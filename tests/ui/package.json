@@ -1,0 +1,8 @@
+{
+  "dependencies": {
+    "@fontsource/atkinson-hyperlegible": "^5.0.20",
+    "@fontsource/saira": "^5.0.20",
+    "@supabase/supabase-js": "^2.45.4",
+    "jsdom": "^24.1.3"
+  }
+}

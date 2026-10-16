@@ -1,0 +1,31 @@
+const { JSDOM } = require("jsdom");
+const fs = require("fs");
+const src = fs.readFileSync(process.argv[2], "utf8");
+const errors = [];
+const dom = new JSDOM("<!doctype html><html><body>" + src + "</body></html>", { runScripts: "dangerously", pretendToBeVisual: true, url: "https://example.test/",
+  beforeParse(w) { w.crypto.randomUUID ??= () => require("crypto").randomUUID(); } });
+dom.window.addEventListener("error", (e) => errors.push(e.message));
+const E = (s) => dom.window.eval(s), doc = dom.window.document, sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const text = () => doc.querySelector("#screen").textContent.replace(/\s+/g, " ");
+const check = (c, m) => { console.log((c ? "pass  " : "FAIL  ") + m + (c ? "" : "\n      " + text().slice(0, 300))); if (!c) process.exitCode = 1; };
+const click = async (sel, ms = 60) => { const el = doc.querySelector("#screen " + sel); if (!el) throw new Error("no " + sel + " :: " + text().slice(0, 200)); el.click(); await sleep(ms); };
+(async () => {
+  await sleep(300);
+  E("demoDevice.skip(); wizStart(); S.wiz.code='DEMO0001'"); await E("activate()"); await sleep(300); E("finishSetup()");
+  E(`demo.db.equipment.push({ id: "qx", category_id: "c5", name: "Radio 07", nfc_uid: null, status: "available", mode: "category", hours: null, extended: null, current_employee_id: null, checked_out_at: null, due_at: null, last_event_at: null }); demo.save()`);
+  E("handleTag('04BA0000000A')"); await sleep(200); doc.querySelector("#staffBtn").click(); await sleep(100);
+  for (const d of "2468") await click(`[data-pin="${d}"]`, 5); await click('[data-pin="OK"]', 500);
+  await click('[data-act="item"]');
+  check(/Tag an item that has no tag \(1\)/.test(text()), "Equipment status offers to tag untagged items");
+  await click('[data-act="untagged"]');
+  check(/Radio 07/.test(text()), "lists Radio 07 (added on the dashboard without a tag)");
+  await click('[data-pick="tagq:qx"]');
+  check(/Tap the replacement tag/.test(text()) && /Radio 07/.test(text()), "pick it -> tap its new tag");
+  E("handleTag('04DE00000507')"); await sleep(600);
+  check(/New tag on Radio 07/.test(text()) && E("demo.db.equipment.find(q => q.id === 'qx').nfc_uid") === "04DE00000507", "Radio 07 is tagged");
+  await click('[data-act="exit"]', 100);
+  E("handleTag('04BA00000001')"); await sleep(200); E("handleTag('04DE00000507')"); await sleep(600);
+  check(/Checked out Radio 07/.test(text()), "and can be checked out right away");
+  check(errors.length === 0, "no script errors " + errors.join(";"));
+  process.exit();
+})();

@@ -1,0 +1,1646 @@
+<title>Equipment Dashboard</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira:wght@500;600;700&family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: a left rail of sections (top bar on phones) beside one working view; details open in a side panel.
+   Same type and brand family as the station so the product reads as one thing. */
+:root {
+  --bg: #f2f4f7;
+  --surface: #ffffff;
+  --surface-2: #f6f8fa;
+  --ink: #121a24;
+  --muted: #5a6777;
+  --line: #dce2e9;
+  --brand: #1f4e79;          /* fills: buttons, rail */
+  --brand-ink: #ffffff;
+  --brand-text: #1f4e79;     /* brand-colored text and links */
+  --brand-soft: #e7eef6;
+  --accent: #f2a900;
+  --ok: #1b7343;   --ok-bg: #e2f3e9;
+  --warn: #8f5400; --warn-bg: #fcefd8;
+  --bad: #b3261e;  --bad-bg: #fbe5e3;
+  --info: #1f5f9e; --info-bg: #e3eef9;
+  --focus: #2b6cb0;
+  --shadow: 0 10px 30px -12px rgba(16, 28, 45, .28);
+  --display: "Barlow Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
+  --body: "Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1319; --surface: #151c24; --surface-2: #1a222c; --ink: #e5eaf0; --muted: #94a1b1; --line: #29333e;
+    --brand: #2c6699; --brand-ink: #ffffff; --brand-text: #8cbcee; --brand-soft: #18293a; --accent: #f2b42a;
+    --ok: #63d39a; --ok-bg: #12301f; --warn: #f2bb55; --warn-bg: #33270e; --bad: #ff8f86; --bad-bg: #3b1614; --info: #8cc2f5; --info-bg: #13283d;
+    --focus: #8cbcee; --shadow: 0 10px 30px -12px rgba(0, 0, 0, .6);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1319; --surface: #151c24; --surface-2: #1a222c; --ink: #e5eaf0; --muted: #94a1b1; --line: #29333e;
+  --brand: #2c6699; --brand-ink: #ffffff; --brand-text: #8cbcee; --brand-soft: #18293a; --accent: #f2b42a;
+  --ok: #63d39a; --ok-bg: #12301f; --warn: #f2bb55; --warn-bg: #33270e; --bad: #ff8f86; --bad-bg: #3b1614; --info: #8cc2f5; --info-bg: #13283d;
+  --focus: #8cbcee; --shadow: 0 10px 30px -12px rgba(0, 0, 0, .6);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 15px; line-height: 1.45; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+h1, h2, h3 { text-wrap: balance; }
+
+.app { display: grid; grid-template-columns: 236px minmax(0, 1fr); min-height: 100%; }
+.rail { background: var(--brand); color: var(--brand-ink); padding: 18px 14px; display: flex; flex-direction: column; gap: 18px;
+        position: sticky; top: env(safe-area-inset-top, 0px); height: 100vh; }
+.org { display: flex; align-items: center; gap: 10px; padding: 4px 6px; }
+.logo { width: 40px; height: 40px; border-radius: 9px; background: var(--accent); color: #1a1a1a; display: grid; place-items: center;
+        font-family: var(--display); font-weight: 700; font-size: 19px; flex: none; }
+.org b { font-family: var(--display); font-size: 21px; font-weight: 700; line-height: 1.05; display: block; }
+.org small { opacity: .8; font-size: 12px; }
+.nav { display: flex; flex-direction: column; gap: 2px; }
+.nav a { color: inherit; text-decoration: none; display: flex; align-items: center; justify-content: space-between; gap: 8px;
+         padding: 9px 12px; border-radius: 9px; font-weight: 700; font-size: 15px; opacity: .86; }
+.nav a:hover { background: rgba(255, 255, 255, .1); opacity: 1; }
+.nav a.on { background: rgba(255, 255, 255, .17); opacity: 1; }
+.nav .n { background: #fff; color: var(--bad); border-radius: 99px; font-size: 12px; padding: 1px 8px; font-weight: 700; }
+.nav .n.quiet { background: rgba(255,255,255,.22); color: inherit; }
+.powered { display: flex; align-items: center; gap: 8px; padding: 10px 8px 0; color: inherit; text-decoration: none; font-size: 11.5px; letter-spacing: .02em; opacity: .78; }
+.powered:hover { opacity: 1; }
+.powered img { width: 22px; height: 22px; flex: none; }
+.powered b { font-weight: 700; display: block; font-size: 12.5px; letter-spacing: 0; }
+.me-foot { display: none; justify-content: center; align-items: center; flex-wrap: wrap; gap: 6px 10px; padding-top: 28px; color: var(--muted); font-size: 13.5px; }
+.powered-foot { display: none; color: var(--muted); justify-content: center; padding: 24px 0 4px; opacity: 1; }
+.me { margin-top: auto; font-size: 13px; padding: 10px 8px; border-top: 1px solid rgba(255, 255, 255, .18); display: flex; flex-direction: column; gap: 2px; }
+.me b { font-size: 14px; }
+.demo-pill { align-self: flex-start; background: var(--accent); color: #1a1a1a; border-radius: 99px; padding: 1px 9px; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+
+.main { padding-block: 26px 48px; padding-left: max(28px, env(safe-area-inset-left, 0px)); padding-right: max(28px, env(safe-area-inset-right, 0px)); min-width: 0; }
+.wrap { max-width: 1240px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px; }
+.head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 20px; }
+.head h1 { margin: 0; font-family: var(--display); font-weight: 700; font-size: 38px; line-height: 1; letter-spacing: .005em; }
+.head p { margin: 4px 0 0; color: var(--muted); }
+
+@media (max-width: 900px) {
+  .app { grid-template-columns: minmax(0, 1fr); }
+  .rail { position: sticky; top: env(safe-area-inset-top, 0px); height: auto; z-index: 5; flex-direction: row; align-items: center; gap: 10px;
+          padding-block: 10px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .org small, .me, .rail .powered { display: none; }
+  .powered-foot, .me-foot { display: flex; }
+  .org b { font-size: 18px; } .logo { width: 34px; height: 34px; font-size: 16px; }
+  .nav { flex-direction: row; overflow-x: auto; scrollbar-width: none; flex: 1; min-width: 0; }
+  .nav::-webkit-scrollbar { display: none; }
+  .nav a { white-space: nowrap; padding: 7px 10px; font-size: 14px; }
+  .main { padding-block: 18px 40px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .head h1 { font-size: 32px; }
+}
+
+/* Building blocks */
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; }
+.panel-h { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--line); }
+.panel-h h2 { margin: 0; font-size: 13px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.panel-b { padding: 14px 18px; }
+.grid2 { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+@media (max-width: 1080px) { .grid2 { grid-template-columns: minmax(0, 1fr); } }
+
+.kpis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 1080px) { .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .kpis > :last-child { grid-column: 1 / -1; } .org b { display: none; } }
+.kpi { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; text-align: left; display: flex; flex-direction: column; gap: 2px; position: relative; overflow: hidden; }
+.kpi::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--line); }
+.kpi.bad::before { background: var(--bad); } .kpi.warn::before { background: var(--warn); } .kpi.ok::before { background: var(--ok); }
+.kpi:hover { border-color: var(--muted); }
+.kpi b { font-family: var(--display); font-size: 40px; line-height: 1; font-variant-numeric: tabular-nums; }
+.kpi span { font-weight: 700; font-size: 14px; }
+.kpi small { color: var(--muted); font-size: 12.5px; }
+
+.chip { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 700; padding: 2px 9px; border-radius: 99px; white-space: nowrap; letter-spacing: .02em; }
+.chip.ok { background: var(--ok-bg); color: var(--ok); } .chip.warn { background: var(--warn-bg); color: var(--warn); }
+.chip.bad { background: var(--bad-bg); color: var(--bad); } .chip.info { background: var(--info-bg); color: var(--info); }
+.chip.quiet { background: var(--surface-2); color: var(--muted); border: 1px solid var(--line); }
+.chip.brand { background: var(--brand-soft); color: var(--brand-text); }
+
+.btn { border: 1px solid var(--line); background: var(--surface); border-radius: 9px; padding: 7px 13px; font-weight: 700; font-size: 14px; display: inline-flex; align-items: center; gap: 6px; }
+.btn:hover { border-color: var(--muted); }
+.btn.primary { background: var(--brand); color: var(--brand-ink); border-color: var(--brand); }
+.btn.danger { color: var(--bad); }
+.btn.sm { padding: 4px 10px; font-size: 13px; }
+.btn[disabled] { opacity: .5; cursor: default; }
+.link { background: none; border: 0; padding: 0; color: var(--brand-text); font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
+
+.filters { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; }
+.field { background: var(--surface); border: 1px solid var(--line); border-radius: 9px; padding: 7px 11px; min-width: 0; }
+input.field { width: 260px; max-width: 100%; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; background: var(--surface); flex-wrap: wrap; }
+.seg button { border: 0; background: none; padding: 6px 12px; font-weight: 700; font-size: 13.5px; color: var(--muted); }
+.seg button.on { background: var(--brand-soft); color: var(--brand-text); }
+.seg button + button { border-left: 1px solid var(--line); }
+
+.tablewrap { overflow-x: auto; }
+@media (max-width: 900px) { .tablewrap table { min-width: 760px; } .tablewrap td { white-space: nowrap; } }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th { text-align: left; font-size: 12px; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); font-weight: 700; padding: 10px 14px; border-bottom: 1px solid var(--line); white-space: nowrap; background: var(--surface-2); }
+td { padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+tr:last-child td { border-bottom: 0; }
+tbody tr.click { cursor: pointer; } tbody tr.click:hover td { background: var(--surface-2); }
+td .sub { display: block; color: var(--muted); font-size: 12.5px; }
+.mono { font-family: var(--mono); font-size: 12px; }
+.num { font-variant-numeric: tabular-nums; }
+.late { color: var(--bad); font-weight: 700; }
+.muted { color: var(--muted); }
+.empty { padding: 26px 18px; color: var(--muted); text-align: center; }
+
+.list { display: flex; flex-direction: column; }
+.row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 11px 18px; border-bottom: 1px solid var(--line); text-align: left; background: none; border-left: 0; border-right: 0; border-top: 0; width: 100%; }
+.row:last-child { border-bottom: 0; }
+button.row:hover { background: var(--surface-2); }
+.row b { font-weight: 700; } .row .sub { display: block; color: var(--muted); font-size: 13px; }
+.dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); }
+.dot.bad { background: var(--bad); } .dot.warn { background: var(--warn); } .dot.ok { background: var(--ok); } .dot.info { background: var(--info); }
+
+.feed .row { grid-template-columns: 92px minmax(0, 1fr); padding: 9px 18px; }
+.feed time { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+
+/* Side panel */
+.scrim { position: fixed; inset: 0; background: rgba(8, 14, 22, .42); z-index: 20; }
+.drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(540px, 100%); background: var(--surface); z-index: 21; box-shadow: var(--shadow);
+          display: flex; flex-direction: column; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); padding-right: env(safe-area-inset-right, 0px); }
+.drawer-h { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 18px 22px 14px; border-bottom: 1px solid var(--line); }
+.drawer-h h2 { margin: 0; font-family: var(--display); font-size: 32px; line-height: 1; }
+.drawer-h p { margin: 6px 0 0; color: var(--muted); }
+.drawer-b { padding: 16px 22px 28px; overflow-y: auto; display: flex; flex-direction: column; gap: 18px; }
+.sect h3 { margin: 0 0 8px; font-size: 12.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.kv { display: grid; grid-template-columns: 140px minmax(0, 1fr); gap: 6px 14px; font-size: 14px; }
+.kv dt { color: var(--muted); } .kv dd { margin: 0; font-weight: 700; min-width: 0; overflow-wrap: anywhere; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.inline-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.inline-form .field { flex: 1; min-width: 160px; }
+.confirm { background: var(--bad-bg); color: var(--bad); border-radius: 10px; padding: 10px 12px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-weight: 700; font-size: 14px; }
+.notice { background: var(--info-bg); color: var(--info); border-radius: 10px; padding: 10px 12px; font-size: 14px; }
+.hist { display: flex; flex-direction: column; gap: 0; border-left: 2px solid var(--line); margin-left: 5px; }
+.hist div { position: relative; padding: 3px 0 10px 16px; font-size: 14px; }
+.hist div::before { content: ""; position: absolute; left: -6px; top: 8px; width: 10px; height: 10px; border-radius: 50%; background: var(--surface); border: 2px solid var(--brand-text); }
+.hist div.in::before { border-color: var(--ok); } .hist div.flag::before { border-color: var(--warn); background: var(--warn); }
+.hist time { color: var(--muted); font-size: 12.5px; display: block; }
+
+.codebox { font-family: var(--mono); font-size: 34px; font-weight: 600; letter-spacing: .12em; background: var(--surface-2); border: 1px dashed var(--muted); border-radius: 12px; padding: 14px 18px; text-align: center; }
+
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; }
+.card h3 { margin: 0; font-family: var(--display); font-size: 25px; line-height: 1.05; }
+
+.form-grid { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 12px 16px; align-items: center; }
+@media (max-width: 640px) { .form-grid { grid-template-columns: minmax(0, 1fr); gap: 6px; } }
+.form-grid label { font-weight: 700; font-size: 14px; } .form-grid label small { display: block; font-weight: 400; color: var(--muted); font-size: 12.5px; }
+.switch { position: relative; width: 44px; height: 26px; display: inline-block; }
+.switch input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; z-index: 1; }
+.switch span { position: absolute; inset: 0; border-radius: 99px; background: var(--line); transition: background .15s; }
+.switch span::after { content: ""; position: absolute; left: 3px; top: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; transition: transform .15s; box-shadow: 0 1px 2px rgba(0,0,0,.3); }
+.switch input:checked + span { background: var(--ok); } .switch input:checked + span::after { transform: translateX(18px); }
+.switch input:focus-visible + span { outline: 3px solid var(--focus); outline-offset: 2px; }
+.swatch { width: 28px; height: 28px; border-radius: 8px; border: 1px solid var(--line); display: inline-block; vertical-align: middle; }
+
+.fgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 14px; }
+.fgrid .full { grid-column: 1 / -1; }
+.fgrid label { display: flex; flex-direction: column; gap: 5px; font-weight: 700; font-size: 13.5px; min-width: 0; }
+.fgrid label small { font-weight: 400; color: var(--muted); font-size: 12.5px; }
+.fgrid .field { width: 100%; }
+@media (max-width: 560px) { .fgrid { grid-template-columns: minmax(0, 1fr); } }
+.checks { display: flex; flex-wrap: wrap; gap: 6px 14px; font-weight: 400; }
+.checks label { flex-direction: row; align-items: center; gap: 6px; font-weight: 400; }
+.err { color: var(--bad); font-weight: 700; font-size: 14px; min-height: 1em; }
+.viewas { display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
+.viewas select { background: rgba(255,255,255,.14); color: inherit; border: 1px solid rgba(255,255,255,.3); border-radius: 7px; padding: 3px 6px; font-size: 13px; }
+.viewas select option { color: #111; }
+.readonly-note { background: var(--surface-2); border: 1px dashed var(--line); border-radius: 10px; padding: 9px 12px; color: var(--muted); font-size: 13.5px; }
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(22px + env(safe-area-inset-bottom, 0px)); background: var(--ink); color: var(--bg);
+         padding: 10px 18px; border-radius: 10px; font-weight: 700; z-index: 40; box-shadow: var(--shadow); max-width: calc(100% - 32px); }
+@media (prefers-reduced-motion: no-preference) { .drawer { animation: slide .18s ease-out; } @keyframes slide { from { transform: translateX(24px); opacity: .6; } } }
+/* SP-THEME:start (generated from brand/sp-theme.css) */
+/* =====================================================================
+   Sonoran Point theme — "desert night" (shared by the dashboard and console)
+   Night navy rail over a mountain ridge with a sunset glow; Sonoran blue for
+   actions; sunset orange only where something needs attention.
+   Display: Saira (echoes the wordmark). Text: Atkinson Hyperlegible.
+   ===================================================================== */
+:root {
+  --sp-night: #071a36; --sp-night-2: #0b2350; --sp-blue: #1663d6; --sp-sky: #2f9bff; --sp-sun: #f7931e; --sp-sun-2: #ffb547;
+  --bg: #f1f4f9; --surface: #ffffff; --surface-2: #f5f8fc; --ink: #0c1b33; --muted: #5a6a84; --line: #dee5ef;
+  --brand: #1663d6; --brand-ink: #ffffff; --brand-text: #1556bd; --brand-soft: #e6effc; --accent: #f7931e;
+  --ok: #157a46; --ok-bg: #e2f5ea; --warn: #9a5800; --warn-bg: #fff1dc; --bad: #c0331f; --bad-bg: #fde8e4; --info: #1556bd; --info-bg: #e6effc;
+  --focus: #2f9bff; --shadow: 0 18px 40px -20px rgba(7, 26, 54, .35);
+  --display: "Saira", "Eurostile", "Arial Narrow", sans-serif;
+  --body: "Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --rail-ink: #e7efff; --radius: 14px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #07111f; --surface: #0d1b31; --surface-2: #11223d; --ink: #e8effb; --muted: #94a6c4; --line: #1d3254;
+    --brand: #2f86ff; --brand-ink: #ffffff; --brand-text: #8cc0ff; --brand-soft: #132b52; --accent: #ffa233;
+    --ok: #5fd39a; --ok-bg: #0f2e22; --warn: #ffbd5c; --warn-bg: #33240c; --bad: #ff8b7a; --bad-bg: #3a1712; --info: #8cc0ff; --info-bg: #132b52;
+    --focus: #8cc0ff; --shadow: 0 18px 40px -20px rgba(0, 0, 0, .7); color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #07111f; --surface: #0d1b31; --surface-2: #11223d; --ink: #e8effb; --muted: #94a6c4; --line: #1d3254;
+  --brand: #2f86ff; --brand-ink: #ffffff; --brand-text: #8cc0ff; --brand-soft: #132b52; --accent: #ffa233;
+  --ok: #5fd39a; --ok-bg: #0f2e22; --warn: #ffbd5c; --warn-bg: #33240c; --bad: #ff8b7a; --bad-bg: #3a1712; --info: #8cc0ff; --info-bg: #132b52;
+  --focus: #8cc0ff; --shadow: 0 18px 40px -20px rgba(0, 0, 0, .7); color-scheme: dark;
+}
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--ink); }
+
+/* ---- The rail: night sky, ridge line, sunset glow ---- */
+.rail {
+  background:
+    radial-gradient(90% 34% at 50% 104%, rgba(247, 147, 30, .42), rgba(247, 147, 30, .10) 45%, transparent 70%),
+    linear-gradient(180deg, #0c2752 0%, var(--sp-night) 48%, #04112a 100%);
+  color: var(--rail-ink); overflow: hidden; isolation: isolate;
+}
+.rail::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 128px; z-index: -1; pointer-events: none;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 240 128' preserveAspectRatio='none'%3E%3Cpath d='M0 92 L34 70 L52 78 L86 46 L104 58 L118 50 L150 80 L170 72 L196 88 L214 82 L240 94 L240 128 L0 128Z' fill='%23123a7a' fill-opacity='.55'/%3E%3Cpath d='M0 108 L28 96 L60 104 L92 84 L120 98 L146 90 L178 104 L206 96 L240 106 L240 128 L0 128Z' fill='%23071a36'/%3E%3Cpath d='M0 108 L28 96 L60 104 L92 84 L120 98 L146 90 L178 104 L206 96 L240 106' fill='none' stroke='%232f9bff' stroke-opacity='.55' stroke-width='1'/%3E%3C/svg%3E") bottom / 100% 100% no-repeat;
+}
+.org b { font-family: var(--display); font-weight: 600; letter-spacing: .005em; }
+.org small { color: rgba(231, 239, 255, .72); opacity: 1; }
+.logo { border-radius: 11px; font-family: var(--display); font-weight: 700; box-shadow: 0 0 0 1px rgba(255, 255, 255, .14), 0 6px 16px -6px rgba(0, 0, 0, .6); }
+.nav a { font-weight: 700; color: rgba(231, 239, 255, .82); opacity: 1; padding: 9px 12px 9px 30px; position: relative; border-radius: 10px; }
+.nav a:hover { background: rgba(47, 155, 255, .10); color: #fff; }
+.nav a.on { background: linear-gradient(90deg, rgba(47, 155, 255, .22), rgba(47, 155, 255, .06)); color: #fff; }
+.nav a::before { content: ""; position: absolute; left: 12px; top: 50%; width: 7px; height: 7px; margin-top: -3.5px; border-radius: 50%; background: rgba(231, 239, 255, .22); }
+.nav a.on::before { background: radial-gradient(circle at 40% 40%, #ffe0a3, var(--sp-sun) 60%, #e36b00); box-shadow: 0 0 0 3px rgba(247, 147, 30, .18), 0 0 12px 2px rgba(247, 147, 30, .55); }
+.nav .n { background: var(--sp-sun); color: #2a1300; }
+.nav .n.quiet { background: rgba(255, 255, 255, .16); color: #fff; }
+.me { border-top-color: rgba(231, 239, 255, .14); }
+.me .btn, .rail .btn { border-color: rgba(231, 239, 255, .26) !important; }
+.powered { color: rgba(231, 239, 255, .78); }
+.powered-foot { color: var(--muted); }
+.demo-pill { background: var(--sp-sun); color: #2a1300; }
+.viewas select { background: rgba(255, 255, 255, .08); border-color: rgba(231, 239, 255, .22); }
+
+@media (max-width: 900px) {
+  .rail { background: linear-gradient(90deg, #0c2752, var(--sp-night) 60%, #102c5c); }
+  .rail::after { display: none; }
+}
+
+/* ---- Page type ---- */
+.head h1 { font-family: var(--display); font-weight: 600; font-size: 36px; letter-spacing: -.01em; line-height: 1.05; color: var(--ink); }
+.head p { color: var(--muted); }
+.panel-h h2, .sect h3 { font-family: var(--display); font-weight: 600; font-size: 17px; letter-spacing: 0; text-transform: none; color: var(--ink); }
+.sect h3 { font-size: 15.5px; margin-bottom: 8px; }
+th { font-size: 12.5px; letter-spacing: 0; text-transform: none; font-weight: 700; color: var(--muted); background: var(--surface-2); }
+.drawer-h h2 { font-family: var(--display); font-weight: 600; font-size: 30px; letter-spacing: -.005em; }
+.card h3 { font-family: var(--display); font-weight: 600; font-size: 22px; }
+
+/* ---- Surfaces ---- */
+.panel, .card, .kpi { border-radius: var(--radius); border-color: var(--line); }
+.panel-h { padding: 15px 18px; }
+.kpi { padding: 16px 18px 14px; gap: 4px; transition: border-color .15s, transform .15s; }
+.kpi::before { display: none; }
+.kpi b { font-family: var(--display); font-weight: 600; font-size: 42px; letter-spacing: -.02em; color: var(--ink); }
+.kpi > span { font-size: 14px; display: flex; align-items: center; gap: 7px; }
+.kpi > span::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--line); flex: none; }
+.kpi.ok > span::before { background: var(--ok); } .kpi.warn > span::before { background: var(--sp-sun); } .kpi.bad > span::before { background: var(--bad); }
+.kpi.bad { background: linear-gradient(180deg, color-mix(in srgb, var(--bad) 11%, var(--surface)), var(--surface) 72%); }
+.kpi.bad b { color: var(--bad); }
+.kpi.warn { background: linear-gradient(180deg, color-mix(in srgb, var(--sp-sun) 13%, var(--surface)), var(--surface) 72%); }
+a.kpi:hover { border-color: var(--brand); transform: translateY(-1px); }
+@media (prefers-reduced-motion: reduce) { a.kpi:hover { transform: none; } }
+
+/* ---- Controls ---- */
+.btn { border-radius: 10px; }
+.btn.primary { background: var(--brand); border-color: var(--brand); color: var(--brand-ink); box-shadow: 0 6px 14px -8px rgba(22, 99, 214, .7); }
+.btn.primary:hover { background: #0f52b8; border-color: #0f52b8; }
+.field { border-radius: 10px; }
+.field:focus { border-color: var(--brand); outline: 3px solid color-mix(in srgb, var(--brand) 22%, transparent); outline-offset: 0; }
+.seg { border-radius: 10px; }
+.seg button.on { background: var(--brand-soft); color: var(--brand-text); }
+.chip { border-radius: 99px; }
+.codebox { border-radius: var(--radius); border-color: var(--sp-blue); background: var(--brand-soft); color: var(--ink); }
+.toast { background: var(--sp-night); color: #fff; border: 1px solid rgba(47, 155, 255, .35); }
+.drawer { border-left: 1px solid var(--line); }
+.drawer-h { background: linear-gradient(180deg, var(--surface-2), var(--surface)); }
+.rail .logo { background: var(--cust, var(--sp-sun)); color: #1a1a1a; }
+/* SP-THEME:end */
+</style>
+
+<div class="app" id="app"></div>
+<div id="layer"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script>
+"use strict";
+/* =====================================================================
+   Equipment Dashboard (manager web app)
+
+   Everything the page shows comes through `api` below. In this demo it
+   reads an in-browser copy of the database filled with a week of
+   realistic activity. On the live site each api function becomes the
+   Supabase query named in its comment (same fields), so the screens
+   don't change.
+   ===================================================================== */
+const $ = (s, r = document) => r.querySelector(s);
+const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const fmtUid = (u) => (u || "").match(/.{1,2}/g)?.join(":") || "";
+const HOUR = 3600000, MIN = 60000;
+
+/* ---- Time zone helpers (company time zone) ---- */
+function tzParts(ms, tz) {
+  const p = {};
+  new Intl.DateTimeFormat("en-US", { timeZone: tz, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" })
+    .formatToParts(new Date(ms)).forEach((x) => { if (x.type !== "literal") p[x.type] = +x.value; });
+  return { y: p.year, m: p.month, d: p.day, h: p.hour % 24, mi: p.minute, s: p.second };
+}
+function tzOffset(ms, tz) { const p = tzParts(ms, tz); return Date.UTC(p.y, p.m - 1, p.d, p.h, p.mi, p.s) - (ms - (ms % 1000)); }
+function zoned(day, hhmm, tz) { const [h, mi] = hhmm.split(":").map(Number); const g = Date.UTC(day.y, day.m - 1, day.d, h, mi); return g - tzOffset(g - tzOffset(g, tz), tz); }
+function localDay(ms, tz) { const p = tzParts(ms, tz); return { y: p.y, m: p.m, d: p.d }; }
+const isoDow = (day) => new Date(Date.UTC(day.y, day.m - 1, day.d)).getUTCDay() || 7;   // 1 = Mon … 7 = Sun
+function addDays(day, n) { const dt = new Date(Date.UTC(day.y, day.m - 1, day.d + n)); return { y: dt.getUTCFullYear(), m: dt.getUTCMonth() + 1, d: dt.getUTCDate() }; }
+const dayKey = (d) => `${d.y}-${String(d.m).padStart(2, "0")}-${String(d.d).padStart(2, "0")}`;
+
+/* =====================================================================
+   DEMO DATABASE — a week of activity, generated the same way every time
+   ===================================================================== */
+function mulberry32(a) { return () => { a |= 0; a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+
+function buildDemo() {
+  const rnd = mulberry32(1015);
+  const now = Date.now();
+  const tz = "America/Phoenix";
+  const org = { name: "Demo Air Services", primary: "#1F4E79", accent: "#F2A900", timezone: tz, extended_hours: 9,
+    settings: { allow_return_by_other: true, allow_checkout_while_held: false },
+    terminology: { equipment: "Equipment", employee: "Employee" }, modules: ["shifts"] };
+  const categories = [
+    ["Vacuum", "hours", 8, null], ["Blower", "hours", 8, null], ["Battery", "hours", 12, 14],
+    ["PDA", "hours", 10, null], ["Radio", "shift_end", 10, null], ["Van Keys", "none", null, null],
+  ].map(([name, rule, hours, extended], i) => ({ id: "c" + (i + 1), name, rule, hours, extended, sort: i + 1 }));
+  const counts = { c1: 4, c2: 4, c3: 6, c4: 5, c5: 6, c6: 4 };
+  const equipment = [];
+  categories.forEach((c) => { for (let n = 1; n <= counts[c.id]; n++) equipment.push({
+    id: `${c.id}-${n}`, cat: c.id, name: `${c.name} ${String(n).padStart(2, "0")}`,
+    tag: "04DE00" + String(c.sort).padStart(2, "0") + String(n).padStart(2, "0"),
+    asset: `${c.name.replace(" ", "").slice(0, 3).toUpperCase()}-${String(n).padStart(3, "0")}`,
+    status: "available", mode: "category", hours: null, extended: null, holder: null, out_at: null, due_at: null }); });
+  const shifts = [
+    { id: "s1", name: "AM", start: "05:00", end: "13:30", grace: 15, early: 60, days: null, active: true },
+    { id: "s2", name: "PM", start: "13:00", end: "21:30", grace: 15, early: 60, days: null, active: true },
+    { id: "s3", name: "Overnight", start: "21:00", end: "05:30", grace: 15, early: 60, days: null, active: true },
+  ];
+  const people = [
+    ["Alex", "Rivera", "E1001", "s1"], ["Jordan", "Lee", "E1002", "s1"], ["Priya", "Shah", "E1004", "s1"], ["Omar", "Haddad", "E1005", "s1"],
+    ["Marcus", "Bell", "E1006", "s2"], ["Elena", "Cruz", "E1007", "s2"], ["Tyler", "Nguyen", "E1008", "s2"], ["Bree", "Walker", "E1009", "s2"],
+    ["Sam", "Patel", "E1003", "s3"], ["Grace", "Kim", "E1010", "s3"], ["Luis", "Ortega", "E1011", "s3"],
+    ["Dana", "Brooks", "M2001", "s1", "manager"], ["Morgan", "Reyes", "A3001", null, "admin"], ["Chris", "Diaz", "E1012", "s2", "employee", false],
+  ];
+  const employees = people.map(([first, last, number, shift, role = "employee", active = true], i) => ({
+    id: "e" + (i + 1), first, last, name: `${first} ${last}`, number, role, active,
+    badge: "04BA0000" + String(i + 1).padStart(4, "0"), shifts: shift ? [shift] : [], pin: role !== "employee" }));
+  const stations = [
+    { id: "st1", name: "Equipment Room 01", location: "Terminal 3", version: "station-0.1.0", last_seen: now - 40 * 1000, revoked: false, added: now - 30 * 86400000 },
+    { id: "st2", name: "Bag Room", location: "Terminal 4", version: "station-0.1.0", last_seen: now - 3.2 * HOUR, revoked: false, added: now - 12 * 86400000 },
+  ];
+  const cat = (id) => categories.find((c) => c.id === id);
+  const limitFor = (q) => { const c = cat(q.cat); const rule = q.mode === "category" ? c.rule : q.mode;
+    return { rule, hours: rule === "none" ? null : rule === "hours" ? (q.mode === "hours" ? q.hours : c.hours) : (q.hours ?? c.hours) }; };
+  const extFor = (q) => q.extended ?? cat(q.cat).extended ?? org.extended_hours;
+
+  equipment.find((q) => q.name === "Vacuum 04").status = "maintenance";
+  const txns = [], alerts = [], audit = [];
+  let tid = 0; const T = (o) => txns.push({ id: "t" + (++tid), station: "st1", source: "station", flags: [], prev: null, notes: null, ...o });
+
+  // Every shift in the last week, oldest first.
+  const today = localDay(now, tz); const occs = [];
+  for (let k = -7; k <= 0; k++) for (const s of shifts) {
+    const day = addDays(today, k); if (s.days && !s.days.includes(isoDow(day))) continue;
+    const start = zoned(day, s.start, tz);
+    const end = zoned(s.end < s.start ? addDays(day, 1) : day, s.end, tz);
+    if (start < now) occs.push({ s, day, start, end });
+  }
+  occs.sort((a, b) => a.start - b.start);
+  const busy = {};            // item id -> time it comes back (Infinity = not back)
+  const plan = [];            // checkouts with their planned return
+  occs.forEach((o, oi) => {
+    const crew = employees.filter((e) => e.active && e.shifts.includes(o.s.id));
+    const next = occs[oi + 1] ? employees.filter((e) => e.active && e.shifts.includes(occs[oi + 1].s.id)) : crew;
+    for (const e of crew) {
+      if (rnd() < 0.12) continue;                              // day off
+      const t = o.start - 20 * MIN + rnd() * 55 * MIN; if (t > now) continue;
+      const want = 1 + Math.floor(rnd() * 2.6); const used = new Set();
+      const pool = equipment.filter((q) => q.status === "available" && (busy[q.id] ?? 0) <= t).sort(() => rnd() - 0.5);
+      for (const q of pool) {
+        if (used.size >= want) break; if (used.has(q.cat)) continue; used.add(q.cat);
+        const r = rnd(); let back = o.end - rnd() * 35 * MIN, by = e;
+        if (r < 0.09) back = o.end + (25 + rnd() * 180) * MIN;                                        // came back late
+        else if (r < 0.14) { back = o.end + (60 + rnd() * 180) * MIN; by = next[Math.floor(rnd() * next.length)] || e; }  // someone else returned it
+        else if (r < 0.165 && now - o.end > 20 * HOUR) back = Infinity;                               // never came back
+        const lim = limitFor(q);
+        const due = lim.rule === "shift_end" ? o.end : lim.rule === "hours" ? t + lim.hours * HOUR : null;
+        busy[q.id] = back;
+        plan.push({ q, e, t, back, by, due, shift: o.s.id });
+      }
+    }
+  });
+  for (const p of plan) {
+    T({ eq: p.q.id, emp: p.e.id, action: "checkout", at: p.t, due: p.due });
+    if (p.back <= now) {
+      const flags = [];
+      if (p.by.id !== p.e.id) flags.push("returned_by_other");
+      if (p.back - p.t > extFor(p.q) * HOUR) flags.push("returned_after_extended");
+      T({ eq: p.q.id, emp: p.by.id, prev: p.e.id, action: "checkin", at: p.back, flags });
+    } else Object.assign(p.q, { holder: p.e.id, out_at: p.t, due_at: p.due, status: "checked_out" });
+  }
+  txns.sort((a, b) => a.at - b.at);
+
+  // One long-missing item gets marked lost by the manager.
+  const longOut = equipment.filter((q) => q.holder && now - q.out_at > 30 * HOUR).sort((a, b) => a.out_at - b.out_at);
+  const lostItem = longOut.find((q) => cat(q.cat).name === "Radio") || longOut[0];
+  if (lostItem) { lostItem.status = "lost"; lostItem.lost_at = lostItem.out_at + 26 * HOUR;
+    audit.push({ at: lostItem.lost_at, actor: "Dana Brooks", text: `marked ${lostItem.name} lost` }); }
+
+  // Alerts: what the server raises every 5 minutes, and closes on return.
+  let aid = 0;
+  for (const t of txns.filter((x) => x.action === "checkout")) {
+    const q = equipment.find((x) => x.id === t.eq);
+    const ret = txns.find((x) => x.eq === t.eq && x.at > t.at);
+    const end = ret ? ret.at : now; const resolved = ret ? ret.at : (q.status === "lost" && q.out_at === t.at ? q.lost_at : null);
+    const ext = extFor(q) * HOUR;
+    const mk = (kind, threshold) => {
+      if (threshold > now) return;
+      const a = { id: "a" + (++aid), eq: q.id, emp: t.emp, kind, out_at: t.at, threshold_at: threshold, raised_at: threshold, resolved_at: resolved, ack_by: null, ack_at: null, notes: null };
+      if (resolved && rnd() < 0.55) Object.assign(a, { ack_by: "Dana Brooks", ack_at: Math.min(resolved, threshold + (20 + rnd() * 90) * MIN),
+        notes: ["Called them, bringing it back.", "Was left in the van. Returned.", "Still on the ramp, ok'd.", "Spoke with lead."][Math.floor(rnd() * 4)] });
+      alerts.push(a);
+    };
+    if (end - t.at > ext) mk("extended_checkout", t.at + ext);
+    if (t.due && end > t.due) mk("overdue", t.due);
+  }
+  const openOne = alerts.find((a) => !a.resolved_at && a.kind === "overdue");
+  if (openOne) Object.assign(openOne, { ack_by: "Dana Brooks", ack_at: openOne.raised_at + 40 * MIN, notes: "Asked at shift change. Checking the vans." });
+
+  audit.push({ at: now - 2 * 86400000, actor: "Dana Brooks", text: "added employee Luis Ortega" });
+  audit.push({ at: now - 5 * 86400000, actor: "Morgan Reyes", text: "made Dana Brooks a manager" });
+  const reportAcks = {};
+  const members = [
+    { id: "u1", name: "Morgan Reyes", email: "morgan.reyes@demoair.example", role: "owner", joined: now - 40 * 86400000, last: now - 10 * MIN },
+    { id: "u2", name: "Dana Brooks", email: "dana.brooks@demoair.example", role: "admin", joined: now - 35 * 86400000, last: now - 2 * HOUR },
+    { id: "u3", name: "Kelly Park", email: "kelly.park@demoair.example", role: "supervisor", joined: now - 20 * 86400000, last: now - 26 * HOUR },
+    { id: "u4", name: "Ops Office", email: "ops-office@demoair.example", role: "viewer", joined: now - 9 * 86400000, last: now - 3 * 86400000 },
+  ];
+  const invites = [{ id: "i1", email: "station-lead@demoair.example", role: "viewer", created: now - 1 * 86400000, expires: now + 13 * 86400000 }];
+  return { now, org, categories, equipment, employees, shifts, stations, txns, alerts, audit, reportAcks, occs, members, invites,
+           me: { id: "u1", name: "Morgan Reyes", role: "owner" } };
+}
+const DB = buildDemo();
+/* Dashboard roles (org_members.role). Mirrors the database's row-level security. */
+const RANK = { viewer: 0, supervisor: 1, admin: 2, owner: 3 };
+const ROLE_NAME = { viewer: "View only", supervisor: "Supervisor", admin: "Admin", owner: "Owner" };
+const can = (need) => RANK[DB.me.role] >= RANK[need];
+const canManageRole = (role) => DB.me.role === "owner" || (DB.me.role === "admin" && role !== "owner");
+
+/* =====================================================================
+   API — the only way screens read or change data
+   ===================================================================== */
+const tz = () => DB.org.timezone;
+const catOf = (id) => DB.categories.find((c) => c.id === id);
+const empOf = (id) => DB.employees.find((e) => e.id === id);
+const eqOf = (id) => DB.equipment.find((q) => q.id === id);
+function limitOf(q) { const c = catOf(q.cat); const rule = q.mode === "category" ? c.rule : q.mode;
+  return { rule, hours: rule === "none" ? null : rule === "hours" ? (q.mode === "hours" ? q.hours : c.hours) : (q.hours ?? c.hours) }; }
+const extOf = (q) => q.extended ?? catOf(q.cat).extended ?? DB.org.extended_hours;
+
+const api = {
+  /* equipment_overview view */
+  equipment() {
+    const now = Date.now();
+    return DB.equipment.map((q) => {
+      const c = catOf(q.cat), lim = limitOf(q), ext = extOf(q);
+      const hoursOut = q.holder ? (now - q.out_at) / HOUR : null;
+      return { ...q, category: c.name, holderName: q.holder ? empOf(q.holder)?.name : null, limit: lim, extended_hours: ext,
+        hours_out: hoursOut, is_overdue: !!(q.due_at && q.due_at < now && q.status !== "lost"),
+        is_extended: !!(q.holder && ext != null && hoursOut > ext && q.status !== "lost") };
+    });
+  },
+  /* activity_log view */
+  activity() {
+    return DB.txns.map((t) => {
+      const q = eqOf(t.eq), by = empOf(t.emp), prev = t.prev ? empOf(t.prev) : null;
+      const forOther = prev && prev.id !== by.id;
+      const description = t.action === "checkout" ? (forOther ? `Checked out (was still with ${prev.name})` : "Checked out")
+        : t.flags.includes("found_lost_item") ? "Returned as found" : forOther ? `Returned for ${prev.name}` : "Returned";
+      const place = t.source === "dashboard" ? "Dashboard" : DB.stations.find((s) => s.id === t.station)?.name;
+      return { ...t, equipment: q.name, category: catOf(q.cat).name, by: by.name, byId: by.id, previous: prev?.name, description, place, forOther };
+    }).sort((a, b) => b.at - a.at);
+  },
+  /* equipment_alerts table */
+  alerts() { return DB.alerts.map((a) => ({ ...a, equipment: eqOf(a.eq).name, employee: empOf(a.emp)?.name })).sort((a, b) => b.raised_at - a.raised_at); },
+  /* employees + station roles */
+  employees() {
+    return DB.employees.map((e) => ({ ...e, out: DB.equipment.filter((q) => q.holder === e.id && q.status !== "lost").length,
+      shiftNames: e.shifts.map((s) => DB.shifts.find((x) => x.id === s).name),
+      last: DB.txns.filter((t) => t.emp === e.id).reduce((m, t) => Math.max(m, t.at), 0) || null }));
+  },
+  /* station_overview view */
+  stations() { return DB.stations.map((s) => ({ ...s, online: !s.revoked && Date.now() - s.last_seen < 5 * MIN })); },
+  /* shift_reports (saved by the server after each shift) + shift_report(shift, date) for one in progress */
+  shiftReports() {
+    const out = [];
+    for (const o of DB.occs) {
+      const cutoff = o.end + o.s.grace * MIN; const inProgress = cutoff > Date.now();
+      if (o.start < Date.now() - 7 * 86400000) continue;
+      const items = shiftReportItems(o, cutoff);
+      const key = `${o.s.id}:${dayKey(o.day)}`;
+      out.push({ key, shift: o.s, day: o.day, start: o.start, end: o.end, cutoff, inProgress, items,
+        outstanding: items.length, stillOut: items.filter((i) => i.outcome === "not_returned").length, ack: DB.reportAcks[key] || null });
+    }
+    return out.sort((a, b) => b.start - a.start);
+  },
+  /* rpc set_equipment_status */
+  setStatus(id, status) {
+    const q = eqOf(id);
+    q.status = status === "available" ? (q.holder ? "checked_out" : "available") : status;
+    if (status === "lost") { q.lost_at = Date.now(); DB.alerts.filter((a) => a.eq === id && !a.resolved_at).forEach((a) => { a.resolved_at = Date.now(); }); }
+    DB.audit.push({ at: Date.now(), actor: DB.me.name, text: { lost: `marked ${q.name} lost`, maintenance: `sent ${q.name} to maintenance`, retired: `retired ${q.name}` }[status] || `put ${q.name} back in service` });
+  },
+  /* update equipment (time_limit_mode, checkout_hours, extended_alert_hours) */
+  setItemLimits(id, mode, hours, extended) { Object.assign(eqOf(id), { mode, hours: hours ?? null, extended: extended ?? null }); },
+  /* rpc acknowledge_alert */
+  ackAlert(id, note) { Object.assign(DB.alerts.find((a) => a.id === id), { ack_by: DB.me.name, ack_at: Date.now(), notes: note || null }); },
+  /* rpc acknowledge_shift_report */
+  ackReport(key, note) { DB.reportAcks[key] = { by: DB.me.name, at: Date.now(), note: note || null }; },
+  /* rpc create_station */
+  createStation(name, location) {
+    const chars = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"; const pick = () => chars[Math.floor(Math.random() * chars.length)];
+    const code = Array.from({ length: 8 }, pick).join("").replace(/^(.{4})/, "$1-");
+    DB.stations.push({ id: "st" + (DB.stations.length + 1), name, location, version: null, last_seen: 0, revoked: false, added: Date.now(), pending: true, code, expires: Date.now() + 7 * 86400000 });
+    return code;
+  },
+  /* rpc revoke_station */
+  revokeStation(id) { Object.assign(DB.stations.find((s) => s.id === id), { revoked: true }); },
+  /* rpc reset_station_activation */
+  newCode(id) { const s = DB.stations.find((x) => x.id === id); s.revoked = false; s.pending = true; s.code = api.createStation._code(); s.expires = Date.now() + 7 * 86400000; return s.code; },
+  /* employees.active */
+  setActive(id, active) { const e = empOf(id); e.active = active; DB.audit.push({ at: Date.now(), actor: DB.me.name, text: `${active ? "reactivated" : "deactivated"} ${e.name}` }); },
+  /* organizations + equipment_categories */
+  saveSettings(patch) { Object.assign(DB.org, patch); },
+  saveCategory(id, patch) { Object.assign(catOf(id), patch); },
+  /* equipment_categories insert / delete_category rpc */
+  addCategory({ name, rule, hours }) {
+    name = (name || "").trim(); if (!name) return { ok: false, error: "Enter a name." };
+    if (DB.categories.some((c) => c.name.toLowerCase() === name.toLowerCase())) return { ok: false, error: "There's already a category with that name." };
+    if (rule === "hours" && !hours) return { ok: false, error: "Enter the number of hours." };
+    DB.categories.push({ id: "c" + Date.now(), name, rule, hours: hours || null, extended: null, sort: DB.categories.length + 1 });
+    return { ok: true };
+  },
+  deleteCategory(id) { if (DB.equipment.some((q) => q.cat === id)) return { ok: false, error: "in_use" }; DB.categories = DB.categories.filter((c) => c.id !== id); return { ok: true }; },
+  /* shifts insert / update (admins) + shift_assignments (supervisors) */
+  saveShift(id, d, crew) {
+    const s0 = id ? DB.shifts.find((x) => x.id === id) : null;
+    if (can("admin")) {
+      const name = (d.name || "").trim(), t = /^([01][0-9]|2[0-3]):[0-5][0-9]$/;
+      if (!name) return { ok: false, error: "Enter a shift name." };
+      if (DB.shifts.some((x) => x.id !== id && x.name.toLowerCase() === name.toLowerCase())) return { ok: false, error: "There's already a shift with that name." };
+      if (!t.test(d.start || "") || !t.test(d.end || "")) return { ok: false, error: "Enter a start and end time." };
+      if (d.start === d.end) return { ok: false, error: "Start and end can't be the same time." };
+      const days = (d.days || []).map(Number);
+      if (!days.length) return { ok: false, error: "Pick at least one day." };
+      const grace = Number(d.grace), early = Number(d.early);
+      if (!(grace >= 0 && grace <= 720) || !(early >= 0 && early <= 720)) return { ok: false, error: "Minutes must be between 0 and 720." };
+      const patch = { name, start: d.start, end: d.end, days: days.length === 7 ? null : days.sort(), grace, early };
+      if (s0) Object.assign(s0, patch); else { id = "s" + Date.now(); DB.shifts.push({ id, active: true, ...patch }); }
+      DB.audit.push({ at: Date.now(), actor: DB.me.name, text: `${s0 ? "edited" : "added"} shift ${name}` });
+    } else if (!s0 || !can("supervisor")) return { ok: false, error: "Not allowed." };
+    if (can("supervisor") && crew) for (const e of DB.employees) {
+      const on = crew.includes(e.id), has = e.shifts.includes(id);
+      if (on && !has) e.shifts.push(id); else if (!on && has) e.shifts = e.shifts.filter((x) => x !== id);
+    }
+    return { ok: true, id };
+  },
+  setShiftActive(id, active) { const s = DB.shifts.find((x) => x.id === id); s.active = active; DB.audit.push({ at: Date.now(), actor: DB.me.name, text: `${active ? "resumed" : "stopped"} shift ${s.name}` }); },
+  /* equipment insert / update */
+  saveEquipment(id, d) {
+    const name = (d.name || "").trim(), tag = normUid(d.tag), asset = (d.asset || "").trim();
+    if (!name) return { ok: false, error: "Enter a name." };
+    if (!catOf(d.cat)) return { ok: false, error: "Pick a category." };
+    if (tag) { const own = uidOwner(tag, id); if (own) return { ok: false, error: `That tag ID is already on ${own}.` }; }
+    if (asset && DB.equipment.some((q) => q.asset === asset && q.id !== id)) return { ok: false, error: "That asset tag is already used." };
+    if (id) { Object.assign(eqOf(id), { name, cat: d.cat, tag: tag || null, asset: asset || null, notes: d.notes || null }); return { ok: true, id }; }
+    const nid = "q" + Date.now();
+    DB.equipment.push({ id: nid, cat: d.cat, name, tag: tag || null, asset: asset || null, notes: d.notes || null, status: "available", mode: "category", hours: null, extended: null, holder: null, out_at: null, due_at: null });
+    DB.audit.push({ at: Date.now(), actor: DB.me.name, text: `added equipment ${name}` });
+    return { ok: true, id: nid };
+  },
+  /* employees insert / update; station fob role via set_employee_station_role rpc */
+  saveEmployee(id, d) {
+    const first = (d.first || "").trim(), last = (d.last || "").trim(), number = (d.number || "").trim(), badge = normUid(d.badge);
+    if (!first) return { ok: false, error: "Enter a first name." };
+    if (number && DB.employees.some((e) => e.number === number && e.id !== id)) return { ok: false, error: `Employee # ${number} is already used by ${DB.employees.find((e) => e.number === number).name}.` };
+    if (badge) { const own = uidOwner(badge, id); if (own) return { ok: false, error: `That badge ID is already used by ${own}.` }; }
+    const e0 = id ? empOf(id) : null; const role = d.role || "employee";
+    if (role !== "employee" && !(e0 && e0.pin) && !/^[0-9]{4,8}$/.test(d.pin || "")) return { ok: false, error: "A manager or admin fob needs a PIN of 4 to 8 digits." };
+    if (d.pin && !/^[0-9]{4,8}$/.test(d.pin)) return { ok: false, error: "PINs are 4 to 8 digits." };
+    const patch = { first, last, name: [first, last].filter(Boolean).join(" "), number: number || null, badge: badge || null, shifts: d.shifts || [] };
+    if (can("admin")) { patch.role = role; if (d.pin) patch.pin = true; if (role === "employee") patch.pin = false; }
+    if (id) { Object.assign(e0, patch); return { ok: true, id }; }
+    const nid = "e" + Date.now();
+    DB.employees.push({ id: nid, active: true, role: "employee", ...patch });
+    DB.audit.push({ at: Date.now(), actor: DB.me.name, text: `added employee ${patch.name}` });
+    return { ok: true, id: nid };
+  },
+  /* list_members / invite_member / set_member_role / remove_member / cancel_invite rpcs */
+  members() { return { members: [...DB.members].sort((a, b) => RANK[b.role] - RANK[a.role] || a.name.localeCompare(b.name)), invites: DB.invites }; },
+  invite(email, role) {
+    email = (email || "").trim().toLowerCase();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return { ok: false, error: "Enter a full email address." };
+    if (!canManageRole(role)) return { ok: false, error: "Only an owner can add owners." };
+    if (DB.members.some((m) => m.email === email)) return { ok: false, error: "That person is already on the team." };
+    DB.invites = DB.invites.filter((i) => i.email !== email);
+    DB.invites.unshift({ id: "i" + Date.now(), email, role, created: Date.now(), expires: Date.now() + 14 * 86400000 });
+    return { ok: true };
+  },
+  setMemberRole(id, role) {
+    const m = DB.members.find((x) => x.id === id);
+    if (!canManageRole(m.role) || !canManageRole(role)) return { ok: false, error: "Only an owner can change owners." };
+    if (m.role === "owner" && role !== "owner" && DB.members.filter((x) => x.role === "owner").length === 1) return { ok: false, error: "The company needs at least one owner. Make someone else an owner first." };
+    m.role = role; if (m.id === DB.me.id) DB.me.role = role; return { ok: true };
+  },
+  removeMember(id) {
+    const m = DB.members.find((x) => x.id === id);
+    if (!canManageRole(m.role)) return { ok: false, error: "Only an owner can remove owners." };
+    if (m.role === "owner" && DB.members.filter((x) => x.role === "owner").length === 1) return { ok: false, error: "The company needs at least one owner." };
+    DB.members = DB.members.filter((x) => x.id !== id); return { ok: true };
+  },
+  cancelInvite(id) { DB.invites = DB.invites.filter((i) => i.id !== id); },
+};
+const normUid = (u) => String(u || "").replace(/[^0-9a-f]/gi, "").toUpperCase();
+function uidOwner(uid, exceptId) {
+  const e = DB.employees.find((x) => x.badge === uid && x.id !== exceptId); if (e) return `${e.name}'s badge`;
+  const q = DB.equipment.find((x) => x.tag === uid && x.id !== exceptId); return q ? q.name : null;
+}
+api.createStation._code = () => { const c = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"; return Array.from({ length: 8 }, () => c[Math.floor(Math.random() * c.length)]).join("").replace(/^(.{4})/, "$1-"); };
+
+/* Same rule as private.build_shift_report: what the shift's crew had out at shift end + grace, and what happened next. */
+function shiftReportItems(o, cutoff) {
+  const crew = new Set(DB.employees.filter((e) => e.shifts.includes(o.s.id)).map((e) => e.id));
+  const items = [];
+  for (const q of DB.equipment) {
+    const evs = DB.txns.filter((t) => t.eq === q.id);
+    const last = evs.filter((t) => t.at <= cutoff).pop();
+    if (!last || last.action !== "checkout" || !crew.has(last.emp)) continue;
+    const nx = evs.find((t) => t.at > cutoff);
+    const outcome = nx?.action === "checkin" ? "returned_late" : nx?.action === "checkout" && nx.emp !== last.emp ? "taken_by_other" : q.status === "lost" ? "lost" : "not_returned";
+    items.push({ eq: q, emp: empOf(last.emp), out_at: last.at, outcome, next: nx, nextBy: nx ? empOf(nx.emp) : null });
+  }
+  return items;
+}
+
+/* =====================================================================
+   Formatting
+   ===================================================================== */
+function fmtTime(ms) { return new Intl.DateTimeFormat("en-US", { timeZone: tz(), hour: "numeric", minute: "2-digit" }).format(new Date(ms)); }
+function fmtWhen(ms) {
+  if (!ms) return "";
+  const d = localDay(ms, tz()), t = localDay(Date.now(), tz());
+  if (dayKey(d) === dayKey(t)) return fmtTime(ms);
+  if (dayKey(d) === dayKey(addDays(t, -1))) return "Yesterday " + fmtTime(ms);
+  return new Intl.DateTimeFormat("en-US", { timeZone: tz(), weekday: "short", month: "short", day: "numeric" }).format(new Date(ms)) + ", " + fmtTime(ms);
+}
+function fmtDay(day) { return new Intl.DateTimeFormat("en-US", { timeZone: "UTC", weekday: "long", month: "short", day: "numeric" }).format(new Date(Date.UTC(day.y, day.m - 1, day.d))); }
+function dur(h) { if (h == null) return ""; if (h < 1) return Math.max(1, Math.round(h * 60)) + " min"; if (h < 48) return (Math.round(h * 10) / 10).toString().replace(/\.0$/, "") + " h"; return Math.round(h / 24) + " days"; }
+function ago(ms) { const m = (Date.now() - ms) / MIN; if (m < 1) return "just now"; if (m < 60) return Math.round(m) + " min ago"; return dur(m / 60) + " ago"; }
+function limitText(l) { return l.rule === "none" ? "No limit" : l.rule === "shift_end" ? `End of shift${l.hours ? ` (else ${l.hours} h)` : ""}` : `${l.hours} h`; }
+function statusChip(q) {
+  if (q.status === "lost") return `<span class="chip bad">Lost</span>`;
+  if (q.status === "maintenance") return `<span class="chip quiet">Maintenance</span>`;
+  if (q.status === "retired") return `<span class="chip quiet">Retired</span>`;
+  if (q.is_overdue) return `<span class="chip bad">Overdue</span>`;
+  if (q.is_extended) return `<span class="chip warn">Out ${dur(q.hours_out)}</span>`;
+  if (q.holder) return `<span class="chip info">Checked out</span>`;
+  return `<span class="chip ok">Available</span>`;
+}
+const ROLE = { employee: "Employee", manager: "Manager", admin: "Admin" };
+const OUTCOME = { not_returned: ["bad", "Still out"], returned_late: ["warn", "Returned late"], taken_by_other: ["info", "Picked up by someone else"], lost: ["bad", "Marked lost"] };
+
+/* =====================================================================
+   App state + routing
+   ===================================================================== */
+const ROUTES = ["overview", "equipment", "employees", "activity", "alerts", "shifts", "stations", "settings", "team"];
+const S = {
+  route: ROUTES.includes(location.hash.slice(1)) ? location.hash.slice(1) : "overview",
+  drawer: null, confirm: null, toast: null,
+  f: { eqSearch: "", eqCat: "", eqStatus: "all", empSearch: "", actSearch: "", actType: "all", actRange: "7d", alertTab: "open", newStation: null },
+};
+window.addEventListener("hashchange", () => { const r = location.hash.slice(1); if (ROUTES.includes(r)) { S.route = r; S.drawer = null; render(); window.scrollTo(0, 0); } });
+let toastT;
+function toast(text) { S.toast = text; renderLayer(); clearTimeout(toastT); toastT = setTimeout(() => { S.toast = null; renderLayer(); }, 2600); }
+
+/* =====================================================================
+   Rendering
+   ===================================================================== */
+function render() {
+  if (LIVE && !S.ready) return renderAuth();
+  const open = api.alerts().filter((a) => !a.resolved_at && !a.ack_at).length;
+  const lost = DB.equipment.filter((q) => q.status === "lost").length;
+  const nav = [["overview", "Overview"], ["equipment", "Equipment"], ["employees", "Employees"], ["activity", "Activity"],
+    ["alerts", "Alerts", open], ["shifts", "Shifts"], ["stations", "Stations"], ["settings", "Settings"], ...(can("admin") ? [["team", "Team access"]] : [])];
+  if (S.route === "team" && !can("admin")) S.route = "overview";
+  $("#app").innerHTML = `
+    <aside class="rail">
+      <div class="org"><div class="logo" aria-hidden="true">${esc(DB.org.name.split(/\s+/).slice(0, 2).map((w) => w[0]).join(""))}</div>
+        <div><b>${esc(DB.org.name)}</b><small>Equipment tracking</small></div></div>
+      <nav class="nav" aria-label="Sections">${nav.map(([r, l, n]) => `<a href="#${r}" class="${S.route === r ? "on" : ""}" ${S.route === r ? 'aria-current="page"' : ""}>${l}${n ? `<span class="n" aria-label="${n} need attention">${n}</span>` : ""}</a>`).join("")}</nav>
+      <div class="me">${LIVE ? "" : `<span class="demo-pill">Demo data</span>`}<b>${esc(DB.me.name)}</b><span>${ROLE_NAME[DB.me.role]}</span>
+        ${LIVE ? `${L.companies.length > 1 ? `<label class="viewas">Company<select id="switchOrg" aria-label="Switch company">${L.companies.map((c) => `<option value="${c.org_id}" ${c.org_id === L.org ? "selected" : ""}>${esc(c.name)}</option>`).join("")}</select></label>` : ""}
+          <span style="display:flex;gap:6px;margin-top:6px"><button class="btn sm" data-act="editName" style="background:transparent;color:inherit;border-color:rgba(255,255,255,.3)">Edit name</button><button class="btn sm" data-act="signOut" style="background:transparent;color:inherit;border-color:rgba(255,255,255,.3)">Sign out</button></span>`
+        : `<label class="viewas">Preview as<select id="viewAs" aria-label="Preview the dashboard as">${Object.keys(RANK).reverse().map((r) => `<option value="${r}" ${DB.me.role === r ? "selected" : ""}>${ROLE_NAME[r]}</option>`).join("")}</select></label>`}</div>
+    ${powered("")}
+    </aside>
+    <main class="main"><div class="wrap">${VIEWS[S.route]()}</div>${LIVE ? `<div class="me-foot"><span>${esc(DB.me.name)} · ${ROLE_NAME[DB.me.role]}</span><button class="btn sm" data-act="editName">Edit name</button><button class="btn sm" data-act="signOut">Sign out</button></div>` : ""}${powered("powered-foot")}</main>`;
+  renderLayer();
+}
+// "Powered by" mark: your product's credit on every customer's dashboard.
+function powered(cls) {
+  return `<a class="powered ${cls}" href="https://sonoranpoint.com" target="_blank" rel="noopener" aria-label="Powered by Sonoran Point">
+    ${LIVE ? `<img src="brand/mark-64.png" alt="">` : ""}<span>Powered by<b>Sonoran Point</b></span></a>`;
+}
+function renderLayer() {
+  let h = "";
+  if (S.drawer) h += `<div class="scrim" data-act="close"></div><aside class="drawer" role="dialog" aria-modal="true" aria-labelledby="dh">${DRAWERS[S.drawer.kind](S.drawer.id)}</aside>`;
+  if (S.toast) h += `<div class="toast" role="status">${esc(S.toast)}</div>`;
+  $("#layer").innerHTML = h;
+}
+function openDrawer(kind, id) { if (S.drawer?.kind !== kind || S.drawer?.id !== id) S.formErr = null; S.drawer = { kind, id }; S.confirm = null; renderLayer(); $(".drawer [data-act=close]")?.focus(); }
+function head(title, sub, right = "") { return `<div class="head"><div><h1>${title}</h1>${sub ? `<p>${sub}</p>` : ""}</div>${right}</div>`; }
+
+/* ---------------- Overview ---------------- */
+function vOverview() {
+  const eq = api.equipment(), al = api.alerts(), st = api.stations();
+  const out = eq.filter((q) => q.holder && q.status !== "lost");
+  const overdue = eq.filter((q) => q.is_overdue), ext = eq.filter((q) => q.is_extended), lost = eq.filter((q) => q.status === "lost");
+  const online = st.filter((s) => s.online).length, active = st.filter((s) => !s.revoked && !s.pending).length;
+  const attention = [
+    // One line per item, even when it's both overdue and out too long.
+    ...Object.values(al.filter((a) => !a.resolved_at).reduce((m, a) => { (m[a.eq] = m[a.eq] || []).push(a); return m; }, {})).map((list) => {
+      const a = list[0], od = list.some((x) => x.kind === "overdue"), ack = list.find((x) => x.ack_at);
+      return { sev: od ? "bad" : "warn", at: Math.max(...list.map((x) => x.raised_at)),
+        title: `${a.equipment} ${od ? "is overdue" : "is out too long"}`,
+        sub: `With ${a.employee} since ${fmtWhen(a.out_at)} (${dur((Date.now() - a.out_at) / HOUR)})${ack ? ` · Seen by ${ack.ack_by}${ack.notes ? ": " + ack.notes : ""}` : ""}`,
+        open: ["equipment", a.eq], acked: list.every((x) => x.ack_at) };
+    }),
+    ...lost.map((q) => ({ sev: "bad", at: q.lost_at, title: `${q.name} is lost`, sub: `Last with ${q.holderName || "unknown"}. Whoever finds it can tap it at a station.`, open: ["equipment", q.id] })),
+    ...st.filter((s) => !s.online && !s.revoked && !s.pending).map((s) => ({ sev: "warn", at: s.last_seen, title: `${s.name} is offline`, sub: `Last seen ${ago(s.last_seen)}. Taps are saved on the station and sync when it reconnects.`, open: ["station", s.id] })),
+  ].sort((a, b) => (!!a.acked - !!b.acked) || (b.at - a.at));
+  const reports = api.shiftReports().filter((r) => !r.inProgress);
+  const last = reports[0];
+  const feed = api.activity().slice(0, 8);
+  const greet = (() => { const h = tzParts(Date.now(), tz()).h; return h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening"; })();
+  return head(`${greet}, ${esc((DB.me.name.includes("@") ? DB.me.name.split("@")[0] : DB.me.name).split(" ")[0])}`, `${fmtDay(localDay(Date.now(), tz()))} · ${esc(DB.org.name)}`) + `
+    <div class="kpis">
+      <a class="kpi ${out.length ? "" : "ok"}" href="#equipment" data-filter="out" style="color:inherit;text-decoration:none"><b>${out.length}</b><span>Out right now</span><small>of ${eq.filter((q) => !["retired"].includes(q.status)).length} items</small></a>
+      <a class="kpi ${overdue.length ? "bad" : "ok"}" href="#equipment" data-filter="overdue" style="color:inherit;text-decoration:none"><b>${overdue.length}</b><span>Overdue</span><small>Past their due time</small></a>
+      <a class="kpi ${ext.length ? "warn" : "ok"}" href="#equipment" data-filter="extended" style="color:inherit;text-decoration:none"><b>${ext.length}</b><span>Out too long</span><small>Over ${DB.org.extended_hours} h (or item limit)</small></a>
+      <a class="kpi ${lost.length ? "bad" : "ok"}" href="#equipment" data-filter="lost" style="color:inherit;text-decoration:none"><b>${lost.length}</b><span>Lost</span><small>Marked by a supervisor</small></a>
+      <a class="kpi ${online < active ? "warn" : "ok"}" href="#stations" style="color:inherit;text-decoration:none"><b>${online}/${active}</b><span>Stations online</span><small>Checked every minute</small></a>
+    </div>
+    <div class="grid2">
+      <section class="panel"><div class="panel-h"><h2>Needs attention</h2><a class="link" href="#alerts">All alerts</a></div>
+        <div class="list">${attention.slice(0, 8).map((x) => `<button class="row" data-open="${x.open[0]}:${x.open[1]}">
+          <span class="dot ${x.acked ? "info" : x.sev}"></span><span><b>${esc(x.title)}</b><span class="sub">${esc(x.sub)}</span></span><span class="muted" style="font-size:13px">${x.acked ? "Seen" : ""}</span></button>`).join("")
+          || `<div class="empty">Nothing needs attention. Everything is in or on time.</div>`}</div></section>
+      <div style="display:flex;flex-direction:column;gap:20px;min-width:0">
+        ${last ? `<section class="panel"><div class="panel-h"><h2>Last shift report</h2><a class="link" href="#shifts">All reports</a></div>
+          <button class="row" data-open="report:${last.key}" style="grid-template-columns:minmax(0,1fr) auto">
+            <span><b>${esc(last.shift.name)} shift · ${esc(fmtDay(last.day))}</b><span class="sub">${fmtTime(last.start)} to ${fmtTime(last.end)}</span></span>
+            ${last.outstanding ? `<span class="chip ${last.stillOut ? "bad" : "warn"}">${last.outstanding} not back on time</span>` : `<span class="chip ok">All returned</span>`}</button></section>` : ""}
+        <section class="panel"><div class="panel-h"><h2>Latest activity</h2><a class="link" href="#activity">Full log</a></div>
+          <div class="list feed">${feed.map(feedRow).join("") || `<div class="empty">No taps yet. Checkouts and returns show up here as they happen at a station.</div>`}</div></section>
+      </div>
+    </div>`;
+}
+function feedRow(a) {
+  return `<div class="row"><time>${esc(fmtWhen(a.at).replace(/^Yesterday /, "Yest. "))}</time><span><b>${esc(a.by)}</b> ${esc(a.description.charAt(0).toLowerCase() + a.description.slice(1))} <b>${esc(a.equipment)}</b>
+    ${a.flags.includes("returned_after_extended") ? `<span class="chip warn">late</span>` : ""}</span></div>`;
+}
+
+/* ---------------- Equipment ---------------- */
+function vEquipment() {
+  const f = S.f; const all = api.equipment();
+  const q = f.eqSearch.trim().toLowerCase();
+  const rows = all.filter((x) => (!f.eqCat || x.cat === f.eqCat)
+    && (f.eqStatus === "all" || (f.eqStatus === "out" && x.holder && x.status !== "lost") || (f.eqStatus === "available" && x.status === "available")
+        || (f.eqStatus === "overdue" && x.is_overdue) || (f.eqStatus === "extended" && x.is_extended) || (f.eqStatus === x.status && ["lost", "maintenance"].includes(x.status)))
+    && (!q || `${x.name} ${x.asset} ${x.holderName || ""} ${x.tag}`.toLowerCase().includes(q)))
+    .sort((a, b) => (b.is_overdue - a.is_overdue) || (b.is_extended - a.is_extended) || a.name.localeCompare(b.name, undefined, { numeric: true }));
+  const seg = [["all", "All"], ["out", "Out"], ["overdue", "Overdue"], ["extended", "Out too long"], ["available", "Available"], ["lost", "Lost"], ["maintenance", "Maintenance"]];
+  return head("Equipment", `${all.length} items · also addable at a station with a manager or admin fob`, can("admin") ? `<button class="btn primary" data-act="newEq">Add equipment</button>` : "") + `
+    <div class="filters">
+      <input class="field" id="eqSearch" type="search" aria-label="Search equipment" placeholder="Search name, asset tag or person" value="${esc(f.eqSearch)}" data-f="eqSearch">
+      <select class="field" id="eqCat" aria-label="Category" data-f="eqCat"><option value="">All categories</option>${DB.categories.map((c) => `<option value="${c.id}" ${f.eqCat === c.id ? "selected" : ""}>${esc(c.name)}</option>`).join("")}</select>
+      <div class="seg" role="group" aria-label="Status">${seg.map(([k, l]) => `<button class="${f.eqStatus === k ? "on" : ""}" data-seg="eqStatus:${k}">${l}</button>`).join("")}</div>
+    </div>
+    <section class="panel"><div class="tablewrap"><table>
+      <thead><tr><th>Item</th><th>Category</th><th>Status</th><th>With</th><th>Out since</th><th>Due</th><th>Time limit</th></tr></thead>
+      <tbody>${rows.map((x) => `<tr class="click" data-open="equipment:${x.id}" tabindex="0">
+        <td><b>${esc(x.name)}</b><span class="sub mono">${esc(x.asset)}</span></td><td>${esc(x.category)}</td><td>${statusChip(x)}</td>
+        <td>${x.holderName ? esc(x.holderName) : `<span class="muted">In the room</span>`}</td>
+        <td class="num">${x.holder ? esc(fmtWhen(x.out_at)) : ""}</td>
+        <td class="num ${x.is_overdue ? "late" : ""}">${x.due_at && x.holder ? esc(fmtWhen(x.due_at)) : ""}</td>
+        <td>${esc(limitText(x.limit))}${x.mode !== "category" ? ` <span class="chip brand">item</span>` : ""}</td></tr>`).join("")}</tbody></table>
+      ${rows.length ? "" : `<div class="empty">No equipment matches these filters.</div>`}</div></section>`;
+}
+
+/* ---------------- Employees ---------------- */
+function vEmployees() {
+  const q = S.f.empSearch.trim().toLowerCase();
+  const rows = api.employees().filter((e) => !q || `${e.name} ${e.number}`.toLowerCase().includes(q))
+    .sort((a, b) => (b.active - a.active) || (b.out - a.out) || a.name.localeCompare(b.name));
+  return head("Employees", `${rows.filter((e) => e.active).length} active · also addable at a station with a manager or admin fob`, can("supervisor") ? `<button class="btn primary" data-act="newEmp">Add employee</button>` : "") + `
+    <div class="filters"><input class="field" type="search" id="empSearch" aria-label="Search employees" placeholder="Search name or employee #" value="${esc(S.f.empSearch)}" data-f="empSearch"></div>
+    <section class="panel"><div class="tablewrap"><table>
+      <thead><tr><th>Name</th><th>Role</th><th>Shift</th><th>Badge</th><th>Has out</th><th>Last tap</th></tr></thead>
+      <tbody>${rows.map((e) => `<tr class="click" data-open="employee:${e.id}" tabindex="0" ${e.active ? "" : 'style="opacity:.55"'}>
+        <td><b>${esc(e.name)}</b><span class="sub">${esc(e.number || "")}${e.active ? "" : " · Inactive"}</span></td>
+        <td>${e.role === "employee" ? `<span class="muted">Employee</span>` : `<span class="chip brand">${ROLE[e.role]} fob</span>`}</td>
+        <td>${esc(e.shiftNames.join(", ") || "—")}</td><td class="mono">${e.badge ? esc(fmtUid(e.badge)) : `<span class="muted" style="font-family:var(--body)">No badge</span>`}</td>
+        <td class="num">${e.out ? `<b>${e.out}</b>` : `<span class="muted">0</span>`}</td><td class="num">${e.last ? esc(fmtWhen(e.last)) : ""}</td></tr>`).join("")}</tbody></table></div></section>`;
+}
+
+/* ---------------- Activity ---------------- */
+function vActivity() {
+  const f = S.f; const q = f.actSearch.trim().toLowerCase();
+  const since = f.actRange === "today" ? zoned(localDay(Date.now(), tz()), "00:00", tz()) : f.actRange === "24h" ? Date.now() - 24 * HOUR : 0;
+  const rows = api.activity().filter((a) => a.at >= since
+    && (f.actType === "all" || (f.actType === "out" && a.action === "checkout") || (f.actType === "in" && a.action === "checkin")
+        || (f.actType === "for" && a.forOther) || (f.actType === "late" && a.flags.includes("returned_after_extended")))
+    && (!q || `${a.by} ${a.equipment} ${a.previous || ""}`.toLowerCase().includes(q)));
+  const seg = [["all", "All"], ["out", "Checkouts"], ["in", "Returns"], ["for", "Returned for someone"], ["late", "Returned late"]];
+  const rng = [["today", "Today"], ["24h", "24 hours"], ["7d", "7 days"]];
+  return head("Activity", "Every tap, who made it, and for whom. History can't be edited or deleted.") + `
+    <div class="filters">
+      <input class="field" type="search" aria-label="Search activity" placeholder="Search person or item" value="${esc(f.actSearch)}" data-f="actSearch">
+      <div class="seg" role="group" aria-label="Type">${seg.map(([k, l]) => `<button class="${f.actType === k ? "on" : ""}" data-seg="actType:${k}">${l}</button>`).join("")}</div>
+      <div class="seg" role="group" aria-label="Time range">${rng.map(([k, l]) => `<button class="${f.actRange === k ? "on" : ""}" data-seg="actRange:${k}">${l}</button>`).join("")}</div>
+    </div>
+    <section class="panel"><div class="tablewrap"><table>
+      <thead><tr><th>When</th><th>Who</th><th>What</th><th>Item</th><th>Where</th></tr></thead>
+      <tbody>${rows.slice(0, 250).map((a) => `<tr>
+        <td class="num">${esc(fmtWhen(a.at))}</td><td><button class="link" data-open="employee:${a.byId}">${esc(a.by)}</button></td>
+        <td>${a.action === "checkout" ? `<span class="chip info">Out</span>` : `<span class="chip ok">In</span>`} ${esc(a.description)}
+          ${a.flags.includes("returned_after_extended") ? ` <span class="chip warn">late</span>` : ""}</td>
+        <td><button class="link" data-open="equipment:${a.eq}">${esc(a.equipment)}</button></td><td class="muted">${esc(a.place)}</td></tr>`).join("")}</tbody></table>
+      ${rows.length ? "" : `<div class="empty">No activity matches these filters.</div>`}</div></section>
+    ${rows.length > 250 ? `<p class="muted">Showing the latest 250 of ${rows.length}. Narrow the filters to see older entries.</p>` : ""}`;
+}
+
+/* ---------------- Alerts ---------------- */
+function vAlerts() {
+  const tab = S.f.alertTab; const all = api.alerts();
+  const rows = all.filter((a) => (tab === "open" ? !a.resolved_at : !!a.resolved_at));
+  const label = (a) => a.kind === "overdue" ? `<span class="chip bad">Overdue</span>` : `<span class="chip warn">Out too long</span>`;
+  return head("Alerts", "Raised automatically every few minutes. They close themselves when the item comes back.") + `
+    <div class="filters"><div class="seg" role="group" aria-label="Which alerts">
+      <button class="${tab === "open" ? "on" : ""}" data-seg="alertTab:open">Open (${all.filter((a) => !a.resolved_at).length})</button>
+      <button class="${tab === "closed" ? "on" : ""}" data-seg="alertTab:closed">Closed (${all.filter((a) => a.resolved_at).length})</button></div></div>
+    <section class="panel"><div class="list">${rows.slice(0, 120).map((a) => `
+      <div class="row" style="grid-template-columns:auto minmax(0,1fr) auto">
+        ${label(a)}<span><b><button class="link" data-open="equipment:${a.eq}">${esc(a.equipment)}</button></b> with ${esc(a.employee)}
+          <span class="sub">Out since ${esc(fmtWhen(a.out_at))} · ${a.kind === "overdue" ? "was due " + esc(fmtWhen(a.threshold_at)) : "passed the limit " + esc(fmtWhen(a.threshold_at))}
+          ${a.resolved_at ? ` · back ${esc(fmtWhen(a.resolved_at))} (out ${dur((a.resolved_at - a.out_at) / HOUR)})` : ` · out ${dur((Date.now() - a.out_at) / HOUR)} so far`}</span>
+          ${a.ack_at ? `<span class="sub">Seen by ${esc(a.ack_by)}${a.notes ? `: “${esc(a.notes)}”` : ""}</span>` : ""}</span>
+        ${a.ack_at ? `<span class="chip quiet">Seen</span>` : !can("supervisor") ? `<span class="chip warn">Not seen</span>` : S.f.acking === a.id
+          ? `<form class="inline-form" data-form="ack:${a.id}"><input class="field" name="note" aria-label="Note" placeholder="Note (optional)" maxlength="200"><button class="btn primary sm">Save</button></form>`
+          : `<button class="btn sm" data-act="ackStart" data-id="${a.id}">Mark seen</button>`}
+      </div>`).join("") || `<div class="empty">${tab === "open" ? "No open alerts. Everything is back or within its time limit." : "No closed alerts yet."}</div>`}</div></section>`;
+}
+
+/* ---------------- Shift reports ---------------- */
+function vShifts() {
+  const reps = api.shiftReports(); const byDay = {};
+  reps.forEach((r) => { (byDay[dayKey(r.day)] = byDay[dayKey(r.day)] || []).push(r); });
+  const crewN = (id) => DB.employees.filter((e) => e.active && e.shifts.includes(id)).length;
+  return head("Shifts", "Who works when, and what each crew hadn't returned by the end of their shift.", can("admin") ? `<button class="btn primary" data-open="shiftForm:">Add a shift</button>` : "") +
+    `<section class="panel"><div class="panel-h"><h2>Shifts</h2>${can("supervisor") ? "" : `<span class="muted" style="font-size:13px">View only</span>`}</div><div class="tablewrap"><table class="tbl">
+      <thead><tr><th>Shift</th><th>Time</th><th>Days</th><th>Grace</th><th>Crew</th><th></th></tr></thead><tbody>
+      ${DB.shifts.map((x) => `<tr ${x.active ? "" : 'style="opacity:.6"'}><td><b>${esc(x.name)}</b>${x.active ? "" : ` <span class="chip quiet">Not in use</span>`}</td>
+        <td>${fmtClock(x.start)} to ${fmtClock(x.end)}${x.end < x.start ? ` <span class="muted">(next day)</span>` : ""}</td><td>${esc(daysText(x.days))}</td>
+        <td>${x.grace} min</td><td>${crewN(x.id)}</td>
+        <td style="text-align:right"><button class="btn sm" data-open="shiftForm:${x.id}">${can("supervisor") ? "Edit" : "View"}</button></td></tr>`).join("")}
+      </tbody></table></div></section>
+    <h2 style="margin:6px 0 0;font-family:var(--display);font-size:22px">Shift reports</h2>
+    <p class="muted" style="margin:0 0 4px">Made automatically after every shift ends (plus its grace period).</p>` +
+    Object.entries(byDay).map(([k, list]) => `<section class="panel"><div class="panel-h"><h2>${esc(fmtDay(list[0].day))}</h2></div><div class="list">
+      ${list.map((r) => `<button class="row" data-open="report:${r.key}" style="grid-template-columns:110px minmax(0,1fr) auto">
+        <b>${esc(r.shift.name)}</b><span><span class="sub" style="margin:0">${fmtTime(r.start)} to ${fmtTime(r.end)}${r.inProgress ? " · in progress" : ""}${r.ack ? ` · Signed off by ${esc(r.ack.by)}` : ""}</span></span>
+        ${r.inProgress ? `<span class="chip quiet">Live</span>` : r.outstanding ? `<span class="chip ${r.stillOut ? "bad" : "warn"}">${r.outstanding} not back${r.stillOut ? `, ${r.stillOut} still out` : ""}</span>` : `<span class="chip ok">All returned</span>`}
+      </button>`).join("")}</div></section>`).join("");
+}
+
+const DOW = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+function daysText(days) {
+  if (!days || days.length === 7) return "Every day";
+  const k = [...days].sort().join();
+  if (k === "1,2,3,4,5") return "Mon–Fri"; if (k === "6,7") return "Sat–Sun";
+  return days.map((d) => DOW[d - 1]).join(", ");
+}
+function fmtClock(hhmm) { const [h, m] = hhmm.split(":").map(Number); return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`; }
+
+/* ---------------- Stations ---------------- */
+function vStations() {
+  const ns = S.f.newStation;
+  return head("Stations", "Each station needs a one-time activation code to connect.", can("admin") ? `<button class="btn primary" data-act="addStation">Add a station</button>` : "") +
+    (ns ? `<section class="panel"><div class="panel-b" style="display:flex;flex-direction:column;gap:12px">${ns.code
+      ? `<h2 style="margin:0;font-family:var(--display);font-size:26px">Activation code for ${esc(ns.name)}</h2>
+         <div class="codebox" aria-label="Activation code">${esc(ns.code)}</div>
+         <p class="muted" style="margin:0">Type this on the new station's setup screen. It works once and expires in 7 days. The station then loads your name, logo and colors, and asks for its admin tag.</p>
+         <div class="actions"><button class="btn" data-act="copyCode">Copy code</button><button class="btn" data-act="doneStation">Done</button></div>`
+      : `<form class="inline-form" data-form="station"><input class="field" name="name" aria-label="Station name" placeholder="Station name, like Equipment Room 02" required maxlength="60">
+         <input class="field" name="location" aria-label="Location" placeholder="Location (optional)" maxlength="60"><button class="btn primary">Create code</button><button class="btn" type="button" data-act="cancelStation">Cancel</button></form>`}</div></section>` : "") +
+    `<div class="cards">${api.stations().map((s) => `<div class="card">
+      <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start"><h3>${esc(s.name)}</h3>
+        ${s.revoked ? `<span class="chip quiet">Disconnected</span>` : s.pending ? `<span class="chip info">Waiting for setup</span>` : s.online ? `<span class="chip ok">Online</span>` : `<span class="chip warn">Offline</span>`}</div>
+      <dl class="kv"><dt>Location</dt><dd>${esc(s.location || "—")}</dd>
+        <dt>${s.pending ? "Code" : "Last seen"}</dt><dd>${s.pending ? (s.code ? `<span class="mono">${esc(s.code)}</span>` : `<span class="muted" style="font-weight:400">Sent with the station. Lost it? Details › New activation code</span>`) : s.revoked ? "—" : esc(ago(s.last_seen))}</dd>
+        <dt>Software</dt><dd>${esc(s.version || "—")}</dd></dl>
+      <div class="actions"><button class="btn sm" data-open="station:${s.id}">Details</button></div></div>`).join("")}</div>`;
+}
+
+/* ---------------- Settings ---------------- */
+function vSettings() {
+  const o = DB.org;
+  const ro = !can("admin");
+  return head("Settings", "Changes reach every station within a minute.") + (ro ? `<div class="readonly-note">You have ${esc(ROLE_NAME[DB.me.role])} access. Ask an admin to change settings.</div>` : "") + `<fieldset ${ro ? "disabled" : ""} style="border:0;padding:0;margin:0;display:flex;flex-direction:column;gap:22px;min-width:0">
+    <section class="panel"><div class="panel-h"><h2>Company</h2></div><form class="panel-b form-grid" data-form="company">
+      <label for="sName">Company name</label><input class="field" id="sName" name="name" value="${esc(o.name)}" maxlength="80">
+      <label for="sPrimary">Main color<small>Station top bar and buttons</small></label><span><input type="color" id="sPrimary" name="primary" value="${esc(o.primary)}"> <span class="mono">${esc(o.primary)}</span></span>
+      <label for="sAccent">Accent color<small>Logo tile and highlights</small></label><span><input type="color" id="sAccent" name="accent" value="${esc(o.accent)}"> <span class="mono">${esc(o.accent)}</span></span>
+      <label for="sExt">Out-too-long alert<small>Hours, for any item. Categories and items can override.</small></label>
+      <span><input class="field" id="sExt" name="ext" type="number" min="1" max="72" step="0.5" value="${o.extended_hours ?? ""}" style="width:100px"> hours (leave blank to turn off)</span>
+      <span></span><span><button class="btn primary">Save company settings</button></span>
+    </form></section>
+    <section class="panel"><div class="panel-h"><h2>Checkout rules</h2></div><div class="panel-b form-grid">
+      <label for="rReturn">Return items for others<small>Tapping an item someone else has returns it for them</small></label>
+      <span class="switch"><input type="checkbox" id="rReturn" data-rule="allow_return_by_other" ${o.settings.allow_return_by_other ? "checked" : ""}><span></span></span>
+      <label for="rTake">Take items others have<small>Off: an item must be returned before anyone else can check it out</small></label>
+      <span class="switch"><input type="checkbox" id="rTake" data-rule="allow_checkout_while_held" ${o.settings.allow_checkout_while_held ? "checked" : ""}><span></span></span>
+    </div></section>
+    <section class="panel"><div class="panel-h"><h2>Categories and time limits</h2></div><div class="tablewrap"><table>
+      <thead><tr><th>Category</th><th>Time limit</th><th>Hours</th><th>Out-too-long</th><th></th></tr></thead>
+      <tbody>${DB.categories.map((c) => { const n = DB.equipment.filter((q) => q.cat === c.id).length; return `<tr>
+        <td><input class="field" style="width:150px;font-weight:700" aria-label="Category name" data-cat="${c.id}" data-k="name" value="${esc(c.name)}" maxlength="40"><span class="sub">${n} item${n === 1 ? "" : "s"}</span></td>
+        <td><select class="field" aria-label="${esc(c.name)} time limit" data-cat="${c.id}" data-k="rule">
+          <option value="hours" ${c.rule === "hours" ? "selected" : ""}>Hours after checkout</option>
+          <option value="shift_end" ${c.rule === "shift_end" ? "selected" : ""}>End of shift</option>
+          <option value="none" ${c.rule === "none" ? "selected" : ""}>No limit</option></select></td>
+        <td><input class="field" type="number" min="0.5" max="72" step="0.5" style="width:90px" aria-label="${esc(c.name)} hours" data-cat="${c.id}" data-k="hours" value="${c.hours ?? ""}" placeholder="${c.rule === "shift_end" ? "fallback" : ""}"></td>
+        <td><input class="field" type="number" min="1" max="72" step="0.5" style="width:90px" aria-label="${esc(c.name)} out-too-long hours" data-cat="${c.id}" data-k="extended" value="${c.extended ?? ""}" placeholder="${o.extended_hours ?? "off"}"></td>
+        <td style="font-size:13px">${S.confirm === "delcat:" + c.id ? `<span class="confirm" style="padding:4px 8px">Delete ${esc(c.name)}? <button class="btn sm danger" type="button" data-act="delCat" data-id="${c.id}">Delete</button><button class="btn sm" type="button" data-act="noConfirm">Cancel</button></span>`
+          : n ? `<span class="muted">${c.rule === "shift_end" ? "Hours = fallback off shift" : ""}</span>` : `<button class="btn sm danger" type="button" data-act="askDelCat" data-id="${c.id}">Delete</button>`}</td></tr>`; }).join("")}</tbody></table></div>
+      <form class="panel-b inline-form" data-form="newCat" style="border-top:1px solid var(--line)">
+        <input class="field" name="name" aria-label="New category name" placeholder="New category, like Headsets" maxlength="40" style="max-width:240px">
+        <select class="field" name="rule" aria-label="Time limit" style="max-width:200px"><option value="hours">Hours after checkout</option><option value="shift_end">End of shift</option><option value="none">No limit</option></select>
+        <input class="field" name="hours" type="number" min="0.5" max="72" step="0.5" aria-label="Hours" placeholder="Hours" style="max-width:100px">
+        <button class="btn primary">Add category</button><span class="err" id="catErr" role="alert"></span></form>
+      <div class="panel-b muted" style="border-top:1px solid var(--line);font-size:13.5px">Changes save as you go. A new limit applies from the next checkout. Individual items can override this from Equipment. Categories with equipment can't be deleted.</div></section>
+    <section class="panel"><div class="panel-h"><h2>Plan and modules</h2></div><div class="panel-b" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">
+      <span class="chip ok">Shifts and shift reports: on</span><span class="muted">To add modules, contact support.</span></div></section></fieldset>`;
+}
+function vTeam() {
+  const { members, invites } = api.members();
+  const roleSel = (m) => `<select class="field" aria-label="Role for ${esc(m.name)}" data-member="${m.id}" ${canManageRole(m.role) ? "" : "disabled"}>
+    ${Object.keys(RANK).reverse().map((r) => `<option value="${r}" ${m.role === r ? "selected" : ""} ${canManageRole(r) ? "" : "disabled"}>${ROLE_NAME[r]}</option>`).join("")}</select>`;
+  return head("Team access", "Who can sign in to this dashboard. Station fobs are separate: set those up under Employees or at a station.") + `
+    <section class="panel"><div class="panel-h"><h2>Invite someone</h2></div>
+      <form class="panel-b inline-form" data-form="invite">
+        <input class="field" name="name" aria-label="Their name" placeholder="Their name" maxlength="60" style="max-width:200px">
+        <input class="field" name="email" type="email" aria-label="Email address" placeholder="name@company.com" required style="max-width:300px">
+        <select class="field" name="role" aria-label="Role" style="max-width:180px">${["viewer", "supervisor", "admin", "owner"].filter(canManageRole).map((r) => `<option value="${r}">${ROLE_NAME[r]}</option>`).join("")}</select>
+        <button class="btn primary">Send invite</button><span class="err" id="invErr" role="alert"></span>
+      </form>
+      <div class="panel-b muted" style="border-top:1px solid var(--line);font-size:13.5px">They get an email with a link that works for 14 days, only when signed in with that address.</div></section>
+    <section class="panel"><div class="panel-h"><h2>People (${members.length})</h2></div><div class="tablewrap"><table>
+      <thead><tr><th>Name</th><th>Role</th><th>Last signed in</th><th></th></tr></thead>
+      <tbody>${members.map((m) => `<tr><td><b>${esc(m.name)}</b>${m.id === DB.me.id ? ` <span class="chip quiet">You</span>` : ""}<span class="sub">${esc(m.email)}</span></td>
+        <td>${roleSel(m)}</td><td class="num">${esc(ago(m.last))}</td>
+        <td>${S.confirm === "rm:" + m.id ? `<span class="confirm" style="padding:4px 8px">Remove ${esc(m.name.split(" ")[0])}? <button class="btn sm danger" data-act="rmMember" data-id="${m.id}">Remove</button><button class="btn sm" data-act="noConfirm">Cancel</button></span>`
+          : canManageRole(m.role) && m.id !== DB.me.id ? `<button class="btn sm danger" data-act="askRm" data-id="${m.id}">Remove</button>` : ""}</td></tr>`).join("")}</tbody></table></div></section>
+    ${invites.length ? `<section class="panel"><div class="panel-h"><h2>Waiting to accept (${invites.length})</h2></div><div class="list">${invites.map((i) => `
+      <div class="row" style="grid-template-columns:minmax(0,1fr) auto auto"><span><b>${esc(i.email)}</b><span class="sub">Invited ${esc(ago(i.created))} · link expires ${esc(fmtWhen(i.expires))}</span></span>
+        <span class="chip brand">${ROLE_NAME[i.role]}</span>${canManageRole(i.role) ? `<button class="btn sm" data-act="cancelInv" data-id="${i.id}">Cancel invite</button>` : ""}</div>`).join("")}</div></section>` : ""}
+    <section class="panel"><div class="panel-h"><h2>What each role can do</h2></div><div class="tablewrap"><table>
+      <thead><tr><th></th><th>View only</th><th>Supervisor</th><th>Admin</th><th>Owner</th></tr></thead>
+      <tbody>${[["See everything: equipment, activity, alerts, reports", 0], ["Add and edit employees, deactivate badges", 1], ["Mark items lost or in maintenance", 1], ["Mark alerts seen, sign off shift reports", 1],
+        ["Add and edit equipment and categories, time limits", 2], ["Stations, company settings, checkout rules", 2], ["Station fob roles and PINs", 2], ["Invite and manage the team (except owners)", 2], ["Manage owners", 3]]
+        .map(([t, n]) => `<tr><td>${t}</td>${[0, 1, 2, 3].map((i) => `<td aria-label="${i >= n ? "Yes" : "No"}">${i >= n ? "✓" : "<span class='muted'>–</span>"}</td>`).join("")}</tr>`).join("")}</tbody></table></div></section>`;
+}
+const VIEWS = { overview: vOverview, equipment: vEquipment, employees: vEmployees, activity: vActivity, alerts: vAlerts, shifts: vShifts, stations: vStations, settings: vSettings, team: vTeam };
+
+/* =====================================================================
+   Detail panels
+   ===================================================================== */
+function drawerHead(title, sub, extra = "") {
+  return `<div class="drawer-h"><div><h2 id="dh">${title}</h2>${sub ? `<p>${sub}</p>` : ""}${extra}</div><button class="btn" data-act="close" aria-label="Close">Close</button></div>`;
+}
+function dEquipment(id) {
+  const x = api.equipment().find((q) => q.id === id); if (!x) return drawerHead("Not found");
+  const hist = api.activity().filter((a) => a.eq === id).slice(0, 30);
+  const c = S.confirm;
+  return drawerHead(esc(x.name), `${esc(x.category)} · <span class="mono">${esc(x.asset)}</span>`, `<div style="margin-top:8px">${statusChip(x)}</div>`) + `<div class="drawer-b">
+    <div class="sect"><dl class="kv">
+      <dt>With</dt><dd>${x.holderName ? `<button class="link" data-open="employee:${x.holder}">${esc(x.holderName)}</button>` : "In the room"}</dd>
+      ${x.holder ? `<dt>Out since</dt><dd>${esc(fmtWhen(x.out_at))} (${dur(x.hours_out)})</dd>` : ""}
+      ${x.holder && x.due_at ? `<dt>Due</dt><dd class="${x.is_overdue ? "late" : ""}">${esc(fmtWhen(x.due_at))}</dd>` : ""}
+      <dt>Time limit</dt><dd>${esc(limitText(x.limit))}${x.mode === "category" ? ` <span class="muted">(from ${esc(x.category)})</span>` : ""}</dd>
+      <dt>Out-too-long alert</dt><dd>${x.extended_hours != null ? x.extended_hours + " h" : "Off"}</dd>
+      <dt>Tag</dt><dd class="mono">${x.tag ? esc(fmtUid(x.tag)) : `<span class="muted" style="font-family:var(--body)">Not tagged yet</span>`}</dd>${x.notes ? `<dt>Notes</dt><dd>${esc(x.notes)}</dd>` : ""}</dl></div>
+    ${can("admin") ? `<div class="actions"><button class="btn" data-act="editEq">Edit details</button></div>` : ""}
+    ${can("supervisor") ? `<div class="sect"><h3>Status</h3>
+      ${c === "lost" ? `<div class="confirm">Mark ${esc(x.name)} lost? Its alerts close, and whoever finds it can tap it at a station to return it.
+          <button class="btn sm danger" data-act="doStatus" data-s="lost">Mark lost</button><button class="btn sm" data-act="noConfirm">Cancel</button></div>`
+      : `<div class="actions">
+        ${x.status !== "lost" ? `<button class="btn danger" data-act="askLost">Mark lost</button>` : ""}
+        ${x.status !== "maintenance" ? `<button class="btn" data-act="doStatus" data-s="maintenance">Send to maintenance</button>` : ""}
+        ${["lost", "maintenance", "retired"].includes(x.status) ? `<button class="btn primary" data-act="doStatus" data-s="available">Back in service</button>` : ""}
+        ${can("admin") && x.status !== "retired" ? `<button class="btn" data-act="doStatus" data-s="retired">Retire</button>` : ""}</div>`}</div>` : ""}
+    ${can("admin") ? `<div class="sect"><h3>Limits for this item</h3><form class="inline-form" data-form="limits:${x.id}">
+      <select class="field" name="mode" aria-label="Time limit for this item" style="flex-basis:100%">
+        <option value="category" ${x.mode === "category" ? "selected" : ""}>Follow ${esc(x.category)} (${esc(limitText(limitOf({ ...x, mode: "category" })))})</option>
+        <option value="hours" ${x.mode === "hours" ? "selected" : ""}>Own number of hours</option>
+        <option value="shift_end" ${x.mode === "shift_end" ? "selected" : ""}>End of shift</option>
+        <option value="none" ${x.mode === "none" ? "selected" : ""}>No limit</option></select>
+      <input class="field" name="hours" type="number" min="0.5" max="72" step="0.5" aria-label="Hours" placeholder="Hours" value="${x.mode !== "category" && x.hours != null ? x.hours : ""}" style="max-width:110px">
+      <input class="field" name="ext" type="number" min="1" max="72" step="0.5" aria-label="Out-too-long hours" placeholder="Alert after (h)" value="${x.extended ?? ""}" style="max-width:150px">
+      <button class="btn primary">Save</button></form>
+      <p class="muted" style="margin:8px 0 0;font-size:13px">Applies from the next checkout. Leave "Alert after" blank to use the category or company setting.</p></div>` : ""}
+    <div class="sect"><h3>History</h3>${hist.length ? `<div class="hist">${hist.map((a) => `<div class="${a.action === "checkin" ? "in" : ""} ${a.flags.length ? "flag" : ""}">
+        <time>${esc(fmtWhen(a.at))} · ${esc(a.place)}</time><b>${esc(a.by)}</b> ${esc(a.description.charAt(0).toLowerCase() + a.description.slice(1))}${a.flags.includes("returned_after_extended") ? " (late)" : ""}</div>`).join("")}</div>` : `<p class="muted">No checkouts yet.</p>`}</div>
+  </div>`;
+}
+function dEmployee(id) {
+  const e = api.employees().find((x) => x.id === id); if (!e) return drawerHead("Not found");
+  const items = api.equipment().filter((q) => q.holder === id && q.status !== "lost");
+  const hist = api.activity().filter((a) => a.byId === id || a.prev === id).slice(0, 30);
+  const lateCount = api.activity().filter((a) => a.action === "checkin" && a.prev === id && a.flags.includes("returned_after_extended")).length;
+  const c = S.confirm;
+  return drawerHead(esc(e.name), `${esc(e.number || "")}${e.shiftNames.length ? " · " + esc(e.shiftNames.join(", ")) + " shift" : ""}`,
+      `<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">${e.active ? `<span class="chip ok">Active</span>` : `<span class="chip quiet">Inactive</span>`}${e.role !== "employee" ? `<span class="chip brand">${ROLE[e.role]} fob</span>` : ""}</div>`) + `<div class="drawer-b">
+    <div class="sect"><h3>Has out now (${items.length})</h3>${items.length ? `<div class="list" style="border:1px solid var(--line);border-radius:10px">${items.map((q) => `<button class="row" data-open="equipment:${q.id}" style="grid-template-columns:minmax(0,1fr) auto">
+        <span><b>${esc(q.name)}</b><span class="sub">Since ${esc(fmtWhen(q.out_at))}${q.due_at ? " · due " + esc(fmtWhen(q.due_at)) : ""}</span></span>${statusChip(q)}</button>`).join("")}</div>` : `<p class="muted" style="margin:0">Nothing checked out.</p>`}</div>
+    <div class="sect"><dl class="kv"><dt>Badge</dt><dd class="mono">${e.badge ? esc(fmtUid(e.badge)) : `<span class="muted" style="font-family:var(--body)">No badge yet</span>`}</dd><dt>Late returns (7 days)</dt><dd>${lateCount}</dd>
+      <dt>Last tap</dt><dd>${e.last ? esc(fmtWhen(e.last)) : "Never"}</dd></dl></div>
+    ${can("supervisor") ? `<div class="actions"><button class="btn" data-act="editEmp">Edit details</button></div>
+    <div class="sect"><h3>Access</h3>${c === "deactivate" ? `<div class="confirm">Deactivate ${esc(e.name)}? Their badge stops working right away. Their history stays.
+        <button class="btn sm danger" data-act="doActive" data-v="0">Deactivate</button><button class="btn sm" data-act="noConfirm">Cancel</button></div>`
+      : e.active ? `<button class="btn danger" data-act="askDeactivate">Deactivate</button>` : `<button class="btn primary" data-act="doActive" data-v="1">Reactivate</button>`}</div>` : ""}
+    <div class="sect"><h3>History</h3>${hist.length ? `<div class="hist">${hist.map((a) => `<div class="${a.action === "checkin" ? "in" : ""} ${a.forOther ? "flag" : ""}">
+      <time>${esc(fmtWhen(a.at))}</time>${a.byId === id ? `${esc(a.description)} <b>${esc(a.equipment)}</b>` : `<b>${esc(a.by)}</b> returned <b>${esc(a.equipment)}</b> for them`}</div>`).join("")}</div>` : `<p class="muted">No activity yet.</p>`}</div>
+  </div>`;
+}
+function dReport(key) {
+  const r = api.shiftReports().find((x) => x.key === key); if (!r) return drawerHead("Not found");
+  return drawerHead(`${esc(r.shift.name)} shift`, `${esc(fmtDay(r.day))} · ${fmtTime(r.start)} to ${fmtTime(r.end)}${r.inProgress ? " · in progress (live preview)" : ""}`) + `<div class="drawer-b">
+    <div class="sect"><h3>${r.items.length ? `Not back by ${fmtTime(r.cutoff)} (${r.items.length})` : "All returned"}</h3>
+      ${r.items.length ? `<div class="list" style="border:1px solid var(--line);border-radius:10px">${r.items.map((i) => `<button class="row" data-open="equipment:${i.eq.id}" style="grid-template-columns:minmax(0,1fr) auto">
+        <span><b>${esc(i.eq.name)}</b> · ${esc(i.emp.name)}<span class="sub">Out since ${esc(fmtWhen(i.out_at))}${i.next && i.outcome !== "not_returned" ? ` · ${i.outcome === "returned_late" ? "back" : "taken"} ${esc(fmtWhen(i.next.at))}${i.nextBy && i.nextBy.id !== i.emp.id ? " by " + esc(i.nextBy.name) : ""}` : ""}</span></span>
+        <span class="chip ${OUTCOME[i.outcome][0]}">${OUTCOME[i.outcome][1]}</span></button>`).join("")}</div>`
+      : `<p class="muted" style="margin:0">Everything the ${esc(r.shift.name)} crew took was back on time.</p>`}</div>
+    ${r.inProgress ? `<div class="notice">This shift is still going. The report is saved 15 minutes after it ends.</div>`
+      : r.ack ? `<div class="notice">Signed off by ${esc(r.ack.by)} ${esc(fmtWhen(r.ack.at))}${r.ack.note ? `: “${esc(r.ack.note)}”` : ""}</div>`
+      : !can("supervisor") ? `<div class="readonly-note">Not signed off yet. A supervisor or admin can sign it off.</div>`
+      : `<div class="sect"><h3>Sign off</h3><form class="inline-form" data-form="report:${esc(r.key)}"><input class="field" name="note" aria-label="Note" placeholder="Note, like: PDA 02 found in van 4" maxlength="200">
+        <button class="btn primary">Sign off</button></form></div>`}
+  </div>`;
+}
+function dStation(id) {
+  const s = api.stations().find((x) => x.id === id); if (!s) return drawerHead("Not found");
+  const taps = api.activity().filter((a) => a.station === id && a.source === "station");
+  const c = S.confirm;
+  return drawerHead(esc(s.name), esc(s.location || ""), `<div style="margin-top:8px">${s.revoked ? `<span class="chip quiet">Disconnected</span>` : s.pending ? `<span class="chip info">Waiting for setup</span>` : s.online ? `<span class="chip ok">Online</span>` : `<span class="chip warn">Offline</span>`}</div>`) + `<div class="drawer-b">
+    <div class="sect"><dl class="kv"><dt>Last seen</dt><dd>${s.last_seen ? esc(ago(s.last_seen)) : "Never"}</dd><dt>Software</dt><dd>${esc(s.version || "—")}</dd>
+      <dt>Taps (7 days)</dt><dd>${taps.length}</dd><dt>Added</dt><dd>${esc(fmtWhen(s.added))}</dd>${s.pending ? `<dt>Activation code</dt><dd${s.code ? ` class="mono"` : ""}>${s.code ? esc(s.code) : "Not shown again after it's made. Use New activation code below if it's lost."}</dd>` : ""}</dl></div>
+    ${!s.online && !s.revoked && !s.pending ? `<div class="notice">Offline stations keep working: taps are saved on the station and sync when it reconnects. Check its power and Wi-Fi.</div>` : ""}
+    ${!can("admin") ? "" : `<div class="sect"><h3>Access</h3>${c === "revoke" ? `<div class="confirm">Disconnect ${esc(s.name)}? It stops working right away. Use this if a station is lost or stolen.
+        <button class="btn sm danger" data-act="doRevoke">Disconnect</button><button class="btn sm" data-act="noConfirm">Cancel</button></div>`
+      : `<div class="actions">${s.revoked ? "" : `<button class="btn danger" data-act="askRevoke">Disconnect station</button>`}<button class="btn" data-act="newCode">New activation code</button></div>
+        <p class="muted" style="margin:8px 0 0;font-size:13px">A new code is for replacing or re-setting up this station. The old connection stops working.</p>`}</div>`}
+  </div>`;
+}
+function dEqForm(id) {
+  const x = id ? eqOf(id) : { name: "", cat: S.f.eqCat || DB.categories[0]?.id, asset: "", tag: "", notes: "" };
+  return drawerHead(id ? `Edit ${esc(x.name)}` : "Add equipment", id ? "" : "Or add it at a station: Admin menu, Add equipment.") + `<div class="drawer-b">
+    <form class="fgrid" data-form="eq:${id || ""}">
+      <label class="full">Name<input class="field" name="name" required maxlength="60" value="${esc(x.name)}" placeholder="Radio 07"></label>
+      <label>Category<select class="field" name="cat">${DB.categories.map((c) => `<option value="${c.id}" ${x.cat === c.id ? "selected" : ""}>${esc(c.name)}</option>`).join("")}</select></label>
+      <label>Asset tag<small>Your own ID, optional</small><input class="field" name="asset" maxlength="40" value="${esc(x.asset || "")}" placeholder="RAD-007"></label>
+      <label class="full">NFC tag ID<small>Printed on the tag or shown when it's tapped at a station. Leave blank to tag it later.</small>
+        <input class="field mono" name="tag" maxlength="40" value="${esc(fmtUid(x.tag || ""))}" placeholder="04:DE:00:05:07"></label>
+      <label class="full">Notes<input class="field" name="notes" maxlength="200" value="${esc(x.notes || "")}" placeholder="Optional"></label>
+      <div class="err full" role="alert">${esc(S.formErr || "")}</div>
+      <div class="actions full"><button class="btn primary">${id ? "Save changes" : "Add equipment"}</button><button class="btn" type="button" data-act="${id ? "backEq" : "close"}">Cancel</button></div>
+    </form></div>`;
+}
+function dEmpForm(id) {
+  const e = id ? empOf(id) : { first: "", last: "", number: "", badge: "", shifts: [], role: "employee" };
+  const role = S.formRole ?? e.role;
+  return drawerHead(id ? `Edit ${esc(e.name)}` : "Add employee", id ? "" : "Or add them at a station: Admin menu, Add employee, then tap their badge.") + `<div class="drawer-b">
+    <form class="fgrid" data-form="emp:${id || ""}">
+      <label>First name<input class="field" name="first" required maxlength="40" value="${esc(e.first)}"></label>
+      <label>Last name<input class="field" name="last" maxlength="40" value="${esc(e.last)}"></label>
+      <label>Employee #<small>Optional</small><input class="field" name="number" maxlength="20" value="${esc(e.number || "")}"></label>
+      <label>Badge ID<small>Leave blank to give them a badge at a station</small><input class="field mono" name="badge" maxlength="40" value="${esc(fmtUid(e.badge || ""))}" placeholder="04:BA:00:00:00:21"></label>
+      <div class="full" style="display:flex;flex-direction:column;gap:5px"><b style="font-size:13.5px">Shifts</b>
+        <div class="checks">${DB.shifts.filter((s) => s.active || e.shifts.includes(s.id)).map((s) => `<label><input type="checkbox" name="shifts" value="${s.id}" ${e.shifts.includes(s.id) ? "checked" : ""}> ${esc(s.name)} <span class="muted">${fmtClock(s.start)}–${fmtClock(s.end)}</span></label>`).join("")}</div></div>
+      ${can("admin") ? `<label>Station fob<small>Managers and admins open the station's Admin menu</small>
+        <select class="field" name="role" data-act-change="formRole">${["employee", "manager", "admin"].map((r) => `<option value="${r}" ${role === r ? "selected" : ""}>${{ employee: "Regular badge", manager: "Manager fob", admin: "Admin fob" }[r]}</option>`).join("")}</select></label>
+        ${role !== "employee" ? `<label>${e.pin ? "New PIN" : "PIN"}<small>${e.pin ? "Leave blank to keep the current PIN" : "4 to 8 digits, needed for the Admin menu"}</small><input class="field" name="pin" inputmode="numeric" maxlength="8" autocomplete="off"></label>` : "<span></span>"}` : ""}
+      <div class="err full" role="alert">${esc(S.formErr || "")}</div>
+      <div class="actions full"><button class="btn primary">${id ? "Save changes" : "Add employee"}</button><button class="btn" type="button" data-act="${id ? "backEmp" : "close"}">Cancel</button></div>
+    </form></div>`;
+}
+function dShiftForm(id) {
+  const x = id ? DB.shifts.find((s) => s.id === id) : { name: "", start: "05:00", end: "13:30", days: null, grace: 15, early: 60, active: true };
+  const admin = can("admin"), sup = can("supervisor"), c = S.confirm;
+  const days = x.days || [1, 2, 3, 4, 5, 6, 7];
+  const people = DB.employees.filter((e) => e.active || e.shifts.includes(id)).sort((a, b) => a.name.localeCompare(b.name));
+  return drawerHead(id ? (sup ? `Edit ${esc(x.name)} shift` : `${esc(x.name)} shift`) : "Add a shift", id ? `${fmtClock(x.start)} to ${fmtClock(x.end)} · ${esc(daysText(x.days))}` : "Times are in the company's time zone.") + `<div class="drawer-b">
+    ${!sup ? `<div class="readonly-note">You have View only access.</div>` : !admin ? `<div class="readonly-note">Supervisors can change who's on the shift. An admin changes its times.</div>` : ""}
+    <form class="fgrid" data-form="shift:${id || ""}"><fieldset ${admin ? "" : "disabled"} class="full fgrid" style="border:0;padding:0;margin:0;min-width:0">
+      <label class="full">Name<input class="field" name="name" required maxlength="40" value="${esc(x.name)}" placeholder="AM, PM, Overnight"></label>
+      <label>Starts<input class="field" type="time" name="start" required value="${x.start}"></label>
+      <label>Ends<small>Earlier than the start = ends the next day</small><input class="field" type="time" name="end" required value="${x.end}"></label>
+      <div class="full" style="display:flex;flex-direction:column;gap:5px"><b style="font-size:13.5px">Days</b>
+        <div class="checks">${DOW.map((d, i) => `<label><input type="checkbox" name="days" value="${i + 1}" ${days.includes(i + 1) ? "checked" : ""}> ${d}</label>`).join("")}</div></div>
+      <label>Grace period (min)<small>Report runs this long after the shift ends</small><input class="field" type="number" name="grace" min="0" max="720" value="${x.grace}"></label>
+      <label>Early checkout (min)<small>Taps this long before the start count for this shift</small><input class="field" type="number" name="early" min="0" max="720" value="${x.early}"></label>
+    </fieldset>
+    <fieldset ${sup ? "" : "disabled"} class="full" style="border:0;padding:0;margin:0;min-width:0;display:flex;flex-direction:column;gap:5px"><b style="font-size:13.5px">Who's on this shift</b>
+      <div class="checks">${people.map((e) => `<label><input type="checkbox" name="crew" value="${e.id}" ${e.shifts.includes(id) ? "checked" : ""}> ${esc(e.name)}</label>`).join("") || `<span class="muted">No employees yet.</span>`}</div></fieldset>
+      <div class="err full" role="alert">${esc(S.formErr || "")}</div>
+      ${sup ? `<div class="actions full"><button class="btn primary">${id ? "Save changes" : "Add shift"}</button><button class="btn" type="button" data-act="close">Cancel</button></div>` : ""}
+    </form>
+    ${id && admin ? `<div class="sect"><h3>${x.active ? "Stop using this shift" : "Not in use"}</h3>${x.active
+      ? (c === "stopShift" ? `<div class="confirm">Stop using ${esc(x.name)}? No more reports are made for it and it's hidden when assigning people. Past reports are kept.
+          <button class="btn sm danger" data-act="doShiftActive" data-v="0">Stop using</button><button class="btn sm" data-act="noConfirm">Cancel</button></div>`
+        : `<div class="actions"><button class="btn danger" data-act="askStopShift">Stop using this shift</button></div>`)
+      : `<p class="muted" style="margin:0 0 8px">No reports are made for it. Past reports are kept.</p><div class="actions"><button class="btn" data-act="doShiftActive" data-v="1">Start using again</button></div>`}</div>` : ""}
+  </div>`;
+}
+const DRAWERS = { shiftForm: dShiftForm, eqForm: dEqForm, empForm: dEmpForm, equipment: dEquipment, employee: dEmployee, report: dReport, station: dStation };
+
+/* =====================================================================
+   Events
+   ===================================================================== */
+document.addEventListener("click", async (e) => {
+  const kpi = e.target.closest("a.kpi[data-filter]");
+  if (kpi) { const f = kpi.dataset.filter; S.f.eqStatus = f === "lost" ? "lost" : f; S.f.eqCat = ""; S.f.eqSearch = ""; }
+  const op = e.target.closest("[data-open]");
+  if (op) { const [kind, ...rest] = op.dataset.open.split(":"); return openDrawer(kind, rest.join(":")); }
+  const seg = e.target.closest("[data-seg]");
+  if (seg) { const [k, v] = seg.dataset.seg.split(":"); S.f[k] = v; return render(); }
+  const t = e.target.closest("[data-act]"); if (!t) return;
+  const a = t.dataset.act, D = S.drawer;
+  if (a === "signOut") { localStorage.removeItem("sp.org"); await sb.auth.signOut(); return; }
+  if (a === "magic" || a === "forgot") return authAction(a);
+  if (a === "pickOrg") return openCompany(t.dataset.id);
+  if (a === "skipPass") return openCompany(L.org);
+  if (a === "editName") { S.ready = false; S.drawer = null; AUTH.err = ""; AUTH.view = "name"; return renderAuth(); }
+  if (a === "close") { S.drawer = null; S.confirm = null; S.formErr = null; S.formRole = null; return renderLayer(); }
+  if (a === "newEq") { S.formErr = null; return openDrawer("eqForm", ""); }
+  if (a === "editEq") { S.formErr = null; return openDrawer("eqForm", D.id); }
+  if (a === "backEq") { S.formErr = null; return openDrawer("equipment", D.id); }
+  if (a === "newEmp") { S.formErr = null; S.formRole = null; return openDrawer("empForm", ""); }
+  if (a === "editEmp") { S.formErr = null; S.formRole = null; return openDrawer("empForm", D.id); }
+  if (a === "backEmp") { S.formErr = null; S.formRole = null; return openDrawer("employee", D.id); }
+  if (a === "askDelCat") { S.confirm = "delcat:" + t.dataset.id; return render(); }
+  if (a === "delCat") { const r = api.deleteCategory(t.dataset.id); S.confirm = null; toast(r.ok ? "Category deleted" : "It still has equipment"); return render(); }
+  if (a === "askRm") { S.confirm = "rm:" + t.dataset.id; return render(); }
+  if (a === "rmMember") { const r = api.removeMember(t.dataset.id); S.confirm = null; toast(r.ok ? "Removed from the team" : r.error); return render(); }
+  if (a === "cancelInv") { api.cancelInvite(t.dataset.id); toast("Invite cancelled"); return render(); }
+  if (a === "askStopShift") { S.confirm = "stopShift"; return renderLayer(); }
+  if (a === "doShiftActive") { api.setShiftActive(D.id, t.dataset.v === "1"); S.confirm = null; toast(t.dataset.v === "1" ? "Shift is in use again" : "Shift stopped. Past reports are kept."); return render(); }
+  if (a === "askLost") { S.confirm = "lost"; return renderLayer(); }
+  if (a === "askDeactivate") { S.confirm = "deactivate"; return renderLayer(); }
+  if (a === "askRevoke") { S.confirm = "revoke"; return renderLayer(); }
+  if (a === "noConfirm") { S.confirm = null; return renderLayer(); }
+  if (a === "doStatus") { api.setStatus(D.id, t.dataset.s); S.confirm = null; toast({ lost: "Marked lost", maintenance: "Sent to maintenance", available: "Back in service" }[t.dataset.s]); return render(); }
+  if (a === "doActive") { api.setActive(D.id, t.dataset.v === "1"); S.confirm = null; toast(t.dataset.v === "1" ? "Reactivated" : "Deactivated. Their badge no longer works."); return render(); }
+  if (a === "doRevoke") { api.revokeStation(D.id); S.confirm = null; toast("Station disconnected"); return render(); }
+  if (a === "newCode") { try { const code = await api.newCode(D.id); toast("New code: " + code); } catch (err) { toast(LIVE ? niceErr(err) : String(err)); } return render(); }
+  if (a === "ackStart") { S.f.acking = t.dataset.id; render(); $(`[data-form="ack:${t.dataset.id}"] input`)?.focus(); return; }
+  if (a === "addStation") { S.f.newStation = { code: null }; render(); $('[data-form="station"] input')?.focus(); return; }
+  if (a === "cancelStation" || a === "doneStation") { S.f.newStation = null; return render(); }
+  if (a === "copyCode") { navigator.clipboard?.writeText(S.f.newStation.code).then(() => toast("Code copied"), () => toast("Couldn't copy. Select the code instead.")); return; }
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && S.drawer) { S.drawer = null; S.confirm = null; renderLayer(); }
+  if (e.key === "Enter" && e.target.matches("tr[data-open]")) e.target.click();
+});
+document.addEventListener("input", (e) => {
+  const k = e.target.dataset.f; if (!k) return;
+  S.f[k] = e.target.value; const pos = e.target.selectionStart; render();
+  const el = $(`[data-f="${k}"]`); if (el) { el.focus(); try { el.setSelectionRange(pos, pos); } catch {} }
+});
+document.addEventListener("change", (e) => {
+  const t = e.target;
+  if (t.id === "switchOrg") { S.drawer = null; return openCompany(t.value); }
+  if (t.id === "viewAs") { DB.me.role = t.value; S.drawer = null; S.confirm = null; toast(`Previewing as ${ROLE_NAME[t.value]}`); return render(); }
+  if (t.dataset.member) { const r = api.setMemberRole(t.dataset.member, t.value); toast(r.ok ? "Role updated" : r.error); return render(); }
+  if (t.dataset.actChange === "formRole") { const form = t.form; const keep = Object.fromEntries(new FormData(form)); S.formRole = t.value; renderLayer();
+    const f2 = $(".drawer form"); for (const [k, v] of Object.entries(keep)) if (f2.elements[k] && k !== "shifts" && k !== "role") f2.elements[k].value = v; return; }
+  if (t.dataset.f === "eqCat") { S.f.eqCat = t.value; return render(); }
+  if (t.dataset.rule) { api.saveSettings({ settings: { ...DB.org.settings, [t.dataset.rule]: t.checked } }); return toast("Saved"); }
+  if (t.dataset.cat) {
+    const v = t.value; const k = t.dataset.k;
+    if (k === "name") { const nm = v.trim(); if (!nm || DB.categories.some((c) => c.id !== t.dataset.cat && c.name.toLowerCase() === nm.toLowerCase())) { toast("Names must be filled in and different"); return render(); }
+      api.saveCategory(t.dataset.cat, { name: nm }); DB.equipment.filter((q) => q.cat === t.dataset.cat); toast("Renamed"); return render(); }
+    api.saveCategory(t.dataset.cat, { [k]: k === "rule" ? v : v === "" ? null : Number(v) });
+    const c = catOf(t.dataset.cat);
+    if (c.rule === "hours" && !c.hours) { c.hours = 8; toast("Hours needed for this limit: set to 8"); } else toast("Saved");
+    return render();
+  }
+});
+document.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const f = e.target, kind = f.dataset.form || "", data = Object.fromEntries(new FormData(f));
+  if (kind === "signin" || kind === "newpass" || kind === "profile") return authAction(kind, f);
+  if (kind.startsWith("ack:")) { api.ackAlert(kind.slice(4), data.note.trim()); S.f.acking = null; toast("Marked seen"); return render(); }
+  if (kind.startsWith("report:")) { api.ackReport(kind.slice(7), data.note.trim()); toast("Report signed off"); return render(); }
+  if (kind.startsWith("limits:")) {
+    const id = kind.slice(7); const hours = data.hours === "" ? null : Number(data.hours);
+    if (data.mode === "hours" && !hours) { toast("Enter the number of hours"); return; }
+    api.setItemLimits(id, data.mode, hours, data.ext === "" ? null : Number(data.ext)); toast("Saved. Applies from the next checkout."); return render();
+  }
+  if (kind.startsWith("eq:")) {
+    const id = kind.slice(3) || null; const r = api.saveEquipment(id, data);
+    if (!r.ok) { S.formErr = r.error; renderLayer(); return; }
+    S.formErr = null; toast(id ? "Saved" : `Added ${data.name.trim()}`); render(); return openDrawer("equipment", r.id);
+  }
+  if (kind.startsWith("emp:")) {
+    const id = kind.slice(4) || null; data.shifts = new FormData(f).getAll("shifts"); const r = api.saveEmployee(id, data);
+    if (!r.ok) { S.formErr = r.error; const keep = data; renderLayer(); const f2 = $(".drawer form"); for (const [k, v] of Object.entries(keep)) if (f2.elements[k] && k !== "shifts" && typeof v === "string") f2.elements[k].value = v; return; }
+    S.formErr = null; S.formRole = null; toast(id ? "Saved" : `Added ${data.first.trim()}`); render(); return openDrawer("employee", r.id);
+  }
+  if (kind.startsWith("shift:")) {
+    const id = kind.slice(6) || null; const fd = new FormData(f); data.days = fd.getAll("days"); const crew = fd.getAll("crew");
+    const r = api.saveShift(id, data, crew);
+    if (!r.ok) { S.formErr = r.error; renderLayer(); const f2 = $(".drawer form");
+      for (const [k, v] of Object.entries(data)) if (f2.elements[k] && typeof v === "string" && f2.elements[k].type !== "checkbox") f2.elements[k].value = v;
+      f2.querySelectorAll("input[type=checkbox]").forEach((cb) => { cb.checked = (cb.name === "days" ? data.days : crew).includes(cb.value); }); return; }
+    S.formErr = null; S.drawer = null; toast(id ? "Shift saved" : `Added ${data.name.trim()} shift`); return render();
+  }
+  if (kind === "newCat") {
+    const r = api.addCategory({ name: data.name, rule: data.rule, hours: data.hours === "" ? null : Number(data.hours) });
+    if (!r.ok) { $("#catErr").textContent = r.error; return; }
+    toast("Category added"); return render();
+  }
+  if (kind === "invite") {
+    const r = api.invite(data.email, data.role, (data.name || "").trim());
+    if (!r.ok) { $("#invErr").textContent = r.error; return; }
+    toast(`Invite sent to ${data.email.trim().toLowerCase()}`); return render();
+  }
+  if (kind === "station") { if (!data.name.trim()) return; f.querySelectorAll("button").forEach((b) => (b.disabled = true));
+    try { const code = await api.createStation(data.name.trim(), data.location.trim()); S.f.newStation = { name: data.name.trim(), code }; }
+    catch (err) { toast(LIVE ? err.message : String(err)); f.querySelectorAll("button").forEach((b) => (b.disabled = false)); return; }
+    return render(); }
+  if (kind === "company") {
+    const ext = data.ext === "" ? null : Number(data.ext);
+    api.saveSettings({ name: data.name.trim() || DB.org.name, primary: data.primary, accent: data.accent, extended_hours: ext });
+    applyBrand(); toast("Company settings saved"); return render();
+  }
+});
+
+/* =====================================================================
+   LIVE MODE — the same screens on the company's real data (Supabase).
+   On app.sonoranpoint.com (or with ?live) people sign in, their company's
+   data is loaded into the same shapes the screens use, and every change is
+   saved to the database (then everything is reloaded). Anywhere else (like
+   this preview) the demo data is used.
+   ===================================================================== */
+const SP = Object.assign({ url: "https://qzzukfjefqwifnqzxhhu.supabase.co", key: "sb_publishable_4mIH45QwuL5gTupgIX-2oQ_0sFp8y92",
+  product: "Sonoran Point", support: "support@sonoranpoint.com" }, window.SP_CONFIG || {});
+const LIVE = !!window.SP_CONFIG || /(^|\.)sonoranpoint\.com$/.test(location.hostname) || /[?&]live(\b|=)/.test(location.search);
+let sb = null;
+const ms = (t) => (t ? Date.parse(t) : null);
+const hhmm = (t) => (t || "").slice(0, 5);
+async function rpc(fn, args) { const { data, error } = await sb.rpc(fn, args || {}); if (error) throw Object.assign(new Error(error.message), { code: error.code }); return data; }
+async function okRpc(fn, args) { const r = await rpc(fn, args); if (r && r.ok === false) throw new Error(r.error); return r; }
+async function q(promise) { const { data, error } = await promise; if (error) throw Object.assign(new Error(error.message), { code: error.code }); return data; }
+async function all(table, cols, build) {      // reads past the server's 1000-row page size
+  const out = []; for (let from = 0; ; from += 1000) {
+    const page = await q(build(sb.from(table).select(cols)).range(from, from + 999)); out.push(...page); if (page.length < 1000) return out; }
+}
+const niceErr = (e) => /fetch|network/i.test(e?.message || "") ? "Can't reach the server. Check your connection."
+  : e?.code === "42501" || /row-level security|permission/i.test(e?.message || "") ? "Your role isn't allowed to do that."
+  : e?.code === "23505" ? "That's already used by something else." : (e?.message || "Something went wrong.");
+async function sendInviteEmail(email, token, name) {
+  // The name is saved on their account if this email doesn't have one yet; they can change it when they first sign in.
+  const { error } = await sb.auth.signInWithOtp({ email, options: { emailRedirectTo: `${location.origin}/?invite=${token}`, shouldCreateUser: true, data: name ? { full_name: name } : undefined } });
+  return error ? error.message : null;
+}
+
+const L = { org: null, companies: [], user: null, names: {}, timer: null, queue: Promise.resolve(), pending: 0, idMap: {} };
+const live = {
+  async load() {
+    const org = L.org, since = new Date(Date.now() - 8 * 86400000).toISOString();
+    const [o, cats, eq, emps, shifts, assigns, stations, txns, alerts, reports, pins] = await Promise.all([
+      q(sb.from("organizations").select("*").eq("id", org).single()),
+      q(sb.from("equipment_categories").select("*").eq("org_id", org).order("sort_order").order("name")),
+      all("equipment", "*", (x) => x.eq("org_id", org).neq("status", "retired").order("name")),
+      all("employees", "*", (x) => x.eq("org_id", org).order("first_name")),
+      q(sb.from("shifts").select("*").eq("org_id", org).order("start_time")),
+      all("shift_assignments", "shift_id,employee_id", (x) => x.eq("org_id", org)),
+      q(sb.from("station_overview").select("*").eq("org_id", org).order("created_at")),
+      all("transactions", "id,occurred_at,equipment_id,employee_id,previous_employee_id,action,station_id,source,flags,notes", (x) => x.eq("org_id", org).gte("occurred_at", since).order("occurred_at")),
+      all("equipment_alerts", "*", (x) => x.eq("org_id", org).or(`resolved_at.is.null,raised_at.gte.${since}`).order("raised_at")),
+      q(sb.from("shift_reports").select("*").eq("org_id", org).gte("shift_date", since.slice(0, 10)).order("shift_start", { ascending: false })),
+      rpc("dashboard_pin_holders", { p_org: org }).catch(() => []),
+    ]);
+    const role = L.companies.find((c) => c.org_id === org)?.role || "viewer";
+    let team = { members: [], invites: [] };
+    if (RANK[role] >= RANK.admin) team = await rpc("list_members", { p_org: org }).catch(() => team);
+    L.names = Object.fromEntries((team.members || []).map((m) => [m.user_id, m.name || m.email]));
+    L.names[L.user.id] = L.user.user_metadata?.full_name || L.user.email;
+    const who = (uid) => (uid ? L.names[uid] || "a supervisor" : null);
+    const pinSet = new Set(pins || []);
+    Object.assign(DB, {
+      org: { id: o.id, name: o.name, primary: o.primary_color, accent: o.accent_color, timezone: o.timezone, extended_hours: o.extended_checkout_hours == null ? null : Number(o.extended_checkout_hours),
+        settings: o.settings || {}, terminology: o.terminology || {}, modules: o.enabled_modules || [], logo_url: o.logo_url, status: o.status, trial_ends: ms(o.trial_ends_at) },
+      categories: cats.map((c) => ({ id: c.id, name: c.name, rule: c.time_limit_type, hours: c.default_checkout_hours == null ? null : Number(c.default_checkout_hours),
+        extended: c.extended_alert_hours == null ? null : Number(c.extended_alert_hours), sort: c.sort_order })),
+      equipment: eq.map((x) => ({ id: x.id, cat: x.category_id, name: x.name, tag: x.nfc_uid, asset: x.asset_tag, notes: x.notes, status: x.status, mode: x.time_limit_mode,
+        hours: x.checkout_hours == null ? null : Number(x.checkout_hours), extended: x.extended_alert_hours == null ? null : Number(x.extended_alert_hours),
+        holder: x.current_employee_id, out_at: ms(x.checked_out_at), due_at: ms(x.due_at), lost_at: x.status === "lost" ? ms(x.last_event_at) : null })),
+      employees: emps.map((e) => ({ id: e.id, first: e.first_name, last: e.last_name, name: [e.first_name, e.last_name].filter(Boolean).join(" "), number: e.employee_number,
+        role: e.station_role, active: e.active, badge: e.badge_uid, pin: pinSet.has(e.id), shifts: assigns.filter((a) => a.employee_id === e.id).map((a) => a.shift_id) })),
+      shifts: shifts.map((s) => ({ id: s.id, name: s.name, start: hhmm(s.start_time), end: hhmm(s.end_time), grace: s.grace_minutes, early: s.early_checkout_minutes,
+        days: s.days_of_week && s.days_of_week.length < 7 ? s.days_of_week : null, active: s.active })),
+      stations: stations.map((s) => ({ id: s.id, name: s.name, location: s.location || "", version: s.software_version, last_seen: ms(s.last_seen_at) || 0, revoked: !!s.revoked_at,
+        added: ms(s.created_at), pending: !s.activated_at && !s.revoked_at, code: (DB.stations || []).find((x) => x.id === s.id)?.code || null })),
+      txns: txns.map((t) => ({ id: t.id, at: ms(t.occurred_at), eq: t.equipment_id, emp: t.employee_id, prev: t.previous_employee_id, action: t.action, station: t.station_id,
+        source: t.source, flags: t.flags || [], notes: t.notes })),
+      alerts: alerts.map((a) => ({ id: a.id, eq: a.equipment_id, emp: a.employee_id, kind: a.kind, out_at: ms(a.checked_out_at), threshold_at: ms(a.threshold_at), raised_at: ms(a.raised_at),
+        resolved_at: ms(a.resolved_at), ack_by: who(a.acknowledged_by), ack_at: ms(a.acknowledged_at), notes: a.notes })),
+      reports, members: (team.members || []).map((m) => ({ id: m.user_id, name: m.name || m.email.split("@")[0], email: m.email, role: m.role, joined: ms(m.joined_at), last: ms(m.last_sign_in_at) })),
+      invites: (team.invites || []).map((i) => ({ id: i.id, email: i.email, role: i.role, created: ms(i.created_at), expires: ms(i.expires_at) })),
+      me: { id: L.user.id, name: L.names[L.user.id], role }, audit: [], reportAcks: {}, occs: [],
+    });
+    // Live previews for shifts still in progress (today's and last night's), like the demo.
+    DB.previews = [];
+    if ((DB.org.modules || []).includes("shifts")) {
+      const today = localDay(Date.now(), tz()), yday = addDays(today, -1);
+      const calls = DB.shifts.filter((s) => s.active).flatMap((s) => [today, yday].map((d) => rpc("shift_report", { p_shift: s.id, p_date: dayKey(d) }).then((r) => ({ r, s, d })).catch(() => null)));
+      for (const x of await Promise.all(calls)) if (x?.r?.ok && x.r.in_progress && x.r.scheduled && ms(x.r.shift_start) <= Date.now()) DB.previews.push(x);
+    }
+    // The saved reports + previews in the shape the Shifts screens use.
+    const item = (i) => ({ eq: { id: i.equipment_id, name: i.equipment }, emp: { name: i.employee }, out_at: ms(i.checked_out_at), outcome: i.outcome,
+      next: i.resolved_at ? { at: ms(i.resolved_at) } : null, nextBy: i.resolved_by ? { name: i.resolved_by } : null });
+    DB.liveReports = [
+      ...DB.previews.map(({ r, s, d }) => ({ key: `live:${s.id}:${dayKey(d)}`, shift: s, day: d, start: ms(r.shift_start), end: ms(r.shift_end), cutoff: ms(r.cutoff), inProgress: true,
+        items: r.items.map(item), outstanding: r.outstanding_count, stillOut: r.still_out_count, ack: null })),
+      ...reports.map((r) => { const s = DB.shifts.find((x) => x.id === r.shift_id) || { id: r.shift_id, name: "Shift", grace: 15 };
+        const [y, m, dd] = r.shift_date.split("-").map(Number);
+        return { key: r.id, shift: s, day: { y, m, d: dd }, start: ms(r.shift_start), end: ms(r.shift_end), cutoff: ms(r.cutoff), inProgress: false, items: (r.items || []).map(item),
+          outstanding: r.outstanding_count, stillOut: r.still_out_count,
+          ack: r.acknowledged_at ? { by: who(r.acknowledged_by), at: ms(r.acknowledged_at), note: r.acknowledgement_notes } : null }; }),
+    ].sort((a, b) => b.start - a.start);
+  },
+  async reload() {
+    L.reloading = (L.reloading || 0) + 1;
+    try { await live.load(); } catch (e) { return toast(niceErr(e)); } finally { L.reloading--; }
+    if (S.drawer && DRAWERS[S.drawer.kind] && S.drawer.id && !["eqForm", "empForm", "shiftForm"].includes(S.drawer.kind)) {
+      const gone = { equipment: () => !eqOf(S.drawer.id), employee: () => !empOf(S.drawer.id), station: () => !DB.stations.some((s) => s.id === S.drawer.id) }[S.drawer.kind];
+      if (gone && gone()) S.drawer = null;
+    }
+    applyBrand(); keepTyping(render);
+  },
+};
+// Re-draw without losing what someone is in the middle of typing (or where the cursor is).
+const cssq = (v) => String(v).replace(/["\\]/g, "\\$&");
+function keepTyping(draw) {
+  const typed = [...document.querySelectorAll("form[data-form] input, form[data-form] select, form[data-form] textarea")]
+    .filter((el) => el.name && (el.type === "checkbox" ? el.checked !== el.defaultChecked : el.tagName === "SELECT" ? el.value !== [...el.options].find((o) => o.defaultSelected)?.value : el.value !== el.defaultValue))
+    .map((el) => ({ form: el.form.dataset.form, name: el.name, v: el.value, c: el.checked, cb: el.type === "checkbox" }));
+  const a = document.activeElement, focus = a?.form?.dataset?.form && a.name ? { form: a.form.dataset.form, name: a.name, pos: a.selectionStart } : null;
+  draw();
+  for (const t of typed) {
+    const els = document.querySelectorAll(`form[data-form="${cssq(t.form)}"] [name="${cssq(t.name)}"]`);
+    els.forEach((el) => { if (t.cb) { if (el.value === t.v) el.checked = t.c; } else el.value = t.v; });
+  }
+  if (focus) { const el = document.querySelector(`form[data-form="${cssq(focus.form)}"] [name="${cssq(focus.name)}"]`); if (el) { el.focus(); try { if (focus.pos != null) el.setSelectionRange(focus.pos, focus.pos); } catch {} } }
+}
+
+/* Every change: apply it on screen right away (same code as the demo), then save it.
+   Saves run one at a time in order; if one fails, the screen reloads from the database. */
+const ORG = () => DB.org.id;
+const upd = (table, id, row) => q(sb.from(table).update(row).eq("id", id));
+async function syncAssignments(field, id, ids, other) {
+  await q(sb.from("shift_assignments").delete().eq(field, id));
+  if (ids.length) await q(sb.from("shift_assignments").insert(ids.map((x) => ({ org_id: ORG(), [field]: id, [other]: x }))));
+}
+const REMOTE = {
+  setStatus: ([id, status]) => okRpc("set_equipment_status", { p_equipment: id, p_status: status }),
+  setItemLimits: ([id, mode, hours, ext]) => upd("equipment", id, { time_limit_mode: mode, checkout_hours: hours ?? null, extended_alert_hours: ext ?? null }),
+  ackAlert: ([id, note]) => rpc("acknowledge_alert", { p_alert: id, p_notes: note || null }),
+  ackReport: ([key, note]) => rpc("acknowledge_shift_report", { p_report: key, p_notes: note || null }),
+  revokeStation: ([id]) => rpc("revoke_station", { p_station: id }),
+  setActive: ([id, active]) => upd("employees", id, { active }),
+  saveSettings: () => { const o = DB.org;
+    return upd("organizations", o.id, { name: o.name, primary_color: o.primary.toUpperCase(), accent_color: o.accent.toUpperCase(), extended_checkout_hours: o.extended_hours, settings: o.settings }); },
+  saveCategory: ([id]) => { const c = catOf(id); if (!c) return;
+    return upd("equipment_categories", id, { name: c.name, time_limit_type: c.rule, default_checkout_hours: c.hours, extended_alert_hours: c.extended }); },
+  addCategory: async ([d]) => { const c = DB.categories.find((x) => x.name.toLowerCase() === (d.name || "").trim().toLowerCase()); if (!c) return;
+    await q(sb.from("equipment_categories").insert({ org_id: ORG(), name: c.name, time_limit_type: c.rule, default_checkout_hours: c.hours, sort_order: c.sort })); },
+  deleteCategory: ([id]) => okRpc("delete_category", { p_category: id }),
+  setShiftActive: ([id, active]) => upd("shifts", id, { active }),
+  saveShift: async ([id, d, crew], r) => {
+    const s = DB.shifts.find((x) => x.id === r.id); let sid = id;
+    if (can("admin")) {
+      const row = { name: s.name, start_time: s.start, end_time: s.end, days_of_week: s.days || null, grace_minutes: s.grace, early_checkout_minutes: s.early };
+      if (id) await upd("shifts", id, row); else { sid = (await q(sb.from("shifts").insert({ org_id: ORG(), ...row }).select("id").single())).id; L.idMap[r.id] = sid; s.id = sid; }
+    }
+    if (crew) await syncAssignments("shift_id", sid, crew, "employee_id");
+  },
+  saveEquipment: async ([id, d], r) => {
+    const x = eqOf(r.id); const row = { category_id: x.cat, name: x.name, nfc_uid: x.tag || null, asset_tag: x.asset || null, notes: x.notes || null };
+    if (id) return upd("equipment", id, row);
+    const nid = (await q(sb.from("equipment").insert({ org_id: ORG(), ...row }).select("id").single())).id;
+    L.idMap[r.id] = nid; x.id = nid; if (S.drawer?.id === r.id) S.drawer.id = nid;
+  },
+  saveEmployee: async ([id, d], r) => {
+    const e = empOf(r.id); const row = { first_name: e.first, last_name: e.last || "", employee_number: e.number || null, badge_uid: e.badge || null };
+    let eid = id;
+    if (id) await upd("employees", id, row); else { eid = (await q(sb.from("employees").insert({ org_id: ORG(), ...row }).select("id").single())).id; L.idMap[r.id] = eid; e.id = eid; if (S.drawer?.id === r.id) S.drawer.id = eid; }
+    await syncAssignments("employee_id", eid, e.shifts || [], "shift_id");
+    if (can("admin")) await okRpc("set_employee_station_role", { p_employee: eid, p_role: e.role || "employee", p_pin: d.pin || null });
+  },
+  invite: async ([email, role, name]) => {
+    const r = await okRpc("invite_member", { p_org: ORG(), p_email: email.trim().toLowerCase(), p_role: role });
+    const err = await sendInviteEmail(email.trim().toLowerCase(), r.token, name);
+    if (err) toast("Invite saved, but the email didn't send: " + err);
+  },
+  setMemberRole: ([id, role]) => okRpc("set_member_role", { p_org: ORG(), p_user: id, p_role: role }),
+  removeMember: ([id]) => okRpc("remove_member", { p_org: ORG(), p_user: id }),
+  cancelInvite: ([id]) => rpc("cancel_invite", { p_invite: id }),
+};
+function goLive() {
+  for (const [name, remote] of Object.entries(REMOTE)) {
+    const local = api[name];
+    api[name] = (...args) => {
+      args = args.map((a) => (typeof a === "string" && L.idMap[a]) || a);   // a just-added record's temporary id -> its real id
+      const r = local.apply(api, args);
+      if (r && r.ok === false) return r;                 // caught on screen; nothing to save
+      L.pending++;
+      L.queue = L.queue.then(() => new Promise((ok) => setTimeout(ok, 0)))   // let the handler finish its own edits first
+        .then(() => remote(args, r))
+        .catch((e) => { toast(`Couldn't save: ${niceErr(e)}`); })
+        .finally(() => { if (--L.pending === 0) live.reload(); });
+      return r;
+    };
+  }
+  // Need the server's answer before showing anything.
+  api.createStation = async (name, location) => {
+    let loc = null;
+    if (location) {
+      const found = await q(sb.from("locations").select("id").eq("org_id", ORG()).eq("name", location).limit(1));
+      loc = found[0]?.id || (await q(sb.from("locations").insert({ org_id: ORG(), name: location }).select("id").single())).id;
+    }
+    const r = await rpc("create_station", { p_org: ORG(), p_name: name, p_location: loc });
+    if (r.ok === false) throw new Error(r.error === "station_limit" ? `Your plan includes ${r.limit} station${r.limit === 1 ? "" : "s"}. Contact ${SP.support} to add more.` : r.error);
+    await live.load(); const s = DB.stations.find((x) => x.id === r.station_id); if (s) s.code = r.activation_code;
+    return r.activation_code;
+  };
+  api.newCode = async (id) => {
+    const r = await rpc("reset_station_activation", { p_station: id });
+    await live.load(); const s = DB.stations.find((x) => x.id === id); if (s) s.code = r.activation_code;
+    return r.activation_code;
+  };
+  api.shiftReports = () => DB.liveReports || [];
+}
+
+/* ---- Sign-in, invites, company choice ---- */
+const AUTH = { view: "signin", msg: "", err: "", busy: false, email: "" };
+function authCard(inner) {
+  return `<div style="grid-column:1 / -1;min-height:100vh;display:grid;place-items:center;padding-block:24px;padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px));background:var(--bg)">
+    <div class="panel" style="width:min(420px,100%);padding:26px 24px;display:flex;flex-direction:column;gap:16px">
+      <div style="background:#ffffff;border-radius:12px;padding:16px 18px 12px;display:flex;flex-direction:column;align-items:center;gap:6px;border:1px solid #e3e8ef">
+        <img src="brand/logo.svg" alt="Sonoran Point Technologies" style="width:min(250px,100%);height:auto;display:block"></div>
+      ${inner}</div></div>`;
+}
+function renderAuth() {
+  const A = AUTH; let inner;
+  const email = esc(L.user?.email || "");
+  if (A.view === "loading") inner = `<p class="muted" style="margin:0">${esc(A.msg || "Loading…")}</p>`;
+  else if (A.view === "nocompany") inner = `<p style="margin:0">You're signed in as <b>${email}</b>, but this account isn't part of a company yet.</p>
+      <p class="muted" style="margin:0;font-size:14px">${A.err ? esc(A.err) + " " : ""}Open the invite email you were sent (it signs you in and adds you), or ask your manager to invite this email address.</p>
+      <button class="btn" data-act="signOut">Sign out</button>`;
+  else if (A.view === "pick") inner = `<p style="margin:0">Which company?</p><div class="list" style="border:1px solid var(--line);border-radius:10px">
+      ${L.companies.map((c) => `<button class="row" data-act="pickOrg" data-id="${c.org_id}" style="grid-template-columns:minmax(0,1fr) auto"><b>${esc(c.name)}</b><span class="muted">${esc(ROLE_NAME[c.role])}</span></button>`).join("")}</div>
+      <button class="btn sm" data-act="signOut" style="align-self:flex-start">Sign out</button>`;
+  else if (A.view === "welcome" || A.view === "name") inner = `<form data-form="profile" class="fgrid" style="grid-template-columns:1fr">
+      <h2 style="margin:0;font-size:20px">${A.view === "welcome" ? `Welcome to ${esc(A.company || "the team")}` : "What's your name?"}</h2>
+      <p class="muted" style="margin:0;font-size:14px">${A.view === "welcome" ? "Your name is what your team sees on the dashboard." : "It's shown to your team instead of your email address."}</p>
+      <label>Your name<input class="field" name="full_name" autocomplete="name" maxlength="60" required value="${esc(L.user?.user_metadata?.full_name || "")}"></label>
+      ${A.view === "welcome" ? `<label>Password<small>Optional. Or keep signing in with an emailed link.</small><input class="field" type="password" name="password" autocomplete="new-password" minlength="8"></label>` : ""}
+      <div class="err" role="alert">${esc(A.err)}</div>
+      <div class="actions"><button class="btn primary" ${A.busy ? "disabled" : ""}>Continue</button>${A.view === "name" && L.user?.user_metadata?.full_name ? `<button class="btn" type="button" data-act="skipPass">Cancel</button>` : ""}</div></form>`;
+  else if (A.view === "newpass") inner = `<form data-form="newpass" class="fgrid" style="grid-template-columns:1fr">
+      <h2 style="margin:0;font-size:20px">Set a new password</h2>
+      <label>New password<input class="field" type="password" name="password" autocomplete="new-password" minlength="8"></label>
+      <div class="err" role="alert">${esc(A.err)}</div>
+      <div class="actions"><button class="btn primary" ${A.busy ? "disabled" : ""}>Save password</button></div></form>`;
+  else inner = `<form data-form="signin" class="fgrid" style="grid-template-columns:1fr">
+      ${A.invite ? `<div class="notice">Sign in with the email address your invite was sent to.</div>` : ""}
+      <label>Email<input class="field" type="email" name="email" autocomplete="username" required value="${esc(A.email)}"></label>
+      <label>Password<input class="field" type="password" name="password" autocomplete="current-password"></label>
+      <div class="err" role="alert">${esc(A.err)}</div>${A.msg ? `<div class="notice">${esc(A.msg)}</div>` : ""}
+      <button class="btn primary" style="justify-content:center;padding:10px" ${A.busy ? "disabled" : ""}>Sign in</button>
+      <div class="actions" style="justify-content:space-between"><button class="btn sm" type="button" data-act="magic">Email me a sign-in link</button><button class="btn sm" type="button" data-act="forgot">Forgot password?</button></div></form>`;
+  $("#app").innerHTML = authCard(inner); renderLayer();
+}
+async function afterSignIn() {
+  L.user = S.session.user; AUTH.view = "loading"; AUTH.msg = ""; renderAuth();
+  const invite = sessionStorage.getItem("sp.invite");
+  if (invite) {
+    sessionStorage.removeItem("sp.invite");
+    try {
+      const r = await rpc("accept_invite", { p_token: invite });
+      if (!r.ok) AUTH.err = { wrong_account: `That invite was sent to ${r.invited_email}. Sign out and open the invite email again.`,
+        invite_expired: "That invite has expired. Ask for a new one.", invalid_invite: "That invite link was already used or cancelled." }[r.error] || r.error;
+      else { AUTH.joined = r.org_id; }
+    } catch (e) { AUTH.err = niceErr(e); }
+  }
+  try { L.companies = await rpc("my_companies"); } catch (e) { AUTH.view = "signin"; AUTH.err = niceErr(e); return renderAuth(); }
+  if (!L.companies.length) { AUTH.view = "nocompany"; return renderAuth(); }
+  let pick = AUTH.joined || localStorage.getItem("sp.org");
+  if (!L.companies.some((c) => c.org_id === pick)) pick = L.companies.length === 1 ? L.companies[0].org_id : null;
+  if (!pick) { AUTH.view = "pick"; return renderAuth(); }
+  if (AUTH.joined && !AUTH.passwordAsked) { AUTH.passwordAsked = true; AUTH.company = L.companies.find((c) => c.org_id === pick)?.name; L.org = pick; AUTH.view = "welcome"; return renderAuth(); }
+  if (!(L.user.user_metadata?.full_name || "").trim()) { L.org = pick; AUTH.view = "name"; return renderAuth(); }
+  return openCompany(pick);
+}
+async function openCompany(id) {
+  L.org = id; try { localStorage.setItem("sp.org", id); } catch {}
+  AUTH.view = "loading"; renderAuth();
+  try { await live.load(); } catch (e) { AUTH.view = "nocompany"; AUTH.err = niceErr(e); return renderAuth(); }
+  S.ready = true; AUTH.err = ""; applyBrand(); render();
+  clearInterval(L.timer);
+  L.timer = setInterval(() => { if (S.ready && !document.hidden && !S.drawer && !L.pending && !document.activeElement?.matches("input,select,textarea")) live.reload(); }, 30000);
+}
+async function authAction(kind, form) {
+  const A = AUTH; const fd = form ? Object.fromEntries(new FormData(form)) : {}; A.err = ""; A.msg = "";
+  const email = (fd.email ?? $('[data-form="signin"] [name=email]')?.value ?? "").trim(); if (email) A.email = email;
+  if (kind === "signin") {
+    if (!email || !fd.password) { A.err = "Enter your email and password, or use a sign-in link."; return renderAuth(); }
+    A.busy = true; renderAuth();
+    const { data, error } = await sb.auth.signInWithPassword({ email, password: fd.password }); A.busy = false;
+    if (error) { A.err = /invalid/i.test(error.message) ? "That email and password don't match." : error.message; return renderAuth(); }
+    S.session = data.session; return afterSignIn();
+  }
+  if (kind === "magic" || kind === "forgot") {
+    if (!email) { A.err = "Enter your email first."; return renderAuth(); }
+    const back = location.origin + "/";
+    const { error } = kind === "magic" ? await sb.auth.signInWithOtp({ email, options: { emailRedirectTo: back, shouldCreateUser: false } })
+      : await sb.auth.resetPasswordForEmail(email, { redirectTo: back });
+    if (error) A.err = /signups not allowed|not found/i.test(error.message) ? "There's no account for that email. Ask your manager for an invite." : error.message;
+    else A.msg = kind === "magic" ? `Check ${email} for a sign-in link.` : `Check ${email} for a link to set a new password.`;
+    return renderAuth();
+  }
+  if (kind === "profile") {
+    const name = (fd.full_name || "").trim().replace(/\s+/g, " ");
+    if (!name) { A.err = "Enter your name."; return renderAuth(); }
+    if (fd.password && fd.password.length < 8) { A.err = "Passwords need at least 8 characters (or leave it blank)."; return renderAuth(); }
+    A.busy = true; renderAuth();
+    const { data, error } = await sb.auth.updateUser({ data: { full_name: name }, ...(fd.password ? { password: fd.password } : {}) }); A.busy = false;
+    if (error) { A.err = error.message; return renderAuth(); }
+    L.user = data.user; if (S.session) S.session.user = data.user;
+    toast(fd.password ? "Saved. You can sign in with your password now." : "Saved"); return openCompany(L.org);
+  }
+  if (kind === "newpass") {
+    if ((fd.password || "").length < 8) { A.err = "Use at least 8 characters."; return renderAuth(); }
+    A.busy = true; renderAuth(); const { error } = await sb.auth.updateUser({ password: fd.password }); A.busy = false;
+    if (error) { A.err = error.message; return renderAuth(); }
+    toast("Password saved"); return L.org && A.view === "welcome" ? openCompany(L.org) : afterSignIn();
+  }
+}
+async function bootLive() {
+  goLive();
+  const inv = new URLSearchParams(location.search).get("invite");
+  if (inv) { sessionStorage.setItem("sp.invite", inv); AUTH.invite = true; history.replaceState(null, "", location.pathname + location.hash); }
+  sb = window.supabase.createClient(SP.url, SP.key);
+  sb.auth.onAuthStateChange((ev, session) => {
+    S.session = session;
+    if (ev === "PASSWORD_RECOVERY") { AUTH.view = "newpass"; S.ready = false; renderAuth(); }
+    if (ev === "SIGNED_OUT") { S.ready = false; clearInterval(L.timer); AUTH.view = "signin"; renderAuth(); }
+  });
+  const { data } = await sb.auth.getSession(); S.session = data.session;
+  if (!S.session) return renderAuth();
+  if (AUTH.view !== "newpass") await afterSignIn();
+}
+
+function applyBrand() {
+  // The dashboard is Sonoran Point's; each company's own color marks their badge at the top of the rail.
+  document.documentElement.style.setProperty("--cust", DB.org.accent || "#f7931e");
+}
+if (LIVE) bootLive(); else { applyBrand(); render(); }
+setInterval(() => { if (!S.drawer && !document.activeElement?.matches("input,select,textarea")) render(); }, 60000);  // keep "x min ago" fresh
+</script>

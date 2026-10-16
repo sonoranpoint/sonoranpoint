@@ -1,0 +1,1493 @@
+<title>Operator Console</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira:wght@500;600;700&family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Your side of the product. Same type family as the customer dashboard and station,
+   but a graphite rail instead of a customer's brand color, so it never looks like a customer's screen. */
+:root {
+  --bg: #f1f2f4; --surface: #ffffff; --surface-2: #f6f7f9; --ink: #14181d; --muted: #5d6672; --line: #dde1e6;
+  --rail: #1d2329; --rail-ink: #f3f5f7;
+  --brand: #24303b; --brand-ink: #ffffff; --brand-text: #2b5f8f; --brand-soft: #e8eef4;
+  --accent: #f2a900;
+  --ok: #1b7343; --ok-bg: #e2f3e9; --warn: #8f5400; --warn-bg: #fcefd8; --bad: #b3261e; --bad-bg: #fbe5e3; --info: #1f5f9e; --info-bg: #e3eef9;
+  --focus: #2b6cb0; --shadow: 0 10px 30px -12px rgba(16, 22, 30, .3);
+  --display: "Barlow Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
+  --body: "Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1216; --surface: #161a20; --surface-2: #1b2027; --ink: #e6e9ed; --muted: #97a0ab; --line: #2a3039;
+    --rail: #0a0d10; --rail-ink: #e6e9ed; --brand: #3a4a59; --brand-ink: #fff; --brand-text: #8cbcee; --brand-soft: #1b2733; --accent: #f2b42a;
+    --ok: #63d39a; --ok-bg: #12301f; --warn: #f2bb55; --warn-bg: #33270e; --bad: #ff8f86; --bad-bg: #3b1614; --info: #8cc2f5; --info-bg: #13283d;
+    --focus: #8cbcee; --shadow: 0 10px 30px -12px rgba(0, 0, 0, .6); color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1216; --surface: #161a20; --surface-2: #1b2027; --ink: #e6e9ed; --muted: #97a0ab; --line: #2a3039;
+  --rail: #0a0d10; --rail-ink: #e6e9ed; --brand: #3a4a59; --brand-ink: #fff; --brand-text: #8cbcee; --brand-soft: #1b2733; --accent: #f2b42a;
+  --ok: #63d39a; --ok-bg: #12301f; --warn: #f2bb55; --warn-bg: #33270e; --bad: #ff8f86; --bad-bg: #3b1614; --info: #8cc2f5; --info-bg: #13283d;
+  --focus: #8cbcee; --shadow: 0 10px 30px -12px rgba(0, 0, 0, .6); color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 15px; line-height: 1.45; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+h1, h2, h3 { text-wrap: balance; }
+
+.app { display: grid; grid-template-columns: 228px minmax(0, 1fr); min-height: 100%; }
+.rail { background: var(--rail); color: var(--rail-ink); padding: 18px 14px; display: flex; flex-direction: column; gap: 18px; position: sticky; top: 0; height: 100vh; }
+.org { display: flex; align-items: center; gap: 10px; padding: 4px 6px; }
+.mark { width: 40px; height: 40px; border-radius: 9px; background: var(--accent); color: #1a1a1a; display: grid; place-items: center; font-family: var(--display); font-weight: 700; font-size: 19px; flex: none; }
+.org b { font-family: var(--display); font-size: 21px; font-weight: 700; line-height: 1.05; display: block; }
+.org small { opacity: .7; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; }
+.nav { display: flex; flex-direction: column; gap: 2px; }
+.nav a { color: inherit; text-decoration: none; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 9px 12px; border-radius: 9px; font-weight: 700; opacity: .82; }
+.nav a:hover { background: rgba(255,255,255,.08); opacity: 1; }
+.nav a.on { background: rgba(255,255,255,.14); opacity: 1; }
+.nav .n { background: var(--bad); color: #fff; border-radius: 99px; font-size: 12px; padding: 1px 8px; }
+.me { margin-top: auto; font-size: 13px; padding: 10px 8px; border-top: 1px solid rgba(255,255,255,.14); display: flex; flex-direction: column; gap: 2px; }
+.me b { font-size: 14px; }
+.pill { align-self: flex-start; background: var(--accent); color: #1a1a1a; border-radius: 99px; padding: 1px 9px; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+
+.main { padding: 26px max(28px, env(safe-area-inset-right, 0px)) 48px max(28px, env(safe-area-inset-left, 0px)); min-width: 0; }
+.wrap { max-width: 1240px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px; }
+.head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 20px; }
+.head h1 { margin: 0; font-family: var(--display); font-weight: 700; font-size: 38px; line-height: 1; }
+.head p { margin: 4px 0 0; color: var(--muted); }
+.back { color: var(--brand-text); font-weight: 700; text-decoration: none; font-size: 14px; }
+@media (max-width: 900px) {
+  .app { grid-template-columns: minmax(0, 1fr); }
+  .rail { height: auto; z-index: 5; flex-direction: row; align-items: center; gap: 10px; padding: 10px max(16px, env(safe-area-inset-right, 0px)) 10px max(16px, env(safe-area-inset-left, 0px)); }
+  .org small, .org b, .me { display: none; }
+  .mark { width: 34px; height: 34px; font-size: 16px; }
+  .nav { flex-direction: row; overflow-x: auto; scrollbar-width: none; flex: 1; min-width: 0; }
+  .nav::-webkit-scrollbar { display: none; }
+  .nav a { white-space: nowrap; padding: 7px 10px; font-size: 14px; }
+  .main { padding: 18px max(16px, env(safe-area-inset-right, 0px)) 40px max(16px, env(safe-area-inset-left, 0px)); }
+  .head h1 { font-size: 32px; }
+}
+
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; min-width: 0; }
+.panel-h { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.panel-h h2 { margin: 0; font-size: 13px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.panel-b { padding: 14px 18px; }
+.cols { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+.stack { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+@media (max-width: 1080px) { .cols { grid-template-columns: minmax(0, 1fr); } }
+
+.kpis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 1080px) { .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .kpis > :last-child { grid-column: 1 / -1; } }
+.kpi { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; display: flex; flex-direction: column; gap: 2px; position: relative; overflow: hidden; }
+.kpi::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--line); }
+.kpi.bad::before { background: var(--bad); } .kpi.warn::before { background: var(--warn); } .kpi.ok::before { background: var(--ok); }
+.kpi b { font-family: var(--display); font-size: 40px; line-height: 1; font-variant-numeric: tabular-nums; }
+.kpi span { font-weight: 700; font-size: 14px; } .kpi small { color: var(--muted); font-size: 12.5px; }
+
+.chip { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 700; padding: 2px 9px; border-radius: 99px; white-space: nowrap; }
+.chip.ok { background: var(--ok-bg); color: var(--ok); } .chip.warn { background: var(--warn-bg); color: var(--warn); }
+.chip.bad { background: var(--bad-bg); color: var(--bad); } .chip.info { background: var(--info-bg); color: var(--info); }
+.chip.quiet { background: var(--surface-2); color: var(--muted); border: 1px solid var(--line); }
+
+.btn { border: 1px solid var(--line); background: var(--surface); border-radius: 9px; padding: 7px 13px; font-weight: 700; font-size: 14px; display: inline-flex; align-items: center; gap: 6px; text-decoration: none; }
+.btn:hover { border-color: var(--muted); }
+.btn.primary { background: var(--brand); color: var(--brand-ink); border-color: var(--brand); }
+.btn.danger { color: var(--bad); }
+.btn.sm { padding: 4px 10px; font-size: 13px; }
+.btn[disabled] { opacity: .5; cursor: default; }
+
+.filters { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; }
+.field { background: var(--surface); border: 1px solid var(--line); border-radius: 9px; padding: 7px 11px; min-width: 0; }
+input.field { width: 260px; max-width: 100%; }
+textarea.field { width: 100%; resize: vertical; min-height: 70px; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; background: var(--surface); flex-wrap: wrap; }
+.seg button { border: 0; background: none; padding: 6px 12px; font-weight: 700; font-size: 13.5px; color: var(--muted); }
+.seg button.on { background: var(--brand-soft); color: var(--brand-text); }
+.seg button + button { border-left: 1px solid var(--line); }
+
+.tablewrap { overflow-x: auto; }
+@media (max-width: 900px) { .tablewrap table { min-width: 760px; } .tablewrap td { white-space: nowrap; } }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th { text-align: left; font-size: 12px; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); font-weight: 700; padding: 10px 14px; border-bottom: 1px solid var(--line); white-space: nowrap; background: var(--surface-2); }
+td { padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+tr:last-child td { border-bottom: 0; }
+tbody tr.click { cursor: pointer; } tbody tr.click:hover td { background: var(--surface-2); }
+td .sub { display: block; color: var(--muted); font-size: 12.5px; }
+.mono { font-family: var(--mono); font-size: 12.5px; }
+.num { font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+.empty { padding: 26px 18px; color: var(--muted); text-align: center; }
+.cust { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.swatch { width: 30px; height: 30px; border-radius: 8px; flex: none; display: grid; place-items: center; font-family: var(--display); font-weight: 700; font-size: 14px; color: #fff; border: 1px solid rgba(0,0,0,.08); }
+
+.list { display: flex; flex-direction: column; }
+.row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 11px 18px; border-bottom: 1px solid var(--line); text-align: left; background: none; border-left: 0; border-right: 0; border-top: 0; width: 100%; }
+.row:last-child { border-bottom: 0; }
+button.row:hover { background: var(--surface-2); }
+.row .sub { display: block; color: var(--muted); font-size: 13px; }
+.dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); }
+.dot.bad { background: var(--bad); } .dot.warn { background: var(--warn); } .dot.ok { background: var(--ok); } .dot.info { background: var(--info); }
+
+.fgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 14px; }
+.fgrid .full { grid-column: 1 / -1; }
+.fgrid label { display: flex; flex-direction: column; gap: 5px; font-weight: 700; font-size: 13.5px; min-width: 0; }
+.fgrid label small { font-weight: 400; color: var(--muted); font-size: 12.5px; }
+.fgrid .field { width: 100%; }
+@media (max-width: 560px) { .fgrid { grid-template-columns: minmax(0, 1fr); } }
+.colorrow { display: flex; gap: 8px; align-items: center; }
+.colorrow input[type=color] { width: 44px; height: 36px; padding: 2px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); flex: none; }
+.colorrow .field { flex: 1; font-family: var(--mono); font-size: 13px; }
+.modrow { display: flex; justify-content: space-between; align-items: center; gap: 14px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.modrow:last-child { border-bottom: 0; }
+.modrow b { display: block; } .modrow small { color: var(--muted); font-size: 13px; }
+.switch { position: relative; width: 44px; height: 26px; display: inline-block; flex: none; }
+.switch input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; z-index: 1; }
+.switch span { position: absolute; inset: 0; border-radius: 99px; background: var(--line); transition: background .15s; }
+.switch span::after { content: ""; position: absolute; left: 3px; top: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; transition: transform .15s; box-shadow: 0 1px 2px rgba(0,0,0,.3); }
+.switch input:checked + span { background: var(--ok); } .switch input:checked + span::after { transform: translateX(18px); }
+.switch input:focus-visible + span { outline: 3px solid var(--focus); outline-offset: 2px; }
+.err { color: var(--bad); font-weight: 700; font-size: 14px; min-height: 1em; }
+.notice { background: var(--info-bg); color: var(--info); border-radius: 10px; padding: 10px 12px; font-size: 14px; }
+.warnbox { background: var(--warn-bg); color: var(--warn); border-radius: 10px; padding: 10px 12px; font-size: 14px; font-weight: 700; }
+.confirm { background: var(--bad-bg); color: var(--bad); border-radius: 10px; padding: 10px 12px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-weight: 700; font-size: 14px; }
+.kv { display: grid; grid-template-columns: 130px minmax(0, 1fr); gap: 6px 14px; font-size: 14px; margin: 0; }
+.kv dt { color: var(--muted); } .kv dd { margin: 0; font-weight: 700; min-width: 0; overflow-wrap: anywhere; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.inline-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.inline-form .field { flex: 1; min-width: 160px; }
+.code { font-family: var(--mono); font-weight: 600; letter-spacing: .08em; }
+.codebox { font-family: var(--mono); font-size: 30px; font-weight: 600; letter-spacing: .12em; background: var(--surface-2); border: 1px dashed var(--muted); border-radius: 12px; padding: 12px 16px; text-align: center; }
+.linkbox { font-family: var(--mono); font-size: 12.5px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 9px; padding: 8px 10px; overflow-wrap: anywhere; flex: 1; min-width: 0; }
+.feed .row { grid-template-columns: 120px minmax(0, 1fr); padding: 9px 18px; }
+.feed time { color: var(--muted); font-size: 13px; }
+
+/* Station look preview (what their station will show) */
+.pv { border-radius: 14px; overflow: hidden; border: 1px solid var(--line); background: #0d1218; color: #fff; font-size: 13px; aspect-ratio: 16 / 10; display: flex; flex-direction: column; }
+.pv-top { display: flex; align-items: center; gap: 10px; padding: 10px 12px; }
+.pv-logo { width: 34px; height: 34px; border-radius: 8px; display: grid; place-items: center; font-family: var(--display); font-weight: 700; color: #1a1a1a; overflow: hidden; flex: none; }
+.pv-logo img { width: 100%; height: 100%; object-fit: contain; background: #fff; }
+.pv-top b { font-family: var(--display); font-size: 19px; line-height: 1; display: block; }
+.pv-top small { opacity: .8; font-size: 11px; }
+.pv-body { flex: 1; display: grid; place-items: center; text-align: center; padding: 10px; gap: 6px; align-content: center; }
+.pv-body h4 { margin: 0; font-family: var(--display); font-size: 30px; line-height: 1; }
+.pv-body p { margin: 0; opacity: .8; font-size: 12px; max-width: 30ch; }
+.pv-btn { display: inline-block; margin-top: 6px; border-radius: 9px; padding: 6px 14px; font-weight: 700; color: #1a1a1a; }
+
+.check { display: flex; gap: 10px; align-items: flex-start; padding: 6px 0; font-size: 14px; }
+.check input { width: 18px; height: 18px; margin-top: 2px; flex: none; }
+.ship { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+.shipcard { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; }
+.shipcard h3 { margin: 0; font-family: var(--display); font-size: 24px; line-height: 1.05; }
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(22px + env(safe-area-inset-bottom, 0px)); background: var(--ink); color: var(--bg); padding: 10px 18px; border-radius: 10px; font-weight: 700; z-index: 40; box-shadow: var(--shadow); max-width: calc(100% - 32px); }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+
+@media print {
+  body { background: #fff; color: #000; }
+  .rail, .noprint, .toast { display: none !important; }
+  .app { display: block; } .main { padding: 0; }
+  .shipcard { break-inside: avoid; border: 1.5px solid #000; }
+  .codebox { border: 2px dashed #000; }
+}
+/* SP-THEME:start (generated from brand/sp-theme.css) */
+/* =====================================================================
+   Sonoran Point theme — "desert night" (shared by the dashboard and console)
+   Night navy rail over a mountain ridge with a sunset glow; Sonoran blue for
+   actions; sunset orange only where something needs attention.
+   Display: Saira (echoes the wordmark). Text: Atkinson Hyperlegible.
+   ===================================================================== */
+:root {
+  --sp-night: #071a36; --sp-night-2: #0b2350; --sp-blue: #1663d6; --sp-sky: #2f9bff; --sp-sun: #f7931e; --sp-sun-2: #ffb547;
+  --bg: #f1f4f9; --surface: #ffffff; --surface-2: #f5f8fc; --ink: #0c1b33; --muted: #5a6a84; --line: #dee5ef;
+  --brand: #1663d6; --brand-ink: #ffffff; --brand-text: #1556bd; --brand-soft: #e6effc; --accent: #f7931e;
+  --ok: #157a46; --ok-bg: #e2f5ea; --warn: #9a5800; --warn-bg: #fff1dc; --bad: #c0331f; --bad-bg: #fde8e4; --info: #1556bd; --info-bg: #e6effc;
+  --focus: #2f9bff; --shadow: 0 18px 40px -20px rgba(7, 26, 54, .35);
+  --display: "Saira", "Eurostile", "Arial Narrow", sans-serif;
+  --body: "Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --rail-ink: #e7efff; --radius: 14px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #07111f; --surface: #0d1b31; --surface-2: #11223d; --ink: #e8effb; --muted: #94a6c4; --line: #1d3254;
+    --brand: #2f86ff; --brand-ink: #ffffff; --brand-text: #8cc0ff; --brand-soft: #132b52; --accent: #ffa233;
+    --ok: #5fd39a; --ok-bg: #0f2e22; --warn: #ffbd5c; --warn-bg: #33240c; --bad: #ff8b7a; --bad-bg: #3a1712; --info: #8cc0ff; --info-bg: #132b52;
+    --focus: #8cc0ff; --shadow: 0 18px 40px -20px rgba(0, 0, 0, .7); color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #07111f; --surface: #0d1b31; --surface-2: #11223d; --ink: #e8effb; --muted: #94a6c4; --line: #1d3254;
+  --brand: #2f86ff; --brand-ink: #ffffff; --brand-text: #8cc0ff; --brand-soft: #132b52; --accent: #ffa233;
+  --ok: #5fd39a; --ok-bg: #0f2e22; --warn: #ffbd5c; --warn-bg: #33240c; --bad: #ff8b7a; --bad-bg: #3a1712; --info: #8cc0ff; --info-bg: #132b52;
+  --focus: #8cc0ff; --shadow: 0 18px 40px -20px rgba(0, 0, 0, .7); color-scheme: dark;
+}
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--ink); }
+
+/* ---- The rail: night sky, ridge line, sunset glow ---- */
+.rail {
+  background:
+    radial-gradient(90% 34% at 50% 104%, rgba(247, 147, 30, .42), rgba(247, 147, 30, .10) 45%, transparent 70%),
+    linear-gradient(180deg, #0c2752 0%, var(--sp-night) 48%, #04112a 100%);
+  color: var(--rail-ink); overflow: hidden; isolation: isolate;
+}
+.rail::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 128px; z-index: -1; pointer-events: none;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 240 128' preserveAspectRatio='none'%3E%3Cpath d='M0 92 L34 70 L52 78 L86 46 L104 58 L118 50 L150 80 L170 72 L196 88 L214 82 L240 94 L240 128 L0 128Z' fill='%23123a7a' fill-opacity='.55'/%3E%3Cpath d='M0 108 L28 96 L60 104 L92 84 L120 98 L146 90 L178 104 L206 96 L240 106 L240 128 L0 128Z' fill='%23071a36'/%3E%3Cpath d='M0 108 L28 96 L60 104 L92 84 L120 98 L146 90 L178 104 L206 96 L240 106' fill='none' stroke='%232f9bff' stroke-opacity='.55' stroke-width='1'/%3E%3C/svg%3E") bottom / 100% 100% no-repeat;
+}
+.org b { font-family: var(--display); font-weight: 600; letter-spacing: .005em; }
+.org small { color: rgba(231, 239, 255, .72); opacity: 1; }
+.logo { border-radius: 11px; font-family: var(--display); font-weight: 700; box-shadow: 0 0 0 1px rgba(255, 255, 255, .14), 0 6px 16px -6px rgba(0, 0, 0, .6); }
+.nav a { font-weight: 700; color: rgba(231, 239, 255, .82); opacity: 1; padding: 9px 12px 9px 30px; position: relative; border-radius: 10px; }
+.nav a:hover { background: rgba(47, 155, 255, .10); color: #fff; }
+.nav a.on { background: linear-gradient(90deg, rgba(47, 155, 255, .22), rgba(47, 155, 255, .06)); color: #fff; }
+.nav a::before { content: ""; position: absolute; left: 12px; top: 50%; width: 7px; height: 7px; margin-top: -3.5px; border-radius: 50%; background: rgba(231, 239, 255, .22); }
+.nav a.on::before { background: radial-gradient(circle at 40% 40%, #ffe0a3, var(--sp-sun) 60%, #e36b00); box-shadow: 0 0 0 3px rgba(247, 147, 30, .18), 0 0 12px 2px rgba(247, 147, 30, .55); }
+.nav .n { background: var(--sp-sun); color: #2a1300; }
+.nav .n.quiet { background: rgba(255, 255, 255, .16); color: #fff; }
+.me { border-top-color: rgba(231, 239, 255, .14); }
+.me .btn, .rail .btn { border-color: rgba(231, 239, 255, .26) !important; }
+.powered { color: rgba(231, 239, 255, .78); }
+.powered-foot { color: var(--muted); }
+.demo-pill { background: var(--sp-sun); color: #2a1300; }
+.viewas select { background: rgba(255, 255, 255, .08); border-color: rgba(231, 239, 255, .22); }
+
+@media (max-width: 900px) {
+  .rail { background: linear-gradient(90deg, #0c2752, var(--sp-night) 60%, #102c5c); }
+  .rail::after { display: none; }
+}
+
+/* ---- Page type ---- */
+.head h1 { font-family: var(--display); font-weight: 600; font-size: 36px; letter-spacing: -.01em; line-height: 1.05; color: var(--ink); }
+.head p { color: var(--muted); }
+.panel-h h2, .sect h3 { font-family: var(--display); font-weight: 600; font-size: 17px; letter-spacing: 0; text-transform: none; color: var(--ink); }
+.sect h3 { font-size: 15.5px; margin-bottom: 8px; }
+th { font-size: 12.5px; letter-spacing: 0; text-transform: none; font-weight: 700; color: var(--muted); background: var(--surface-2); }
+.drawer-h h2 { font-family: var(--display); font-weight: 600; font-size: 30px; letter-spacing: -.005em; }
+.card h3 { font-family: var(--display); font-weight: 600; font-size: 22px; }
+
+/* ---- Surfaces ---- */
+.panel, .card, .kpi { border-radius: var(--radius); border-color: var(--line); }
+.panel-h { padding: 15px 18px; }
+.kpi { padding: 16px 18px 14px; gap: 4px; transition: border-color .15s, transform .15s; }
+.kpi::before { display: none; }
+.kpi b { font-family: var(--display); font-weight: 600; font-size: 42px; letter-spacing: -.02em; color: var(--ink); }
+.kpi > span { font-size: 14px; display: flex; align-items: center; gap: 7px; }
+.kpi > span::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--line); flex: none; }
+.kpi.ok > span::before { background: var(--ok); } .kpi.warn > span::before { background: var(--sp-sun); } .kpi.bad > span::before { background: var(--bad); }
+.kpi.bad { background: linear-gradient(180deg, color-mix(in srgb, var(--bad) 11%, var(--surface)), var(--surface) 72%); }
+.kpi.bad b { color: var(--bad); }
+.kpi.warn { background: linear-gradient(180deg, color-mix(in srgb, var(--sp-sun) 13%, var(--surface)), var(--surface) 72%); }
+a.kpi:hover { border-color: var(--brand); transform: translateY(-1px); }
+@media (prefers-reduced-motion: reduce) { a.kpi:hover { transform: none; } }
+
+/* ---- Controls ---- */
+.btn { border-radius: 10px; }
+.btn.primary { background: var(--brand); border-color: var(--brand); color: var(--brand-ink); box-shadow: 0 6px 14px -8px rgba(22, 99, 214, .7); }
+.btn.primary:hover { background: #0f52b8; border-color: #0f52b8; }
+.field { border-radius: 10px; }
+.field:focus { border-color: var(--brand); outline: 3px solid color-mix(in srgb, var(--brand) 22%, transparent); outline-offset: 0; }
+.seg { border-radius: 10px; }
+.seg button.on { background: var(--brand-soft); color: var(--brand-text); }
+.chip { border-radius: 99px; }
+.codebox { border-radius: var(--radius); border-color: var(--sp-blue); background: var(--brand-soft); color: var(--ink); }
+.toast { background: var(--sp-night); color: #fff; border: 1px solid rgba(47, 155, 255, .35); }
+.drawer { border-left: 1px solid var(--line); }
+.drawer-h { background: linear-gradient(180deg, var(--surface-2), var(--surface)); }
+/* SP-THEME:end */
+  .oprow > span:nth-child(2) { min-width: 0; overflow-wrap: anywhere; }
+  @media (max-width: 640px) { .oprow { grid-template-columns: auto 1fr; } .oprow > span:last-child { grid-column: 2; justify-content: flex-start !important; } }
+</style>
+
+<div class="app" id="app"></div>
+<div id="layer"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script>
+"use strict";
+/* =====================================================================
+   Operator Console — your side of the product.
+
+   You (and anyone you add to private.platform_operators) use this to set up
+   customer companies, ship stations, and keep an eye on every station.
+   Customers never see it.
+
+   Everything goes through `api`. In this demo it uses an in-browser copy of
+   the data; on the live site each function is the Supabase RPC named in its
+   comment (supabase/migrations/20261015000005_platform.sql), so the screens
+   stay the same.
+   ===================================================================== */
+const VENDOR = { name: "Sonoran Point", short: "SP", appUrl: "https://app.sonoranpoint.com" };   // product name and domain
+const OPERATOR = { name: "Dez", role: "owner", email: "g.ryan@sonoranpoint.com" };   // replaced by whoever signs in on the live site
+const ROLES = { owner: ["Owner", "Everything, plus adding and removing people on this team."], operator: ["Operator", "Customers, stations and codes. Can't change this team."] };
+const HW_KIND = { station: "Station kit", reader: "NFC reader", display: "Screen", spare: "Spare part", other: "Other" };
+const HW_STATUS = { building: ["Building", "quiet"], ready: ["In stock", "ok"], shipped: ["Shipped", "info"], installed: ["Installed", "ok"],
+  repair: ["In repair", "warn"], returned: ["Returned", "warn"], retired: ["Retired", "quiet"] };
+const CARRIERS = { UPS: "https://www.ups.com/track?tracknum=", USPS: "https://tools.usps.com/go/TrackConfirmAction?tLabels=",
+  FedEx: "https://www.fedex.com/fedextrack/?trknbr=", DHL: "https://www.dhl.com/us-en/home/tracking/tracking-express.html?tracking-id=", "Hand delivered": null, Other: null };
+const PLANS = [{ id: "pilot", name: "Pilot" }, { id: "standard", name: "Standard" }, { id: "enterprise", name: "Enterprise" }];   // rename to your price list
+const MODULES = [{ id: "shifts", name: "Shifts", desc: "Assign people to shifts, end-of-shift reports, items due at end of shift" }];
+const STATUS = { trial: ["Trial", "info"], active: ["Active", "ok"], paused: ["Paused", "bad"], cancelled: ["Cancelled", "quiet"] };
+const TERMS = [["equipment", "Equipment (one)", "Radio"], ["equipment_plural", "Equipment (many)", "Radios"], ["employee", "Person (one)", "Agent"],
+  ["employee_plural", "People (many)", "Agents"], ["checkout", "Check out button", "Check Out"], ["checkin", "Return button", "Return"]];
+const DEFAULT_TERMS = { equipment: "Equipment", equipment_plural: "Equipment", employee: "Employee", employee_plural: "Employees", checkout: "Check Out", checkin: "Return" };
+
+const $ = (s, r = document) => r.querySelector(s);
+const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const MIN = 60000, HOUR = 3600000, DAY = 86400000;
+const initials = (n) => String(n || "?").split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join("");
+const hex = (s) => /^#[0-9a-f]{6}$/i.test(s || "");
+const slugify = (s) => String(s || "").toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40).replace(/-+$/, "");
+const newCode = () => { const c = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"; const r = crypto.getRandomValues(new Uint8Array(8)); return Array.from(r, (b) => c[b % c.length]).join("").replace(/^(.{4})/, "$1-"); };
+const newToken = () => Array.from(crypto.getRandomValues(new Uint8Array(24)), (b) => b.toString(16).padStart(2, "0")).join("");
+const uid = (p) => p + Math.random().toString(36).slice(2, 9);
+// Readable text on a brand color.
+const inkOn = (h) => { if (!hex(h)) return "#fff"; const n = parseInt(h.slice(1), 16); const L = (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255; return L > 0.6 ? "#14181d" : "#ffffff"; };
+
+/* =====================================================================
+   Demo data
+   ===================================================================== */
+function buildDemo() {
+  const now = Date.now();
+  const st = (name, location, o = {}) => ({ id: uid("st"), name, location, activated_at: now - 20 * DAY, last_seen: now - 30 * 1000, version: "station-0.1.0",
+    admin_claimed_at: now - 20 * DAY, code: null, code_expires: null, revoked: false, created: now - 21 * DAY, ...o });
+  const waiting = (name, location, daysAgo) => st(name, location, { activated_at: null, last_seen: null, version: null, admin_claimed_at: null,
+    code: newCode(), code_expires: now - daysAgo * DAY + 7 * DAY, created: now - daysAgo * DAY });
+  const C = (o) => ({ id: uid("org"), logo_url: "", timezone: "America/Phoenix", terms: { ...DEFAULT_TERMS }, modules: [], station_limit: null,
+    trial_ends: null, notes: "", invites: [], log: [], ...o });
+  const customers = [
+    C({ name: "Demo Air Services", slug: "demo", status: "active", plan: "pilot", primary: "#1F4E79", accent: "#F2A900", modules: ["shifts"],
+      contact_name: "Morgan Reyes", contact_email: "morgan@demoair.example", contact_phone: "(602) 555-0142", created: now - 34 * DAY,
+      notes: "Pilot site, Terminal 3. First customer: use for reference calls.",
+      usage: { employees: 13, equipment: 29, taps7d: 412, last_tap: now - 6 * MIN },
+      members: [["morgan@demoair.example", "owner", 1 * HOUR], ["dana@demoair.example", "admin", 3 * HOUR], ["kelly@demoair.example", "supervisor", 26 * HOUR], ["ops@demoair.example", "viewer", 5 * DAY]],
+      stations: [st("Equipment Room 01", "Terminal 3"), st("Bag Room", "Terminal 4", { last_seen: now - 3.2 * HOUR, created: now - 12 * DAY, activated_at: now - 12 * DAY })] }),
+    C({ name: "Copper State Cargo", slug: "copperstate", status: "active", plan: "standard", primary: "#8A3B12", accent: "#E8B04A", modules: ["shifts"], station_limit: 4,
+      contact_name: "Rafael Montoya", contact_email: "rmontoya@copperstate.example", contact_phone: "(520) 555-0177", created: now - 26 * DAY,
+      terms: { ...DEFAULT_TERMS, equipment: "Tool", equipment_plural: "Tools" },
+      usage: { employees: 41, equipment: 96, taps7d: 1288, last_tap: now - 2 * MIN },
+      members: [["rmontoya@copperstate.example", "owner", 2 * DAY], ["leads@copperstate.example", "supervisor", 40 * MIN]],
+      stations: [st("Cargo Dock A", "West cargo"), st("Cargo Dock B", "West cargo", { version: "station-0.0.9" }), st("Tug Shop", "Maintenance", { last_seen: now - 2 * MIN })] }),
+    C({ name: "Desert Ground Handling", slug: "desertground", status: "trial", plan: "standard", primary: "#2E5E4E", accent: "#F4B400", station_limit: 2,
+      trial_ends: now + 5 * DAY, contact_name: "Tasha Begay", contact_email: "tbegay@desertground.example", contact_phone: "(928) 555-0110", created: now - 25 * DAY,
+      notes: "Wants batteries tracked too. Follow up before the trial ends.",
+      usage: { employees: 18, equipment: 22, taps7d: 230, last_tap: now - 50 * MIN },
+      members: [["tbegay@desertground.example", "owner", 4 * HOUR]],
+      stations: [st("Ramp Office", "Gate B4", { created: now - 24 * DAY, activated_at: now - 24 * DAY })] }),
+    C({ name: "Mesa Ramp Services", slug: "mesaramp", status: "paused", plan: "standard", primary: "#4B3F72", accent: "#F2C14E",
+      contact_name: "Jim Okafor", contact_email: "jokafor@mesaramp.example", created: now - 60 * DAY, notes: "Paused for an unpaid invoice. Resume once it's paid.",
+      usage: { employees: 9, equipment: 14, taps7d: 0, last_tap: now - 9 * DAY },
+      members: [["jokafor@mesaramp.example", "owner", 12 * DAY]],
+      stations: [st("Bag Room", "Concourse A", { last_seen: now - 40 * 1000, created: now - 58 * DAY, activated_at: now - 58 * DAY })] }),
+    C({ name: "Saguaro Aviation Fuel", slug: "saguarofuel", status: "trial", plan: "pilot", primary: "#0F5C6E", accent: "#F28C28", trial_ends: now + 29 * DAY,
+      contact_name: "Lena Ruiz", contact_email: "lruiz@saguarofuel.example", created: now - 1 * DAY, notes: "Shipped yesterday.",
+      usage: { employees: 0, equipment: 0, taps7d: 0, last_tap: null },
+      members: [], invites: [{ id: uid("inv"), email: "lruiz@saguarofuel.example", role: "owner", expires: now + 13 * DAY, token: newToken() }],
+      stations: [waiting("Fuel Farm Office", "North apron", 1)] }),
+    C({ name: "Sky Harbor Catering", slug: "skyharborcatering", status: "trial", plan: "pilot", primary: "#7A1F3D", accent: "#F2A900", trial_ends: now + 22 * DAY,
+      contact_name: "Ana Pereira", contact_email: "apereira@shcatering.example", created: now - 9 * DAY,
+      usage: { employees: 0, equipment: 0, taps7d: 0, last_tap: null },
+      members: [], invites: [{ id: uid("inv"), email: "apereira@shcatering.example", role: "owner", expires: now + 5 * DAY, token: newToken() }],
+      stations: [waiting("Commissary", "Building 2", 9)] }),
+  ];
+  customers.forEach((c) => { c.members = c.members.map(([email, role, ago]) => ({ email, role, last_sign_in: now - ago })); });
+  const log = [];
+  const L = (c, at, action, details = "") => log.push({ id: uid("lg"), at, by: OPERATOR.name, org: c.id, customer: c.name, action, details });
+  customers.forEach((c) => { L(c, c.created, "created customer", `${c.stations.length} station${c.stations.length === 1 ? "" : "s"}, owner invite to ${c.contact_email}`); });
+  L(customers[0], now - 12 * DAY, "added station", "Bag Room");
+  L(customers[1], now - 6 * DAY, "updated customer", "Station limit 4");
+  L(customers[3], now - 9 * DAY, "status: paused", "Unpaid invoice");
+  L(customers[2], now - 3 * DAY, "updated customer", "Trial extended");
+  log.sort((a, b) => b.at - a.at);
+  const team = { operators: [
+      { user_id: "op-me", name: OPERATOR.name, email: OPERATOR.email, role: "owner", since: now - 40 * DAY, last_sign_in: now - 2 * MIN, me: true },
+      { user_id: "op-2", name: "Jordan Ellis", email: "jordan@sonoranpoint.com", role: "operator", since: now - 8 * DAY, last_sign_in: now - 5 * HOUR, me: false }],
+    invites: [{ id: "opi-1", email: "support@sonoranpoint.com", name: "Support desk", role: "operator", expires: now + 11 * DAY }] };
+  // Hardware: dates are YYYY-MM-DD, same as the database.
+  const dayStr = (ago) => new Date(now - ago * DAY).toISOString().slice(0, 10);
+  let n = 0;
+  const U = (o) => { n++; const u = { id: uid("hw"), serial: "SP-" + String(n).padStart(4, "0"), kind: "station", status: "installed", org_id: null, station_id: null,
+    pi_serial: "10000000" + Math.random().toString(16).slice(2, 10), software: "station-0.1.0", parts: "Pi 5 2GB (CanaKit), SmartiPi Touch Pro 3 Large, Touch Display 2, PN532 reader, NS4168 amp, RTC battery, active cooler",
+    built_at: dayStr(40 - n), built_by_name: OPERATOR.name, shipped_at: null, carrier: null, tracking: null, ship_to: null, notes: null, created_at: now - (40 - n) * DAY, ...o };
+    u.events = [{ at: u.created_at, by: OPERATOR.name, action: "added", details: {} }];
+    if (u.shipped_at) u.events.unshift({ at: Date.parse(u.shipped_at + "T15:00:00"), by: OPERATOR.name, action: "status: shipped", details: { carrier: u.carrier, tracking: u.tracking } });
+    if (u.status === "installed" && u.shipped_at) u.events.unshift({ at: Date.parse(u.shipped_at + "T15:00:00") + 2 * DAY, by: "Automatic", action: "status: installed", details: { reason: "station activated" } });
+    return u; };
+  const at = (c, i) => ({ org_id: c.id, station_id: c.stations[i].id });
+  const [demo, copper, desert, mesa, saguaro, catering] = customers;
+  const hw = [
+    U({ ...at(demo, 0), shipped_at: dayStr(22), carrier: "Hand delivered", ship_to: "PHX Terminal 3 equipment room", notes: "Pilot unit." }),
+    U({ ...at(copper, 0), shipped_at: dayStr(21), carrier: "UPS", tracking: "1Z999AA10123456784" }),
+    U({ ...at(copper, 1), shipped_at: dayStr(21), carrier: "UPS", tracking: "1Z999AA10123456791", software: "station-0.0.9" }),
+    U({ ...at(copper, 2), shipped_at: dayStr(21), carrier: "UPS", tracking: "1Z999AA10123456808" }),
+    U({ ...at(desert, 0), shipped_at: dayStr(25), carrier: "FedEx", tracking: "794698123456" }),
+    U({ ...at(demo, 1), shipped_at: dayStr(13), carrier: "Hand delivered", ship_to: "PHX Terminal 4 bag room" }),
+    U({ ...at(mesa, 0), shipped_at: dayStr(59), carrier: "USPS", tracking: "9400111899223197428490" }),
+    U({ ...at(saguaro, 0), status: "shipped", shipped_at: dayStr(1), carrier: "UPS", tracking: "1Z999AA10123456815", ship_to: "Lena Ruiz, Saguaro Aviation Fuel, North apron, PHX" }),
+    U({ ...at(catering, 0), status: "shipped", shipped_at: dayStr(9), carrier: "FedEx", tracking: "794698123499", ship_to: "Ana Pereira, Building 2, Sky Harbor Catering" }),
+    U({ status: "ready", notes: "Burned in 24 h, all good." }),
+    U({ status: "ready" }),
+    U({ status: "building", pi_serial: null, software: null, notes: "Waiting on the Touch Display 2." }),
+    U({ status: "repair", org_id: null, station_id: null, shipped_at: dayStr(30), carrier: "UPS", notes: "Came back with a cracked screen. New display ordered." }),
+    U({ kind: "reader", status: "ready", serial: "R-0001", pi_serial: null, software: null, parts: "PN532 + USB-UART, spare", built_at: dayStr(10) }),
+  ];
+  hw.forEach((u) => { if (u.status === "repair") u.events.unshift({ at: now - 4 * DAY, by: OPERATOR.name, action: "status: repair", details: { customer: null } }); });
+  hw.sort((a, b) => b.created_at - a.created_at);
+  return { customers, log, team, hw };
+}
+const DB = buildDemo();
+
+/* =====================================================================
+   api — one function per database call
+   ===================================================================== */
+const custOf = (id) => DB.customers.find((c) => c.id === id);
+// Turns what changed into a readable line: "Status: Trial, Trial ends Nov 16, 2026, Contact: Tasha".
+function changeText(d) {
+  if (!d || typeof d !== "object") return d || "";
+  if (d.stations != null && d.owner) return `${d.stations} station${d.stations === 1 ? "" : "s"}, owner invite to ${d.owner}`;
+  const day = (v) => fmtDate(typeof v === "number" ? v : Date.parse(v));
+  const F = {
+    status: (v) => `Status: ${STATUS[v]?.[0] || v}`, plan: (v) => `Plan: ${planName(v)}`,
+    station_limit: (v) => v == null ? "No station limit" : `Station limit: ${v}`,
+    trial_ends_at: (v) => v ? `Trial ends ${day(v)}` : "No trial end date", trial_ends: (v) => v ? `Trial ends ${day(v)}` : "No trial end date",
+    name: (v) => `Name: ${v}`, primary_color: (v) => `Main color ${v}`, primary: (v) => `Main color ${v}`, accent_color: (v) => `Accent color ${v}`, accent: (v) => `Accent color ${v}`,
+    logo_url: (v) => v ? "New logo" : "Logo removed", terminology: () => "Their words for things", terms: () => "Their words for things",
+    enabled_modules: (v) => `Modules: ${(v || []).map((m) => MODULES.find((x) => x.id === m)?.name || m).join(", ") || "none"}`,
+    modules: (v) => `Modules: ${(v || []).map((m) => MODULES.find((x) => x.id === m)?.name || m).join(", ") || "none"}`,
+    contact_name: (v) => `Contact: ${v}`, contact_email: (v) => `Contact email: ${v}`, contact_phone: (v) => `Contact phone: ${v}`,
+    timezone: (v) => `Time zone: ${v}`, notes: () => "Notes changed",
+    unit: (v) => v, kind: (v) => HW_KIND[v] || v, customer: (v) => v ? `Customer: ${v}` : "No customer", station: (v) => v ? `Station: ${v}` : "No station",
+    pi_serial: (v) => v ? `Pi serial ${v}` : "Pi serial cleared", software: (v) => `Software ${v || "cleared"}`, built_at: (v) => v ? `Built ${fmtDay(v)}` : "Build date cleared",
+    shipped_at: (v) => v ? `Shipped ${fmtDay(v)}` : "Ship date cleared", carrier: (v) => v ? `Carrier: ${v}` : "Carrier cleared", tracking: (v) => v ? `Tracking ${v}` : "Tracking cleared",
+    ship_to: (v) => v ? `Ship to: ${v}` : "Ship-to cleared", parts: () => "Parts changed", text: (v) => v, reason: (v) => v === "station activated" ? "Station was activated" : v, role: (v) => `as ${ROLES[v]?.[0] || v}`, email: (v) => v, station: (v) => v,
+  };
+  const order = ["unit", "text", "reason", "email", "role", "customer", "station", "status", "plan", "trial_ends_at", "trial_ends", "station_limit", "name"];
+  const keys = Object.keys(d).filter((k) => !k.startsWith("_")).sort((a, b) => ((order.indexOf(a) + 1) || 99) - ((order.indexOf(b) + 1) || 99));
+  return keys.filter((k) => !(d[k] === "" || (d[k] == null && !["station_limit", "trial_ends_at", "trial_ends", "customer", "station"].includes(k))))
+    .map((k) => F[k] ? F[k](d[k]) : (typeof d[k] === "object" ? k.replace(/_/g, " ") : `${k.replace(/_/g, " ")}: ${d[k]}`)).join(", ");
+}
+function stationState(s, c) {
+  if (s.revoked) return { key: "revoked", label: "Disconnected", tone: "quiet" };
+  if (!s.activated_at) return s.code_expires < Date.now() ? { key: "expired", label: "Code expired", tone: "bad" } : { key: "waiting", label: "Waiting for setup", tone: "info" };
+  if (c && (c.status === "paused" || c.status === "cancelled")) return { key: "paused", label: "Paused", tone: "quiet" };
+  const age = Date.now() - s.last_seen;
+  if (age < 5 * MIN) return { key: "online", label: "Online", tone: "ok" };
+  return { key: "offline", label: `Offline ${ago(s.last_seen, true)}`, tone: age > HOUR ? "bad" : "warn" };
+}
+const log = (c, action, details = "") => DB.log.unshift({ id: uid("lg"), at: Date.now(), by: OPERATOR.name, org: c?.id, customer: c?.name, action, details });
+
+const api = {
+  /* rpc platform_customers() */
+  customers() {
+    return DB.customers.map((c) => {
+      const live = c.stations.filter((s) => !s.revoked); const states = live.map((s) => stationState(s, c).key);
+      return { ...c, stations_total: live.length, stations_online: states.filter((k) => k === "online").length,
+        stations_waiting: states.filter((k) => k === "waiting" || k === "expired").length, stations_offline: states.filter((k) => k === "offline").length };
+    });
+  },
+  /* rpc platform_customer(org) */
+  customer(id) { return custOf(id); },
+  /* rpc platform_fleet() */
+  fleet() {
+    return DB.customers.flatMap((c) => c.stations.filter((s) => !s.revoked).map((s) => ({ ...s, customer: c.name, org: c.id, customer_status: c.status, state: stationState(s, c) })));
+  },
+  /* rpc platform_log() */
+  log() { return DB.log; },
+  /* rpc platform_create_customer(jsonb) — returns the owner invite token and one activation code per station */
+  createCustomer(d) {
+    const name = (d.name || "").trim(), slug = (d.slug || "").trim().toLowerCase(), email = (d.owner_email || "").trim().toLowerCase();
+    if (!name) return { ok: false, error: "Enter the company name.", field: "name" };
+    if (!/^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$/.test(slug)) return { ok: false, error: "Short ID: letters, numbers and dashes only.", field: "slug" };
+    if (DB.customers.some((c) => c.slug === slug)) return { ok: false, error: `The short ID "${slug}" is already used.`, field: "slug" };
+    if (!hex(d.primary) || !hex(d.accent)) return { ok: false, error: "Colors must look like #1F4E79.", field: "primary" };
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return { ok: false, error: "Enter the owner's email address.", field: "owner_email" };
+    const stations = (d.stations || []).map((s) => s.trim()).filter(Boolean);
+    if (!stations.length) return { ok: false, error: "Add at least one station to ship.", field: "stations" };
+    const now = Date.now();
+    const c = { id: uid("org"), name, slug, status: d.status, plan: d.plan, primary: d.primary.toUpperCase(), accent: d.accent.toUpperCase(), logo_url: (d.logo_url || "").trim(),
+      timezone: d.timezone, terms: { ...DEFAULT_TERMS, ...d.terms }, modules: d.modules || [], station_limit: d.station_limit === "" || d.station_limit == null ? null : Number(d.station_limit),
+      trial_ends: d.status === "trial" ? now + Number(d.trial_days || 30) * DAY : null, contact_name: (d.contact_name || "").trim(), contact_email: email,
+      contact_phone: (d.contact_phone || "").trim(), notes: (d.notes || "").trim(), created: now, usage: { employees: 0, equipment: 0, taps7d: 0, last_tap: null },
+      members: [], invites: [], stations: [] };
+    const token = newToken();
+    c.invites.push({ id: uid("inv"), email, role: "owner", expires: now + 14 * DAY, token });
+    for (const n of stations) c.stations.push({ id: uid("st"), name: n, location: "", activated_at: null, last_seen: null, version: null, admin_claimed_at: null,
+      code: newCode(), code_expires: now + 7 * DAY, revoked: false, created: now });
+    DB.customers.push(c);
+    log(c, "created customer", `${stations.length} station${stations.length === 1 ? "" : "s"}, owner invite to ${email}`);
+    return { ok: true, id: c.id, invite: { email, token }, stations: c.stations.map((s) => ({ id: s.id, name: s.name, code: s.code, expires: s.code_expires })) };
+  },
+  /* rpc platform_update_customer(org, jsonb) — only the keys sent are changed */
+  updateCustomer(id, patch, what = "updated customer") {
+    const c = custOf(id);
+    if ("name" in patch && !patch.name.trim()) return { ok: false, error: "Enter the company name." };
+    if (("primary" in patch && !hex(patch.primary)) || ("accent" in patch && !hex(patch.accent))) return { ok: false, error: "Colors must look like #1F4E79." };
+    if ("contact_email" in patch && patch.contact_email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(patch.contact_email)) return { ok: false, error: "That contact email doesn't look right." };
+    const before = JSON.parse(JSON.stringify(c)), changed = {};
+    for (const [k, v] of Object.entries(patch)) if (!k.startsWith("_") && JSON.stringify(before[k] ?? null) !== JSON.stringify(k === "primary" || k === "accent" ? v.toUpperCase() : v ?? null)) changed[k] = v;
+    Object.assign(c, patch);
+    if ("primary" in patch) c.primary = c.primary.toUpperCase(); if ("accent" in patch) c.accent = c.accent.toUpperCase();
+    delete c._note;
+    if (Object.keys(changed).length) log(c, "status" in changed ? `status: ${patch.status}` : what, patch._note || changeText(changed));
+    return { ok: true };
+  },
+  /* rpc platform_invite_owner(org, email) — the API layer emails the link */
+  inviteOwner(id, email) {
+    const c = custOf(id); email = (email || "").trim().toLowerCase();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return { ok: false, error: "Enter a full email address." };
+    if (c.members.some((m) => m.email === email)) return { ok: false, error: "That person is already on their team." };
+    c.invites = c.invites.filter((i) => i.email !== email);
+    const token = newToken(); c.invites.unshift({ id: uid("inv"), email, role: "owner", expires: Date.now() + 14 * DAY, token });
+    log(c, "invited owner", email);
+    return { ok: true, email, token };
+  },
+  /* rpc platform_hardware() */
+  hardware() { return DB.hw; },
+  /* rpc platform_hardware_unit(id) — the unit plus its history */
+  hardwareUnit(id) { return DB.hw?.find((u) => u.id === id) || null; },
+  /* rpc platform_save_hardware(jsonb) — no id adds a unit; only the keys sent change */
+  saveHardware(p) {
+    const isNew = !p.id; const u = isNew ? null : DB.hw.find((x) => x.id === p.id);
+    if (!isNew && !u) return { ok: false, error: HW_ERR.not_found };
+    const serial = (p.serial || "").trim();
+    if ("serial" in p && !isNew && !serial) return { ok: false, error: HW_ERR.serial_required };
+    if (serial && DB.hw.some((x) => x.serial === serial && x !== u)) return { ok: false, error: HW_ERR.serial_taken };
+    let stOrg = null;
+    if (p.station_id) { stOrg = DB.customers.find((c) => c.stations.some((s) => s.id === p.station_id))?.id; if (!stOrg || (p.org_id && p.org_id !== stOrg)) return { ok: false, error: HW_ERR.station_mismatch }; }
+    const today = new Date().toISOString().slice(0, 10);
+    const t = u || { id: uid("hw"), serial: "", kind: "station", status: "building", org_id: null, station_id: null, pi_serial: null, software: null, parts: null,
+      built_at: today, built_by_name: OPERATOR.name, shipped_at: null, carrier: null, tracking: null, ship_to: null, notes: null, created_at: Date.now(), events: [] };
+    if (isNew) { let i = DB.hw.length; do { i++; t.serial = "SP-" + String(i).padStart(4, "0"); } while (DB.hw.some((x) => x.serial === t.serial)); if (serial) t.serial = serial; }
+    const before = { ...t }; const nz = (v) => (v == null || String(v).trim() === "" ? null : String(v).trim());
+    if (serial) t.serial = serial;
+    for (const k of ["kind", "status"]) if (p[k]) t[k] = p[k];
+    for (const k of ["pi_serial", "software", "parts", "built_at", "shipped_at", "carrier", "tracking", "ship_to", "notes"]) if (k in p) t[k] = nz(p[k]);
+    if (stOrg) { t.org_id = stOrg; t.station_id = p.station_id; }
+    else { if ("org_id" in p && (p.org_id || null) !== t.org_id) { t.org_id = p.org_id || null; t.station_id = null; } if ("station_id" in p && !p.station_id) t.station_id = null; }
+    if (p.status === "shipped" && !("shipped_at" in p) && !t.shipped_at) t.shipped_at = today;
+    const ch = {};
+    for (const k of ["serial", "kind", "status", "pi_serial", "software", "built_at", "shipped_at", "carrier", "tracking", "ship_to"]) if (before[k] !== t[k]) ch[k] = t[k];
+    if (before.org_id !== t.org_id) ch.customer = custOf(t.org_id)?.name || null;
+    if (before.station_id !== t.station_id) ch.station = hwStation(t)?.name || null;
+    if (before.parts !== t.parts) ch.parts = "changed"; if (before.notes !== t.notes) ch.notes = "changed";
+    const ev = (action, details) => t.events.unshift({ at: Date.now(), by: OPERATOR.name, action, details });
+    if (isNew) { DB.hw.unshift(t); ev("added", {}); log(custOf(t.org_id), "added hardware", changeText({ unit: t.serial, kind: t.kind })); }
+    else if (Object.keys(ch).length) {
+      const { status, ...rest } = ch; ev(status ? "status: " + status : "updated", rest);
+      if (status) log(custOf(t.org_id), "hardware " + status, changeText({ unit: t.serial, ...rest }));
+    }
+    if (nz(p.note)) ev("note", { text: nz(p.note) });
+    return { ok: true, id: t.id, serial: t.serial };
+  },
+  /* rpc platform_delete_hardware(id) — owners only */
+  deleteHardware(id) {
+    if (OPERATOR.role !== "owner") return { ok: false, error: "Only owners can delete hardware." };
+    const u = DB.hw.find((x) => x.id === id); DB.hw = DB.hw.filter((x) => x !== u); log(null, "deleted hardware", u.serial); return { ok: true };
+  },
+  /* rpc platform_team() */
+  team() { return DB.team; },
+  /* rpc platform_set_my_name(name) */
+  setMyName(name) {
+    name = (name || "").trim().replace(/\s+/g, " "); if (!name || name.length > 60) return { ok: false, error: "Enter your name (up to 60 characters)." };
+    OPERATOR.name = name; DB.team.operators.find((o) => o.me).name = name; return { ok: true };
+  },
+  /* rpc platform_invite_operator(email, role, name) — owners only; the API layer emails the link */
+  inviteOperator(email, role, name) {
+    email = (email || "").trim().toLowerCase();
+    if (OPERATOR.role !== "owner") return { ok: false, error: "Only owners can invite people." };
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return { ok: false, error: "Enter a full email address." };
+    if (DB.team.operators.some((o) => o.email === email)) return { ok: false, error: "That person is already on your team." };
+    DB.team.invites = DB.team.invites.filter((i) => i.email !== email);
+    const token = newToken(); DB.team.invites.unshift({ id: uid("opi"), email, name: (name || "").trim(), role, expires: Date.now() + 14 * DAY });
+    log(null, "invited operator", changeText({ email, role }));
+    return { ok: true, email, token };
+  },
+  /* rpc platform_set_operator_role(user, role) */
+  setOperatorRole(userId, role) {
+    const o = DB.team.operators.find((x) => x.user_id === userId);
+    if (o.role === "owner" && role !== "owner" && DB.team.operators.filter((x) => x.role === "owner").length === 1) return { ok: false, error: "There has to be at least one owner." };
+    o.role = role; if (o.me) OPERATOR.role = role; log(null, "changed operator role", changeText({ email: o.email, role })); return { ok: true };
+  },
+  /* rpc platform_remove_operator(user) */
+  removeOperator(userId) {
+    const o = DB.team.operators.find((x) => x.user_id === userId);
+    if (o.role === "owner" && DB.team.operators.filter((x) => x.role === "owner").length === 1) return { ok: false, error: "There has to be at least one owner." };
+    DB.team.operators = DB.team.operators.filter((x) => x !== o); log(null, "removed operator", o.email); return { ok: true };
+  },
+  /* rpc platform_cancel_operator_invite(id) */
+  cancelOperatorInvite(id) { DB.team.invites = DB.team.invites.filter((i) => i.id !== id); return { ok: true }; },
+  /* rpc platform_add_station(org, name) */
+  addStation(id, name) {
+    const c = custOf(id); name = (name || "").trim(); if (!name) return { ok: false, error: "Name the station." };
+    const s = { id: uid("st"), name, location: "", activated_at: null, last_seen: null, version: null, admin_claimed_at: null, code: newCode(), code_expires: Date.now() + 7 * DAY, revoked: false, created: Date.now() };
+    c.stations.push(s); log(c, "added station", name);
+    return { ok: true, station: s };
+  },
+  /* rpc platform_station_code(station) — the station's old key stops working */
+  stationCode(orgId, stId) {
+    const c = custOf(orgId); const s = c.stations.find((x) => x.id === stId);
+    Object.assign(s, { code: newCode(), code_expires: Date.now() + 7 * DAY, activated_at: null, last_seen: null, admin_claimed_at: null, revoked: false });
+    log(c, "new activation code", s.name); return { ok: true, code: s.code };
+  },
+  /* rpc platform_revoke_station(station) */
+  revokeStation(orgId, stId) { const c = custOf(orgId); const s = c.stations.find((x) => x.id === stId); s.revoked = true; s.code = null; log(c, "disconnected station", s.name); },
+};
+
+/* =====================================================================
+   LIVE MODE — the same screens on your real database (Supabase).
+   On console.sonoranpoint.com (or with ?live) everything above that says
+   "demo" is replaced by calls to the platform_* functions. Anywhere else
+   (like this preview) the demo data is used.
+   ===================================================================== */
+const SP = Object.assign({ url: "https://qzzukfjefqwifnqzxhhu.supabase.co", key: "sb_publishable_4mIH45QwuL5gTupgIX-2oQ_0sFp8y92",
+  appUrl: "https://app.sonoranpoint.com" }, window.SP_CONFIG || {});
+const LIVE = !!window.SP_CONFIG || /(^|\.)sonoranpoint\.com$/.test(location.hostname) || /[?&]live(\b|=)/.test(location.search);
+VENDOR.appUrl = SP.appUrl;
+let sb = null;
+const ms = (t) => (t ? Date.parse(t) : null);
+async function rpc(fn, args) { const { data, error } = await sb.rpc(fn, args || {}); if (error) throw Object.assign(new Error(error.message), { code: error.code }); return data; }
+const nice = (e) => /fetch|network/i.test(e?.message || "") ? "Can't reach the server. Check your connection." : e?.code === "42501" ? "Your account isn't allowed to do that." : (e?.message || "Something went wrong.");
+// Emails the person a one-time sign-in link that opens their dashboard and accepts the invite.
+async function sendInviteEmail(email, token, name) {
+  const { error } = await sb.auth.signInWithOtp({ email, options: { emailRedirectTo: `${SP.appUrl}/?invite=${token}`, shouldCreateUser: true, data: name ? { full_name: name } : undefined } });
+  return error ? error.message : null;
+}
+// Same, for someone joining this console: the link opens the console and accepts the invite.
+async function sendOperatorInviteEmail(email, token, name) {
+  const { error } = await sb.auth.signInWithOtp({ email, options: { emailRedirectTo: opInviteLink(token), shouldCreateUser: true, data: name ? { full_name: name } : undefined } });
+  return error ? error.message : null;
+}
+const detailText = changeText;
+const mapTeam = (t) => ({ operators: (t.operators || []).map((o) => ({ ...o, since: ms(o.since), last_sign_in: ms(o.last_sign_in_at) })),
+  invites: (t.invites || []).map((i) => ({ ...i, name: i.name || "", expires: ms(i.expires_at) })) });
+const mapStation = (s) => ({ id: s.id, name: s.name, location: s.location || "", activated_at: ms(s.activated_at), last_seen: ms(s.last_seen_at),
+  version: s.software_version, admin_claimed_at: ms(s.admin_claimed_at), code: null, code_expires: ms(s.code_expires_at),
+  revoked: !!s.revoked_at, created: ms(s.created_at) || Date.now() });
+const live = {
+  async load() {
+    const [cs, fleet, lg, team, hw] = await Promise.all([rpc("platform_customers"), rpc("platform_fleet"), rpc("platform_log", { p_limit: 300 }),
+      rpc("platform_team").catch(() => null),   // null until the team migration is run
+      rpc("platform_hardware").catch(() => null)]);   // null until the hardware migration is run
+    DB.team = team ? mapTeam(team) : null;
+    const hwPrev = Object.fromEntries((DB.hw || []).map((u) => [u.id, u]));
+    DB.hw = hw ? hw.map((u) => ({ ...u, created_at: ms(u.created_at), events: hwPrev[u.id]?.events })) : null;
+    const prev = Object.fromEntries(DB.customers.map((c) => [c.id, c]));
+    DB.customers = cs.map((c) => {
+      const p = prev[c.id] || {};
+      return { ...p, id: c.id, name: c.name, slug: c.slug, status: c.status, plan: c.plan, primary: c.primary_color, accent: c.accent_color,
+        logo_url: c.logo_url || "", modules: c.enabled_modules || [], station_limit: c.station_limit, trial_ends: ms(c.trial_ends_at),
+        contact_name: c.contact_name || "", contact_email: c.contact_email || "", created: ms(c.created_at), has_owner: c.has_owner,
+        usage: { employees: c.employees, equipment: c.equipment, taps7d: c.taps_7d, last_tap: ms(c.last_tap_at) },
+        terms: p.terms || { ...DEFAULT_TERMS }, timezone: p.timezone || "America/Phoenix", contact_phone: p.contact_phone || "", notes: p.notes || "",
+        members: p.members || [], invites: p.invites || [],
+        stations: p.detail ? p.stations : fleet.filter((f) => f.org_id === c.id).map(mapStation) };
+    });
+    DB.log = lg.map((g, i) => ({ id: "lg" + i, at: ms(g.at), by: g.by || "", org: g.org_id, customer: g.org_id ? g.customer || "(deleted customer)" : null, action: g.action, details: detailText(g.details) }));
+  },
+  async detail(id) {
+    const r = await rpc("platform_customer", { p_org: id }); const c = custOf(id); if (!r.ok || !c) return;
+    const o = r.organization;
+    Object.assign(c, { detail: true, terms: { ...DEFAULT_TERMS, ...(o.terminology || {}) }, timezone: o.timezone, contact_phone: o.contact_phone || "", notes: o.notes || "",
+      logo_url: o.logo_url || "", stations: r.stations.map(mapStation),
+      members: r.members.map((m) => ({ email: m.email, role: m.role, last_sign_in: ms(m.last_sign_in_at) })),
+      invites: r.invites.map((i) => ({ id: i.id, email: i.email, role: i.role, expires: ms(i.expires_at) })) });
+    if (c.members.length) c.has_owner = c.members.some((m) => m.role === "owner");
+  },
+  async hwDetail(id) {
+    const r = await rpc("platform_hardware_unit", { p_id: id }); const u = DB.hw?.find((x) => x.id === id); if (!r.ok || !u) return;
+    u.events = r.events.map((e) => ({ ...e, at: ms(e.at) }));
+  },
+  async refresh(id) {
+    await live.load();
+    if (S.route === "unit" && S.id && S.id !== "new") await live.hwDetail(S.id).catch(() => {});
+    else if (id || S.id) await live.detail(id || S.id).catch(() => {});
+  },
+};
+const ERR = { slug_taken: ["That short ID is already used.", "slug"], bad_slug: ["Short ID: letters, numbers and dashes only.", "slug"], bad_email: ["Enter the owner's email address.", "owner_email"],
+  name_required: ["Enter the company name.", "name"], already_member: ["That person is already on their team.", "email"], not_found: ["That customer or station no longer exists.", null] };
+const demoCreate = api.createCustomer;
+const liveApi = {
+  async createCustomer(d) {
+    // Same checks as the demo first (so mistakes are caught without a round trip), on a throwaway copy.
+    const snapshot = JSON.stringify(DB);
+    const check = demoCreate(d); Object.assign(DB, JSON.parse(snapshot));
+    if (!check.ok) return check;
+    const p = { name: d.name.trim(), slug: d.slug.trim().toLowerCase(), timezone: d.timezone, primary_color: d.primary.toUpperCase(), accent_color: d.accent.toUpperCase(),
+      logo_url: (d.logo_url || "").trim(), terminology: d.terms, modules: d.modules || [], status: d.status, plan: d.plan, trial_days: Number(d.trial_days || 30),
+      station_limit: d.station_limit === "" || d.station_limit == null ? null : Number(d.station_limit), owner_email: d.owner_email.trim().toLowerCase(),
+      contact_name: d.contact_name || "", contact_email: d.owner_email.trim().toLowerCase(), contact_phone: d.contact_phone || "", notes: d.notes || "",
+      stations: (d.stations || []).map((s) => s.trim()).filter(Boolean) };
+    let r; try { r = await rpc("platform_create_customer", { p }); } catch (e) { return { ok: false, error: nice(e) }; }
+    if (!r.ok) { const [error, field] = ERR[r.error] || [r.error, null]; return { ok: false, error, field }; }
+    const mailErr = await sendInviteEmail(r.owner_invite.email, r.owner_invite.token, (d.contact_name || "").trim());
+    await live.refresh(r.org_id).catch(() => {});
+    return { ok: true, id: r.org_id, invite: { email: r.owner_invite.email, token: r.owner_invite.token, mailErr },
+      stations: r.stations.map((s) => ({ id: s.station_id, name: s.name, code: s.activation_code, expires: ms(s.expires_at) })) };
+  },
+  async updateCustomer(id, patch) {
+    if ("name" in patch && !patch.name.trim()) return { ok: false, error: "Enter the company name." };
+    if (("primary" in patch && !hex(patch.primary)) || ("accent" in patch && !hex(patch.accent))) return { ok: false, error: "Colors must look like #1F4E79." };
+    if ("contact_email" in patch && patch.contact_email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(patch.contact_email)) return { ok: false, error: "That contact email doesn't look right." };
+    const map = { name: "name", primary: "primary_color", accent: "accent_color", logo_url: "logo_url", terms: "terminology", modules: "modules", status: "status", plan: "plan",
+      station_limit: "station_limit", contact_name: "contact_name", contact_email: "contact_email", contact_phone: "contact_phone", notes: "notes", timezone: "timezone" };
+    const p = {};
+    for (const [k, v] of Object.entries(patch)) if (map[k]) p[map[k]] = k === "primary" || k === "accent" ? v.toUpperCase() : v;
+    if ("trial_ends" in patch) p.trial_ends_at = patch.trial_ends ? new Date(patch.trial_ends).toISOString() : null;
+    try { const r = await rpc("platform_update_customer", { p_org: id, p }); if (!r.ok) return { ok: false, error: (ERR[r.error] || [r.error])[0] }; }
+    catch (e) { return { ok: false, error: nice(e) }; }
+    await live.refresh(id).catch(() => {}); return { ok: true };
+  },
+  async inviteOwner(id, email) {
+    email = (email || "").trim().toLowerCase();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return { ok: false, error: "Enter a full email address." };
+    let r; try { r = await rpc("platform_invite_owner", { p_org: id, p_email: email }); } catch (e) { return { ok: false, error: nice(e) }; }
+    if (!r.ok) return { ok: false, error: (ERR[r.error] || [r.error])[0] };
+    const mailErr = await sendInviteEmail(r.email, r.token);
+    await live.refresh(id).catch(() => {});
+    return { ok: true, email: r.email, token: r.token, mailErr };
+  },
+  async addStation(id, name) {
+    name = (name || "").trim(); if (!name) return { ok: false, error: "Name the station." };
+    let r; try { r = await rpc("platform_add_station", { p_org: id, p_name: name }); } catch (e) { return { ok: false, error: nice(e) }; }
+    if (r.ok === false) return { ok: false, error: r.error };
+    await live.refresh(id).catch(() => {});
+    return { ok: true, station: { name, code: r.activation_code } };
+  },
+  async stationCode(orgId, stId) {
+    let r; try { r = await rpc("platform_station_code", { p_station: stId }); } catch (e) { return { ok: false, error: nice(e) }; }
+    await live.refresh(orgId).catch(() => {}); return { ok: !!r.ok, code: r.activation_code, error: r.error };
+  },
+  async revokeStation(orgId, stId) {
+    try { await rpc("platform_revoke_station", { p_station: stId }); } catch (e) { toast(nice(e)); }
+    await live.refresh(orgId).catch(() => {});
+  },
+  async saveHardware(p) {
+    let r; try { r = await rpc("platform_save_hardware", { p }); } catch (e) { return { ok: false, error: nice(e) }; }
+    if (!r.ok) return { ok: false, error: HW_ERR[r.error] || r.error };
+    await live.load().catch(() => {}); await live.hwDetail(r.id).catch(() => {}); return r;
+  },
+  async deleteHardware(id) {
+    let r; try { r = await rpc("platform_delete_hardware", { p_id: id }); } catch (e) { return { ok: false, error: nice(e) }; }
+    if (!r.ok) return { ok: false, error: HW_ERR[r.error] || r.error };
+    await live.load().catch(() => {}); return { ok: true };
+  },
+  async setMyName(name) {
+    let r; try { r = await rpc("platform_set_my_name", { p_name: name }); } catch (e) { return { ok: false, error: nice(e) }; }
+    if (!r.ok) return { ok: false, error: "Enter your name (up to 60 characters)." };
+    OPERATOR.name = r.name; await live.refresh().catch(() => {}); return { ok: true };
+  },
+  async inviteOperator(email, role, name) {
+    email = (email || "").trim().toLowerCase();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return { ok: false, error: "Enter a full email address." };
+    let r; try { r = await rpc("platform_invite_operator", { p_email: email, p_role: role, p_name: (name || "").trim() || null }); } catch (e) { return { ok: false, error: nice(e) }; }
+    if (!r.ok) return { ok: false, error: TEAM_ERR[r.error] || r.error };
+    const mailErr = await sendOperatorInviteEmail(r.email, r.token, (name || "").trim());
+    await live.refresh().catch(() => {}); return { ok: true, email: r.email, token: r.token, mailErr };
+  },
+  async setOperatorRole(userId, role) {
+    let r; try { r = await rpc("platform_set_operator_role", { p_user: userId, p_role: role }); } catch (e) { return { ok: false, error: nice(e) }; }
+    if (!r.ok) return { ok: false, error: TEAM_ERR[r.error] || r.error };
+    await live.refresh().catch(() => {}); return { ok: true };
+  },
+  async removeOperator(userId) {
+    let r; try { r = await rpc("platform_remove_operator", { p_user: userId }); } catch (e) { return { ok: false, error: nice(e) }; }
+    if (!r.ok) return { ok: false, error: TEAM_ERR[r.error] || r.error };
+    await live.refresh().catch(() => {}); return { ok: true };
+  },
+  async cancelOperatorInvite(id) {
+    try { await rpc("platform_cancel_operator_invite", { p_invite: id }); } catch (e) { return { ok: false, error: nice(e) }; }
+    await live.refresh().catch(() => {}); return { ok: true };
+  },
+};
+const HW_ERR = { serial_taken: "That unit ID is already used.", serial_required: "Give it a unit ID.", station_mismatch: "That station belongs to a different customer.",
+  not_found: "That unit or customer no longer exists.", bad_status: "Pick a status.", bad_kind: "Pick a type." };
+const TEAM_ERR = { last_owner: "There has to be at least one owner.", already_operator: "That person is already on your team.", bad_email: "Enter a full email address.",
+  bad_role: "Pick Owner or Operator.", not_operator: "They're no longer on the team." };
+
+/* ---- Sign-in (live only) ---- */
+const AUTH = { view: "signin", msg: "", err: "", busy: false };
+function authCard(inner) {
+  return `<div style="grid-column:1 / -1;min-height:100vh;display:grid;place-items:center;padding:24px max(16px, env(safe-area-inset-right, 0px)) 24px max(16px, env(safe-area-inset-left, 0px));background:var(--bg)">
+    <div class="panel" style="width:min(420px,100%);padding:26px 24px;display:flex;flex-direction:column;gap:16px">
+      <div style="background:#ffffff;border-radius:12px;padding:16px 18px 12px;display:flex;flex-direction:column;align-items:center;gap:6px;border:1px solid #e3e8ef">
+        <img src="brand/logo.svg" alt="Sonoran Point Technologies" style="width:min(250px,100%);height:auto;display:block"><small style="letter-spacing:.14em;text-transform:uppercase;font-size:11px;font-weight:700;color:#5d6b82">Operator console</small></div>
+      ${inner}</div></div>`;
+}
+function renderAuth() {
+  const A = AUTH; let inner;
+  if (A.view === "denied") inner = `<p style="margin:0">You're signed in as <b>${esc(S.session?.user?.email)}</b>, but this account isn't on the team.</p>
+      <p class="muted" style="margin:0;font-size:14px">${A.inviteErr ? esc(A.inviteErr) : "Ask an owner to invite you from the Team page."}</p>
+      <button class="btn" data-act="signOut">Sign out</button>`;
+  else if (A.view === "newpass") inner = `<form data-form="newpass" class="fgrid" style="grid-template-columns:1fr"><h2 style="margin:0;font-size:20px">Set a new password</h2>
+      <label>New password<input class="field" type="password" name="password" autocomplete="new-password" minlength="8" required></label>
+      <div class="err" role="alert">${esc(A.err)}</div><div class="actions"><button class="btn primary" ${A.busy ? "disabled" : ""}>Save password</button>${S.operator ? `<button type="button" class="btn" data-act="backIn">Cancel</button>` : ""}</div></form>`;
+  else if (A.view === "loading") inner = `<p class="muted" style="margin:0">Loading…</p>`;
+  else inner = `<form data-form="signin" class="fgrid" style="grid-template-columns:1fr">
+      <label>Email<input class="field" type="email" name="email" autocomplete="username" required value="${esc(A.email || "")}"></label>
+      <label>Password<input class="field" type="password" name="password" autocomplete="current-password"></label>
+      <div class="err" role="alert">${esc(A.err)}</div>${A.msg ? `<div class="notice">${esc(A.msg)}</div>` : ""}
+      <button class="btn primary" style="justify-content:center;padding:10px" ${A.busy ? "disabled" : ""}>Sign in</button>
+      <div class="actions" style="justify-content:space-between"><button class="btn sm" type="button" data-act="magic">Email me a sign-in link</button><button class="btn sm" type="button" data-act="forgot">Forgot password?</button></div></form>`;
+  $("#app").innerHTML = authCard(inner); renderLayer();
+}
+// An operator invite link looks like console.sonoranpoint.com/?opinvite=<token>.
+const OPINVITE = { token: new URLSearchParams(location.search).get("opinvite") };
+const opInviteLink = (t) => `${LIVE ? location.origin + location.pathname : "https://console.sonoranpoint.com/"}?opinvite=${t}`;
+async function acceptOpInvite() {
+  const t = OPINVITE.token; OPINVITE.token = null; AUTH.inviteErr = "";
+  history.replaceState(null, "", location.pathname + location.hash);
+  let r; try { r = await rpc("platform_accept_invite", { p_token: t }); } catch (e) { AUTH.inviteErr = nice(e); return; }
+  if (r.ok) { OPINVITE.joined = true; return; }
+  AUTH.inviteErr = r.error === "wrong_account" ? `That invite is for ${r.invited_email}. Sign out, then open the link from that inbox.`
+    : r.error === "invite_expired" ? "That invite has expired. Ask an owner to send a new one." : "That invite link has already been used or was cancelled.";
+}
+async function afterSignIn() {
+  AUTH.view = "loading"; renderAuth();
+  if (OPINVITE.token) await acceptOpInvite();
+  try { S.operator = await rpc("am_platform_operator"); } catch (e) { AUTH.view = "signin"; AUTH.err = nice(e); return renderAuth(); }
+  if (!S.operator) { AUTH.view = "denied"; return renderAuth(); }
+  OPERATOR.name = S.session.user.user_metadata?.full_name || S.session.user.email.split("@")[0]; OPERATOR.role = "owner"; OPERATOR.email = S.session.user.email;
+  try { const me = await rpc("platform_me"); if (me?.operator) Object.assign(OPERATOR, { name: me.name, role: me.role, email: me.email }); } catch {}   // before the team migration: everyone is an owner
+  if (OPINVITE.joined) { OPINVITE.joined = false; toast(`Welcome, ${OPERATOR.name}`); }
+  try { await live.load(); } catch (e) { AUTH.view = "signin"; AUTH.err = nice(e); return renderAuth(); }
+  S.ready = true; readHash(); if (S.route === "customer") await live.detail(S.id).catch(() => {}); if (S.route === "unit" && S.id !== "new") await live.hwDetail(S.id).catch(() => {}); render();
+}
+async function boot() {
+  if (!LIVE) { readHash(); render(); return; }
+  Object.assign(api, liveApi);
+  sb = window.supabase.createClient(SP.url, SP.key);
+  sb.auth.onAuthStateChange((ev, session) => {
+    S.session = session;
+    if (ev === "PASSWORD_RECOVERY") { AUTH.view = "newpass"; renderAuth(); }
+    if (ev === "SIGNED_OUT") { S.ready = false; AUTH.view = "signin"; renderAuth(); }
+  });
+  const { data } = await sb.auth.getSession(); S.session = data.session;
+  if (!S.session) return renderAuth();
+  if (AUTH.view !== "newpass") await afterSignIn();
+  setInterval(async () => { if (S.ready && !document.hidden && !document.activeElement?.matches("input,select,textarea")) { await live.refresh().catch(() => {}); render(); } }, 30000);
+}
+async function authAction(kind, form) {
+  const A = AUTH; const fd = form ? Object.fromEntries(new FormData(form)) : {}; A.err = ""; A.msg = "";
+  const email = (fd.email ?? $('[data-form="signin"] [name=email]')?.value ?? "").trim(); A.email = email;
+  if (kind === "signin") {
+    if (!email || !fd.password) { A.err = "Enter your email and password, or use a sign-in link."; return renderAuth(); }
+    A.busy = true; renderAuth();
+    const { data, error } = await sb.auth.signInWithPassword({ email, password: fd.password }); A.busy = false;
+    if (error) { A.err = /invalid/i.test(error.message) ? "That email and password don't match." : error.message; return renderAuth(); }
+    S.session = data.session; return afterSignIn();
+  }
+  if (kind === "magic" || kind === "forgot") {
+    if (!email) { A.err = "Enter your email first."; return renderAuth(); }
+    const back = location.origin + location.pathname;
+    const { error } = kind === "magic" ? await sb.auth.signInWithOtp({ email, options: { emailRedirectTo: back, shouldCreateUser: false } })
+      : await sb.auth.resetPasswordForEmail(email, { redirectTo: back });
+    if (error) A.err = error.message; else A.msg = kind === "magic" ? `Check ${email} for a sign-in link.` : `Check ${email} for a link to set a new password.`;
+    return renderAuth();
+  }
+  if (kind === "newpass") {
+    if ((fd.password || "").length < 8) { A.err = "Use at least 8 characters."; return renderAuth(); }
+    A.busy = true; renderAuth(); const { error } = await sb.auth.updateUser({ password: fd.password }); A.busy = false;
+    if (error) { A.err = error.message; return renderAuth(); }
+    toast("Password saved"); return afterSignIn();
+  }
+}
+
+/* =====================================================================
+   Formatting
+   ===================================================================== */
+function ago(ms, short) {
+  if (!ms) return "never";
+  const d = Date.now() - ms, m = Math.round(d / MIN);
+  if (m < 1) return short ? "now" : "just now";
+  if (m < 60) return short ? `${m} min` : `${m} min ago`;
+  const h = Math.round(d / HOUR); if (h < 48) return short ? `${h} h` : `${h} h ago`;
+  const days = Math.round(d / DAY); return short ? `${days} d` : `${days} days ago`;
+}
+const fmtDate = (ms) => ms ? new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(ms)) : "—";
+const fmtWhen = (ms) => new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(ms));
+function untilText(ms) { const d = Math.ceil((ms - Date.now()) / DAY); return d < 0 ? `ended ${-d} day${d === -1 ? "" : "s"} ago` : d === 0 ? "ends today" : `${d} day${d === 1 ? "" : "s"} left`; }
+const fmtDay = (d) => d ? fmtDate(Date.parse(String(d).slice(0, 10) + "T12:00:00")) : "—";
+const hwChip = (st) => `<span class="chip ${HW_STATUS[st][1]}">${HW_STATUS[st][0]}</span>`;
+const hwStation = (u) => { const c = custOf(u.org_id); return (c && c.stations.find((s) => s.id === u.station_id)) || (u.station_id && u.station ? { ...u.station, id: u.station_id } : null); };
+const hwCustomer = (u) => custOf(u.org_id)?.name || u.customer || null;
+const trackUrl = (u) => (u.tracking && CARRIERS[u.carrier] ? CARRIERS[u.carrier] + encodeURIComponent(u.tracking) : null);
+const trackLink = (u) => u.tracking ? (trackUrl(u) ? `<a href="${esc(trackUrl(u))}" target="_blank" rel="noopener" style="color:var(--brand-text)">${esc(u.tracking)}</a>` : esc(u.tracking)) : "";
+const hwForStation = (stId) => (DB.hw || []).find((u) => u.station_id === stId && u.status !== "retired");
+const planName = (id) => PLANS.find((p) => p.id === id)?.name || id;
+const statusChip = (s) => `<span class="chip ${STATUS[s][1]}">${STATUS[s][0]}</span>`;
+const swatch = (c, big) => `<span class="swatch" style="background:${esc(c.primary)};color:${inkOn(c.primary)}${big ? ";width:52px;height:52px;font-size:22px;border-radius:12px" : ""}" aria-hidden="true">${esc(initials(c.name))}</span>`;
+const inviteLink = (t) => `${VENDOR.appUrl}/invite/${t}`;
+
+/* =====================================================================
+   State + routing
+   ===================================================================== */
+const S = { route: "customers", id: null, f: { q: "", status: "all", fleet: "problems", hw: "all", hwq: "" }, confirm: null, toast: null, made: null, newForm: null, formErr: null, lastCode: null, lastInvite: null };
+function readHash() {
+  const [r, id] = location.hash.slice(1).split("/");
+  S.route = ["customers", "customer", "new", "fleet", "log", "team", "hardware", "unit"].includes(r) ? r : "customers"; S.id = id || null;
+  if (S.route === "customer" && !custOf(S.id)) S.route = "customers";
+  if (S.route === "unit" && S.id !== "new" && !api.hardwareUnit(S.id)) S.route = "hardware";
+  S.hwAssign = null;
+  S.confirm = null; S.formErr = null; S.lastCode = null; S.lastInvite = null; S.lastOpInvite = null;
+  if (S.route !== "new") { S.made = null; }
+}
+window.addEventListener("hashchange", async () => { readHash(); render(); window.scrollTo(0, 0);
+  if (LIVE && S.ready && S.route === "customer") { await live.detail(S.id).catch(() => {}); if (S.route === "customer") render(); }
+  if (LIVE && S.ready && S.route === "unit" && S.id !== "new") { await live.hwDetail(S.id).catch(() => {}); if (S.route === "unit") render(); } });
+let toastT;
+function toast(t) { S.toast = t; renderLayer(); clearTimeout(toastT); toastT = setTimeout(() => { S.toast = null; renderLayer(); }, 2600); }
+function renderLayer() { $("#layer").innerHTML = S.toast ? `<div class="toast" role="status">${esc(S.toast)}</div>` : ""; }
+
+/* =====================================================================
+   Views
+   ===================================================================== */
+function attention() {
+  const out = [], now = Date.now();
+  for (const c of api.customers()) {
+    if (c.status === "trial" && c.trial_ends && c.trial_ends - now < 7 * DAY) out.push({ tone: c.trial_ends < now ? "bad" : "warn", c, text: `Trial ${untilText(c.trial_ends)}`, sub: "Talk to them about going live, or extend the trial." });
+    for (const s of c.stations.filter((x) => !x.revoked)) {
+      const st = stationState(s, c);
+      if (st.key === "offline" && now - s.last_seen > 15 * MIN) out.push({ tone: st.tone, c, text: `${s.name} offline for ${ago(s.last_seen, true)}`, sub: "Taps are being saved on the station. Check its power and Wi-Fi." });
+      if (st.key === "expired") out.push({ tone: "bad", c, text: `${s.name}: activation code expired`, sub: "Make a new code from the customer page and send it to them." });
+      if (st.key === "waiting" && now - s.created > 3 * DAY) out.push({ tone: "warn", c, text: `${s.name} not set up after ${ago(s.created, true)}`, sub: `Code expires ${fmtDate(s.code_expires)}. Check it arrived.` });
+    }
+    if (!(c.has_owner ?? c.members.some((m) => m.role === "owner")) && c.status !== "paused") out.push({ tone: "info", c, text: "Owner hasn't signed in yet", sub: c.invites.length ? `Invite sent to ${c.invites[0].email}` : c.detail || !LIVE ? "No invite sent. Invite an owner." : "Open the customer to see or resend the invite." });
+  }
+  return out.sort((a, b) => ({ bad: 0, warn: 1, info: 2 }[a.tone] - { bad: 0, warn: 1, info: 2 }[b.tone]));
+}
+function vCustomers() {
+  const all = api.customers(), now = Date.now();
+  const fleet = api.fleet().filter((s) => s.customer_status !== "paused" && s.customer_status !== "cancelled");
+  const online = fleet.filter((s) => s.state.key === "online").length, offline = fleet.filter((s) => s.state.key === "offline").length;
+  const waiting = fleet.filter((s) => s.state.key === "waiting" || s.state.key === "expired").length;
+  const trials = all.filter((c) => c.status === "trial"), ending = trials.filter((c) => c.trial_ends - now < 14 * DAY);
+  const q = S.f.q.trim().toLowerCase();
+  const rows = all.filter((c) => (S.f.status === "all" || c.status === S.f.status) && (!q || (c.name + " " + c.slug + " " + (c.contact_name || "") + " " + (c.contact_email || "")).toLowerCase().includes(q)))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const att = attention();
+  return `<div class="head"><div><h1>Customers</h1><p>Every company using ${esc(VENDOR.name)}.</p></div><a class="btn primary" href="#new">New customer</a></div>
+    <div class="kpis">
+      <div class="kpi ok"><b class="num">${all.filter((c) => c.status === "active").length}</b><span>Active customers</span><small>${trials.length} on trial</small></div>
+      <div class="kpi ${online === fleet.filter((s) => s.activated_at).length ? "ok" : ""}"><b class="num">${online}<span class="muted" style="font-size:22px"> / ${fleet.filter((s) => s.activated_at).length}</span></b><span>Stations online</span><small>Across all customers</small></div>
+      <div class="kpi ${offline ? "bad" : "ok"}"><b class="num">${offline}</b><span>Stations offline</span><small>${offline ? "Saving taps until they reconnect" : "All connected"}</small></div>
+      <div class="kpi ${waiting ? "warn" : ""}"><b class="num">${waiting}</b><span>Waiting for setup</span><small>Shipped, not activated yet</small></div>
+      <div class="kpi ${ending.length ? "warn" : ""}"><b class="num">${ending.length}</b><span>Trials ending soon</span><small>Within 14 days</small></div>
+    </div>
+    ${att.length ? `<section class="panel"><div class="panel-h"><h2>Needs attention</h2><span class="muted" style="font-size:13px">${att.length}</span></div><div class="list">
+      ${att.map((a) => `<a class="row" href="#customer/${a.c.id}" style="text-decoration:none;color:inherit"><span class="dot ${a.tone}"></span><span><b>${esc(a.c.name)}</b> · ${esc(a.text)}<span class="sub">${esc(a.sub)}</span></span><span class="muted" aria-hidden="true">›</span></a>`).join("")}</div></section>` : ""}
+    <section class="panel"><div class="panel-h"><h2>All customers</h2>
+      <div class="filters"><input class="field" type="search" data-f="q" placeholder="Search name or contact" aria-label="Search customers" value="${esc(S.f.q)}">
+        <div class="seg" role="group" aria-label="Status">${[["all", "All"], ["active", "Active"], ["trial", "Trial"], ["paused", "Paused"]].map(([k, l]) => `<button data-seg="status:${k}" class="${S.f.status === k ? "on" : ""}" aria-pressed="${S.f.status === k}">${l}</button>`).join("")}</div></div></div>
+      <div class="tablewrap"><table><thead><tr><th>Customer</th><th>Status</th><th>Plan</th><th>Stations</th><th class="num">People</th><th class="num">Equipment</th><th class="num">Taps (7 days)</th><th>Last tap</th></tr></thead><tbody>
+      ${rows.map((c) => `<tr class="click" data-go="customer/${c.id}" tabindex="0"><td><span class="cust">${swatch(c)}<span><b>${esc(c.name)}</b><span class="sub">${esc(c.contact_name || c.slug)}</span></span></span></td>
+        <td>${statusChip(c.status)}${c.status === "trial" && c.trial_ends ? `<span class="sub">${esc(untilText(c.trial_ends))}</span>` : ""}</td>
+        <td>${esc(planName(c.plan))}</td>
+        <td>${c.stations_total ? `${c.stations_online}/${c.stations_total - c.stations_waiting} online` : "—"}${c.stations_waiting ? `<span class="sub">${c.stations_waiting} waiting for setup</span>` : ""}${c.stations_offline ? `<span class="sub" style="color:var(--bad)">${c.stations_offline} offline</span>` : ""}</td>
+        <td class="num">${c.usage.employees}</td><td class="num">${c.usage.equipment}</td><td class="num">${c.usage.taps7d.toLocaleString()}</td><td>${c.usage.last_tap ? esc(ago(c.usage.last_tap)) : "—"}</td></tr>`).join("")
+        || `<tr><td colspan="8" class="empty">No customers match.</td></tr>`}
+      </tbody></table></div></section>`;
+}
+
+function stationPreview(c, terms) {
+  const t = { ...DEFAULT_TERMS, ...terms };
+  const logo = c.logo_url ? `<img src="${esc(c.logo_url)}" alt="" onerror="this.replaceWith(document.createTextNode('${esc(initials(c.name))}'))">` : esc(initials(c.name || "Company"));
+  return `<div class="pv" aria-label="Preview of their station screen">
+    <div class="pv-top" style="background:${esc(hex(c.primary) ? c.primary : "#1F4E79")};color:${inkOn(c.primary)}"><span class="pv-logo" style="background:${esc(hex(c.accent) ? c.accent : "#F2A900")}">${logo}</span>
+      <span><b>${esc(c.name || "Company name")}</b><small>Equipment Room 01</small></span></div>
+    <div class="pv-body"><h4>Tap your badge</h4><p>Then tap each ${esc(t.equipment.toLowerCase())} to ${esc(t.checkout.toLowerCase())}, or tap one you have to ${esc(t.checkin.toLowerCase())} it.</p>
+      <span class="pv-btn" style="background:${esc(hex(c.accent) ? c.accent : "#F2A900")};color:${inkOn(c.accent)}">${esc(t.checkout)}</span></div></div>`;
+}
+
+function vCustomer() {
+  const c = api.customer(S.id); const cf = S.confirm; const now = Date.now();
+  const live = c.stations.filter((s) => !s.revoked), gone = c.stations.filter((s) => s.revoked);
+  const owners = c.members.filter((m) => m.role === "owner");
+  return `<div><a class="back" href="#customers">‹ All customers</a></div>
+    <div class="head"><div class="cust" style="gap:14px">${swatch(c, true)}
+      <div><h1>${esc(c.name)}</h1><p>${statusChip(c.status)} · ${esc(planName(c.plan))} plan${c.status === "trial" && c.trial_ends ? ` · trial ${esc(untilText(c.trial_ends))}` : ""} · customer since ${esc(fmtDate(c.created))}</p></div></div>
+      <div class="actions">${c.status === "paused"
+        ? `<button class="btn primary" data-act="resume">Resume account</button>`
+        : cf === "pause" ? `<span class="confirm">Pause ${esc(c.name)}? Their stations stop recording right away (they keep their setup). <button class="btn sm danger" data-act="doPause">Pause</button><button class="btn sm" data-act="noConfirm">Cancel</button></span>`
+        : `<button class="btn danger" data-act="askPause">Pause account</button>`}</div></div>
+    ${c.status === "paused" ? `<div class="warnbox">Paused: their stations show "This station is paused" and nothing is recorded. Their dashboard still opens. Resume to switch everything back on (no new codes needed).</div>` : ""}
+    <div class="cols"><div class="stack">
+
+      <section class="panel"><div class="panel-h"><h2>Stations</h2><span class="muted" style="font-size:13px">${live.length}${c.station_limit != null ? ` of ${c.station_limit} allowed` : ""}</span></div>
+        ${live.length ? `<div class="tablewrap"><table><thead><tr><th>Station</th><th>Status</th><th>Admin tag</th><th></th></tr></thead><tbody>
+          ${live.map((s) => { const st = stationState(s, c); return `<tr><td><b>${esc(s.name)}</b><span class="sub">${esc([s.location, s.version].filter(Boolean).join(" · "))}</span></td>
+            <td><span class="chip ${st.tone}">${esc(st.label)}</span>${st.key === "waiting" || st.key === "expired" ? `<span class="sub">${s.code ? `Code <span class="code">${esc(s.code)}</span> · ` : ""}${s.code_expires > now ? "expires " + esc(fmtDate(s.code_expires)) : "expired"}</span>` : s.last_seen && st.key === "online" ? "" : s.last_seen ? `<span class="sub">Last seen ${esc(ago(s.last_seen))}</span>` : ""}</td>
+            <td>${s.admin_claimed_at ? `<span class="chip ok">Registered</span>` : `<span class="muted">Not yet</span>`}</td>
+            <td style="text-align:right;white-space:nowrap">${cf === "code:" + s.id
+              ? `<span class="confirm" style="padding:5px 8px">${s.activated_at ? "Disconnects the Pi now. " : ""}New code? <button class="btn sm danger" data-act="doCode" data-id="${s.id}">Yes</button><button class="btn sm" data-act="noConfirm">No</button></span>`
+              : cf === "revoke:" + s.id ? `<span class="confirm" style="padding:5px 8px">Disconnect for good? <button class="btn sm danger" data-act="doRevoke" data-id="${s.id}">Disconnect</button><button class="btn sm" data-act="noConfirm">No</button></span>`
+              : `<button class="btn sm" data-act="askCode" data-id="${s.id}">New code</button> <button class="btn sm danger" data-act="askRevoke" data-id="${s.id}">Disconnect</button>`}</td></tr>`; }).join("")}
+        </tbody></table></div>` : `<div class="empty">No stations yet.</div>`}
+        ${S.lastCode ? `<div class="panel-b" style="border-top:1px solid var(--line);display:flex;flex-direction:column;gap:10px">
+          <b>Activation code for ${esc(S.lastCode.name)}</b><div class="codebox" aria-label="Activation code">${esc(S.lastCode.code)}</div>
+          <p class="muted" style="margin:0;font-size:13.5px">Works once, for 7 days. Write it on the quick-start card in the box (or send it to them). Ship a blank admin tag with the station.</p>
+          <div class="actions"><button class="btn" data-copy="${esc(S.lastCode.code)}">Copy code</button><button class="btn" data-act="hideCode">Done</button></div></div>` : ""}
+        <form class="panel-b inline-form" data-form="addStation" style="border-top:1px solid var(--line)"><input class="field" name="name" placeholder="New station, like Bag Room" aria-label="New station name" maxlength="60" required>
+          <button class="btn primary">Add station</button>${c.station_limit != null && live.length >= c.station_limit ? `<span class="muted" style="font-size:13px">Over their limit of ${c.station_limit}. You can still add one; they can't.</span>` : ""}</form>
+        ${gone.length ? `<div class="panel-b muted" style="border-top:1px solid var(--line);font-size:13px">Disconnected: ${gone.map((s) => esc(s.name)).join(", ")}</div>` : ""}
+      </section>
+
+      ${DB.hw ? (() => { const mine = DB.hw.filter((u) => u.org_id === c.id); return `<section class="panel"><div class="panel-h"><h2>Hardware</h2><a class="btn sm" href="#hardware">All hardware</a></div>
+        <div class="list">${mine.map((u) => `<a class="row" href="#unit/${u.id}" style="text-decoration:none;color:inherit"><span class="dot ${HW_STATUS[u.status][1] === "quiet" ? "" : HW_STATUS[u.status][1]}"></span>
+          <span><b class="mono">${esc(u.serial)}</b> · ${esc(HW_KIND[u.kind])}<span class="sub">${HW_STATUS[u.status][0]}${hwStation(u) ? " · " + esc(hwStation(u).name) : ""}${u.shipped_at ? " · shipped " + esc(fmtDay(u.shipped_at)) : ""}${u.tracking ? " · " + esc(u.tracking) : ""}</span></span><span class="muted" aria-hidden="true">›</span></a>`).join("")
+          || `<div class="empty">Nothing shipped to them yet. Open a unit on the Hardware page to ship it.</div>`}</div></section>`; })() : ""}
+
+      <section class="panel"><div class="panel-h"><h2>Their team</h2><span class="muted" style="font-size:13px">They add the rest of their people themselves</span></div>
+        <div class="list">${c.members.map((m) => `<div class="row"><span class="dot ${m.role === "owner" ? "ok" : ""}"></span><span>${esc(m.email)}<span class="sub">${esc({ owner: "Owner", admin: "Admin", supervisor: "Supervisor", viewer: "View only" }[m.role])} · signed in ${esc(ago(m.last_sign_in))}</span></span><span></span></div>`).join("")}
+          ${c.invites.map((i) => `<div class="row"><span class="dot info"></span><span>${esc(i.email)}<span class="sub">Owner invite sent · expires ${esc(fmtDate(i.expires))}</span></span><button class="btn sm" data-act="resend" data-email="${esc(i.email)}">Resend</button></div>`).join("")}
+          ${!c.members.length && !c.invites.length ? `<div class="empty">Nobody yet. Invite their owner.</div>` : ""}</div>
+        ${S.lastInvite ? `<div class="panel-b" style="border-top:1px solid var(--line);display:flex;flex-direction:column;gap:8px"><b>Invite for ${esc(S.lastInvite.email)}</b>
+          <p class="muted" style="margin:0;font-size:13.5px">The live site emails this link. It works once, for 14 days, and only for that email address.</p>
+          <div class="inline-form"><span class="linkbox">${esc(inviteLink(S.lastInvite.token))}</span><button class="btn" data-copy="${esc(inviteLink(S.lastInvite.token))}">Copy link</button></div></div>` : ""}
+        <form class="panel-b inline-form" data-form="invite" style="border-top:1px solid var(--line)"><input class="field" name="email" type="email" placeholder="owner@theircompany.com" aria-label="Owner email" required>
+          <button class="btn">${owners.length ? "Invite another owner" : "Invite owner"}</button><div class="err" id="invErr" role="alert" style="flex-basis:100%"></div></form>
+      </section>
+
+      <section class="panel"><div class="panel-h"><h2>Usage</h2></div><div class="panel-b"><dl class="kv">
+        <dt>People</dt><dd>${c.usage.employees}</dd><dt>Equipment</dt><dd>${c.usage.equipment}</dd><dt>Taps (7 days)</dt><dd>${c.usage.taps7d.toLocaleString()}</dd>
+        <dt>Last tap</dt><dd>${c.usage.last_tap ? esc(ago(c.usage.last_tap)) : "None yet"}</dd><dt>Dashboard users</dt><dd>${c.members.length}</dd></dl>
+        <p class="muted" style="margin:10px 0 0;font-size:13px">You see counts only. Their equipment, people and history stay private to them.</p></div></section>
+
+      <section class="panel"><div class="panel-h"><h2>History</h2></div><div class="list feed">
+        ${DB.log.filter((g) => g.org === c.id).slice(0, 12).map((g) => `<div class="row"><time>${esc(fmtWhen(g.at))}</time><span><b>${esc(g.by)}</b> ${esc(g.action)}${g.details ? `<span class="sub">${esc(g.details)}</span>` : ""}</span></div>`).join("") || `<div class="empty">Nothing yet.</div>`}</div></section>
+    </div>
+
+    <div class="stack">
+      <section class="panel"><div class="panel-h"><h2>Account</h2></div>
+        <form class="panel-b fgrid" data-form="account">
+          <label>Status<select class="field" name="status">${Object.entries(STATUS).map(([k, [l]]) => `<option value="${k}" ${c.status === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
+          <label>Plan<select class="field" name="plan">${PLANS.map((p) => `<option value="${p.id}" ${c.plan === p.id ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select></label>
+          <label>Trial ends<small>Only used on trial</small><input class="field" type="date" name="trial_ends" value="${c.trial_ends ? new Date(c.trial_ends).toISOString().slice(0, 10) : ""}"></label>
+          <label>Station limit<small>Blank = no limit</small><input class="field" type="number" min="0" max="500" name="station_limit" value="${c.station_limit ?? ""}"></label>
+          <label>Contact<input class="field" name="contact_name" maxlength="60" value="${esc(c.contact_name || "")}"></label>
+          <label>Contact phone<input class="field" name="contact_phone" maxlength="30" value="${esc(c.contact_phone || "")}"></label>
+          <label class="full">Contact email<small>For billing and setup. Not a login.</small><input class="field" name="contact_email" type="email" value="${esc(c.contact_email || "")}"></label>
+          <label class="full">Your notes<small>Only you see these</small><textarea class="field" name="notes" maxlength="2000">${esc(c.notes || "")}</textarea></label>
+          <div class="err full" role="alert">${S.formErr?.form === "account" ? esc(S.formErr.text) : ""}</div>
+          <div class="actions full"><button class="btn primary">Save account</button></div>
+        </form></section>
+
+      <section class="panel"><div class="panel-h"><h2>Look on their station</h2></div>
+        <form class="panel-b fgrid" data-form="brand">
+          <div class="full">${stationPreview(c, c.terms)}</div>
+          <label class="full">Company name<input class="field" name="name" required maxlength="80" value="${esc(c.name)}"></label>
+          <label>Main color<span class="colorrow"><input type="color" data-pair="primary" value="${esc(c.primary)}" aria-label="Pick main color"><input class="field" name="primary" value="${esc(c.primary)}" maxlength="7"></span></label>
+          <label>Accent color<span class="colorrow"><input type="color" data-pair="accent" value="${esc(c.accent)}" aria-label="Pick accent color"><input class="field" name="accent" value="${esc(c.accent)}" maxlength="7"></span></label>
+          <label class="full">Logo link<small>A PNG or SVG web address. Blank shows their initials.</small><input class="field" name="logo_url" value="${esc(c.logo_url || "")}" placeholder="https://..."></label>
+          <details class="full"><summary style="cursor:pointer;font-weight:700;font-size:13.5px">Their words for things</summary>
+            <div class="fgrid" style="margin-top:10px">${TERMS.map(([k, l, ph]) => `<label>${l}<input class="field" name="t_${k}" maxlength="24" value="${esc(c.terms[k])}" placeholder="${ph}"></label>`).join("")}</div></details>
+          <div class="err full" role="alert">${S.formErr?.form === "brand" ? esc(S.formErr.text) : ""}</div>
+          <div class="actions full"><button class="btn primary">Save look</button><span class="muted" style="font-size:13px;align-self:center">Stations pick it up within a minute.</span></div>
+        </form></section>
+
+      <section class="panel"><div class="panel-h"><h2>Modules</h2></div><div class="panel-b">
+        ${MODULES.map((m) => `<div class="modrow"><span><b>${esc(m.name)}</b><small>${esc(m.desc)}</small></span>
+          <span class="switch"><input type="checkbox" data-mod="${m.id}" ${c.modules.includes(m.id) ? "checked" : ""} aria-label="${esc(m.name)}"><span></span></span></div>`).join("")}
+        <p class="muted" style="margin:8px 0 0;font-size:13px">Checkouts, returns, lost and found, alerts, team access and the admin fobs are always included.</p></div></section>
+    </div></div>`;
+}
+
+function newDefaults() {
+  return { name: "", slug: "", slugTouched: false, timezone: "America/Phoenix", primary: "#0B2350", accent: "#F7931E", logo_url: "", terms: { ...DEFAULT_TERMS },
+    status: "trial", trial_days: 30, plan: "pilot", station_limit: "", modules: ["shifts"], owner_email: "", contact_name: "", contact_phone: "", notes: "", stations: ["Equipment Room 01"] };
+}
+function vNew() {
+  if (S.made) return vMade();
+  const f = S.newForm || (S.newForm = newDefaults()); const e = S.formErr?.form === "new" ? S.formErr : null;
+  const tzs = ["America/Phoenix", "America/Los_Angeles", "America/Denver", "America/Chicago", "America/New_York", "America/Anchorage", "Pacific/Honolulu"];
+  const sec = (n, title, body) => `<section class="panel"><div class="panel-h"><h2>${n}. ${title}</h2></div><div class="panel-b fgrid">${body}</div></section>`;
+  return `<div><a class="back" href="#customers">‹ All customers</a></div>
+    <div class="head"><div><h1>New customer</h1><p>Sets up their company, invites their owner and makes an activation code for each station you'll ship.</p></div></div>
+    <form data-form="new" class="cols" novalidate><div class="stack">
+      ${sec(1, "Company", `<label class="full">Company name<input class="field" name="name" required maxlength="80" value="${esc(f.name)}" placeholder="Desert Ground Handling" data-new="name"></label>
+        <label>Short ID<small>Letters, numbers, dashes. Used in support and links.</small><input class="field mono" name="slug" maxlength="40" value="${esc(f.slug)}" data-new="slug" placeholder="desertground"></label>
+        <label>Time zone<small>Shift times and due times use this</small><select class="field" name="timezone" data-new="timezone">${tzs.map((t) => `<option ${f.timezone === t ? "selected" : ""}>${t}</option>`).join("")}</select></label>`)}
+      ${sec(2, "Look", `<label>Main color<span class="colorrow"><input type="color" data-pair="primary" value="${esc(hex(f.primary) ? f.primary : "#0B2350")}" aria-label="Pick main color"><input class="field" name="primary" value="${esc(f.primary)}" maxlength="7" data-new="primary"></span></label>
+        <label>Accent color<span class="colorrow"><input type="color" data-pair="accent" value="${esc(hex(f.accent) ? f.accent : "#F7931E")}" aria-label="Pick accent color"><input class="field" name="accent" value="${esc(f.accent)}" maxlength="7" data-new="accent"></span></label>
+        <label class="full">Logo link<small>Optional. You can add it later.</small><input class="field" name="logo_url" value="${esc(f.logo_url)}" placeholder="https://..." data-new="logo_url"></label>
+        <details class="full"><summary style="cursor:pointer;font-weight:700;font-size:13.5px">Their words for things (optional)</summary>
+          <div class="fgrid" style="margin-top:10px">${TERMS.map(([k, l, ph]) => `<label>${l}<input class="field" name="t_${k}" maxlength="24" value="${esc(f.terms[k])}" placeholder="${ph}" data-new="t_${k}"></label>`).join("")}</div></details>`)}
+      ${sec(3, "Plan", `<label>Start as<select class="field" name="status" data-new="status"><option value="trial" ${f.status === "trial" ? "selected" : ""}>Trial</option><option value="active" ${f.status === "active" ? "selected" : ""}>Active (paying)</option></select></label>
+        <label>Trial length (days)<input class="field" type="number" min="1" max="365" name="trial_days" value="${esc(f.trial_days)}" data-new="trial_days" ${f.status === "trial" ? "" : "disabled"}></label>
+        <label>Plan<select class="field" name="plan" data-new="plan">${PLANS.map((p) => `<option value="${p.id}" ${f.plan === p.id ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select></label>
+        <label>Station limit<small>Blank = no limit</small><input class="field" type="number" min="0" max="500" name="station_limit" value="${esc(f.station_limit)}" data-new="station_limit"></label>
+        <div class="full">${MODULES.map((m) => `<div class="modrow"><span><b>${esc(m.name)}</b><small>${esc(m.desc)}</small></span><span class="switch"><input type="checkbox" data-newmod="${m.id}" ${f.modules.includes(m.id) ? "checked" : ""} aria-label="${esc(m.name)}"><span></span></span></div>`).join("")}</div>`)}
+      ${sec(4, "Their owner", `<label class="full">Owner's email<small>They get an invite to the dashboard and can add the rest of their team.</small><input class="field" type="email" name="owner_email" value="${esc(f.owner_email)}" placeholder="manager@theircompany.com" data-new="owner_email"></label>
+        <label>Contact name<input class="field" name="contact_name" maxlength="60" value="${esc(f.contact_name)}" data-new="contact_name"></label>
+        <label>Contact phone<input class="field" name="contact_phone" maxlength="30" value="${esc(f.contact_phone)}" data-new="contact_phone"></label>
+        <label class="full">Your notes<small>Only you see these</small><textarea class="field" name="notes" maxlength="2000" data-new="notes">${esc(f.notes)}</textarea></label>`)}
+      ${sec(5, "Stations to ship", `<div class="full" style="display:flex;flex-direction:column;gap:8px">${f.stations.map((s, i) => `<div class="inline-form"><input class="field" value="${esc(s)}" data-station="${i}" aria-label="Station ${i + 1} name" maxlength="60" placeholder="Station name">
+          ${f.stations.length > 1 ? `<button type="button" class="btn sm" data-act="rmStation" data-i="${i}" aria-label="Remove station ${i + 1}">Remove</button>` : ""}</div>`).join("")}
+          <div><button type="button" class="btn sm" data-act="addStationRow">Add another station</button></div>
+          <p class="muted" style="margin:0;font-size:13px">Each one gets its own activation code. Name it after where it'll go: Bag Room, Ramp Office.</p></div>`)}
+    </div>
+    <div class="stack" style="position:sticky;top:20px">
+      <section class="panel"><div class="panel-h"><h2>Their station will look like</h2></div><div class="panel-b">${stationPreview(f, f.terms)}</div></section>
+      <section class="panel"><div class="panel-b" style="display:flex;flex-direction:column;gap:10px">
+        <dl class="kv" id="newSum"><dt>Company</dt><dd>${esc(f.name || "—")}</dd><dt>Plan</dt><dd>${esc(planName(f.plan))} · ${f.status === "trial" ? `${esc(f.trial_days)}-day trial` : "Active"}</dd>
+          <dt>Owner</dt><dd>${esc(f.owner_email || "—")}</dd><dt>Stations</dt><dd>${f.stations.filter((s) => s.trim()).length}</dd></dl>
+        <div class="err" role="alert" id="newErr">${e ? esc(e.text) : ""}</div>
+        <button class="btn primary" style="justify-content:center;padding:10px">Create customer</button></div></section>
+    </div></form>`;
+}
+function vMade() {
+  const m = S.made, c = custOf(m.id);
+  return `<div class="noprint"><a class="back" href="#customer/${c.id}">‹ ${esc(c.name)}</a></div>
+    <div class="head"><div><h1>${esc(c.name)} is set up</h1><p>Pack one box per station. Codes work once and expire ${esc(fmtDate(m.stations[0].expires))}.</p></div>
+      <div class="actions noprint"><button class="btn" data-act="print">Print setup sheets</button><a class="btn primary" href="#customer/${c.id}">Open customer</a></div></div>
+    <section class="panel noprint"><div class="panel-h"><h2>Owner invite</h2></div><div class="panel-b" style="display:flex;flex-direction:column;gap:8px">
+      <span>${!LIVE ? `Sent to <b>${esc(m.invite.email)}</b>. On the live site this is emailed for you; here's the link if you want to send it yourself.`
+        : m.invite.mailErr ? `<b>The email to ${esc(m.invite.email)} didn't send</b> (${esc(m.invite.mailErr)}). Send them this link yourself:`
+        : `Emailed to <b>${esc(m.invite.email)}</b>. Here's the same link if you want to send it yourself.`}</span>
+      <div class="inline-form"><span class="linkbox">${esc(inviteLink(m.invite.token))}</span><button class="btn" data-copy="${esc(inviteLink(m.invite.token))}">Copy link</button></div></div></section>
+    <div class="ship">${m.stations.map((s) => `<div class="shipcard"><span class="muted" style="font-size:12.5px;letter-spacing:.08em;text-transform:uppercase;font-weight:700">${esc(c.name)}</span>
+      <h3>${esc(s.name)}</h3><div class="codebox">${esc(s.code)}</div>
+      <div><b style="font-size:13.5px">In the box</b>
+        ${["Station: Pi, touchscreen and case, labeled “" + s.name + "”", "NFC reader, plugged in", "Power supply", "Blank admin tag (the setup screen asks for it)", "Quick-start card with this code written in"]
+          .map((t, i) => `<label class="check"><input type="checkbox" data-pack="${s.id}:${i}">${esc(t)}</label>`).join("")}</div>
+      <button class="btn sm noprint" data-copy="${esc(s.code)}" style="align-self:flex-start">Copy code</button></div>`).join("")}</div>`;
+}
+
+function vFleet() {
+  const all = api.fleet(); const now = Date.now();
+  const problem = (s) => ["offline", "expired"].includes(s.state.key) || (s.state.key === "waiting" && now - s.created > 3 * DAY);
+  const rows = all.filter((s) => S.f.fleet === "all" || (S.f.fleet === "problems" ? problem(s) : S.f.fleet === "waiting" ? ["waiting", "expired"].includes(s.state.key) : s.state.key === "online"))
+    .sort((a, b) => ({ bad: 0, warn: 1, info: 2, quiet: 3, ok: 4 }[a.state.tone] - { bad: 0, warn: 1, info: 2, quiet: 3, ok: 4 }[b.state.tone]) || a.customer.localeCompare(b.customer));
+  const versions = {}; all.filter((s) => s.version).forEach((s) => { versions[s.version] = (versions[s.version] || 0) + 1; });
+  const counts = { problems: all.filter(problem).length, online: all.filter((s) => s.state.key === "online").length, waiting: all.filter((s) => ["waiting", "expired"].includes(s.state.key)).length, all: all.length };
+  return `<div class="head"><div><h1>Stations</h1><p>Every station at every customer.</p></div></div>
+    <section class="panel"><div class="panel-h"><div class="seg" role="group" aria-label="Show">${[["problems", "Needs a look"], ["online", "Online"], ["waiting", "Waiting for setup"], ["all", "All"]].map(([k, l]) => `<button data-seg="fleet:${k}" class="${S.f.fleet === k ? "on" : ""}" aria-pressed="${S.f.fleet === k}">${l} (${counts[k]})</button>`).join("")}</div>
+      <span class="muted" style="font-size:13px">Software: ${Object.entries(versions).map(([v, n]) => `<span class="mono">${esc(v)}</span> × ${n}`).join(", ")}</span></div>
+      <div class="tablewrap"><table><thead><tr><th>Station</th><th>Customer</th><th>Status</th><th>Last seen</th><th>Software</th><th>Unit</th><th>Admin tag</th></tr></thead><tbody>
+      ${rows.map((s) => `<tr class="click" data-go="customer/${s.org}" tabindex="0"><td><b>${esc(s.name)}</b><span class="sub">${esc(s.location || "")}</span></td><td>${esc(s.customer)}</td>
+        <td><span class="chip ${s.state.tone}">${esc(s.state.label)}</span>${["waiting", "expired"].includes(s.state.key) ? `<span class="sub">Shipped ${esc(ago(s.created))}</span>` : ""}</td>
+        <td>${s.last_seen ? esc(fmtWhen(s.last_seen)) : "—"}</td><td class="mono">${esc(s.version || "—")}</td><td>${hwForStation(s.id) ? `<a class="mono" href="#unit/${hwForStation(s.id).id}" style="color:var(--brand-text)">${esc(hwForStation(s.id).serial)}</a>` : `<span class="muted">—</span>`}</td><td>${s.admin_claimed_at ? "Registered" : s.activated_at ? `<span class="muted">Skipped</span>` : "—"}</td></tr>`).join("")
+        || `<tr><td colspan="7" class="empty">${S.f.fleet === "problems" ? "Nothing needs a look. Every station is online or on its way." : "None."}</td></tr>`}
+      </tbody></table></div></section>`;
+}
+function vLog() {
+  return `<div class="head"><div><h1>Activity</h1><p>Everything your team has done in this console, newest first.</p></div></div>
+    <section class="panel"><div class="list feed">${api.log().map((g) => `<div class="row"><time>${esc(fmtWhen(g.at))}</time><span><b>${esc(g.by)}</b> ${esc(g.action)}${g.org ? ` · <a href="#customer/${g.org}" style="color:var(--brand-text)">${esc(g.customer)}</a>` : ""}${g.details ? `<span class="sub">${esc(g.details)}</span>` : ""}</span></div>`).join("")}</div></section>`;
+}
+
+function vTeam() {
+  const T = api.team(); const owner = OPERATOR.role === "owner"; const cf = S.confirm;
+  if (!T) return `<div class="head"><div><h1>Team</h1></div></div><div class="warnbox">Run the database update <span class="mono">20261016000008_operator_team.sql</span> in Supabase to turn on the team page.</div>`;
+  const roleSel = (o) => `<select class="field" style="width:auto;padding:5px 8px" data-oprole="${esc(o.user_id)}" aria-label="Role for ${esc(o.name)}">${Object.entries(ROLES).map(([k, [l]]) => `<option value="${k}" ${o.role === k ? "selected" : ""}>${l}</option>`).join("")}</select>`;
+  return `<div class="head"><div><h1>Team</h1><p>People who can sign in to this console. Each person's name shows in the activity log.</p></div></div>
+    <div class="cols"><div class="stack">
+      <section class="panel"><div class="panel-h"><h2>People</h2><span class="muted" style="font-size:13px">${T.operators.length}</span></div><div class="list">
+        ${T.operators.map((o) => `<div class="row oprow"><span class="dot ${o.role === "owner" ? "ok" : ""}"></span>
+          <span><b>${esc(o.name)}</b>${o.me ? ` <span class="muted">(you)</span>` : ""}<span class="sub">${esc(o.email)} · ${o.last_sign_in ? "signed in " + esc(ago(o.last_sign_in)) : "hasn't signed in yet"}</span></span>
+          <span style="display:flex;gap:6px;align-items:center;justify-content:flex-end;flex-wrap:wrap">${owner && !o.me
+            ? cf === "rmop:" + o.user_id ? `<span class="confirm" style="padding:5px 8px">Remove ${esc(o.name)}? They're signed out of the console. <button class="btn sm danger" data-act="doRmOp" data-id="${esc(o.user_id)}">Remove</button><button class="btn sm" data-act="noConfirm">Cancel</button></span>`
+              : `${roleSel(o)}<button class="btn sm danger" data-act="askRmOp" data-id="${esc(o.user_id)}">Remove</button>`
+            : `<span class="chip ${o.role === "owner" ? "ok" : "info"}">${ROLES[o.role][0]}</span>`}</span></div>`).join("")}
+        ${T.invites.map((i) => `<div class="row oprow"><span class="dot info"></span><span><b>${esc(i.name || i.email)}</b><span class="sub">${i.name ? esc(i.email) + " · " : ""}Invited as ${ROLES[i.role][0]} · expires ${esc(fmtDate(i.expires))}</span></span>
+          <span style="display:flex;gap:6px;justify-content:flex-end">${owner ? `<button class="btn sm" data-act="resendOp" data-email="${esc(i.email)}" data-role="${i.role}" data-name="${esc(i.name || "")}">Resend</button><button class="btn sm" data-act="cancelOp" data-id="${esc(i.id)}">Cancel</button>` : `<span class="muted" style="font-size:13px">Invite sent</span>`}</span></div>`).join("")}
+      </div>
+      ${S.lastOpInvite ? `<div class="panel-b" style="border-top:1px solid var(--line);display:flex;flex-direction:column;gap:8px"><b>${S.lastOpInvite.mailErr ? `The email to ${esc(S.lastOpInvite.email)} didn't send. Send them this link yourself:` : `Invite emailed to ${esc(S.lastOpInvite.email)}`}</b>
+        <p class="muted" style="margin:0;font-size:13.5px">The link works once, for 14 days, and only for that email address.</p>
+        <div class="inline-form"><span class="linkbox">${esc(opInviteLink(S.lastOpInvite.token))}</span><button class="btn" data-copy="${esc(opInviteLink(S.lastOpInvite.token))}">Copy link</button></div></div>` : ""}
+      </section>
+      ${owner ? `<section class="panel"><div class="panel-h"><h2>Invite someone</h2></div>
+        <form class="panel-b fgrid" data-form="opinvite">
+          <label>Name<input class="field" name="name" maxlength="60" placeholder="Jordan Ellis" autocomplete="off"></label>
+          <label>Email<input class="field" name="email" type="email" placeholder="jordan@sonoranpoint.com" required autocomplete="off"></label>
+          <label>Role<select class="field" name="role">${Object.entries(ROLES).map(([k, [l]]) => `<option value="${k}" ${k === "operator" ? "selected" : ""}>${l}</option>`).join("")}</select></label>
+          <div class="err full" role="alert">${S.formErr?.form === "opinvite" ? esc(S.formErr.text) : ""}</div>
+          <div class="actions full"><button class="btn primary">Send invite</button><span class="muted" style="font-size:13px;align-self:center">They get an email with a sign-in link.</span></div>
+        </form></section>` : ""}
+    </div>
+    <div class="stack">
+      <section class="panel"><div class="panel-h"><h2>You</h2><span class="chip ${owner ? "ok" : "info"}">${ROLES[OPERATOR.role]?.[0] || "Operator"}</span></div>
+        <form class="panel-b fgrid" data-form="myname" style="grid-template-columns:1fr">
+          <label>Your name<small>Shown in the activity log and on the side bar</small><input class="field" name="name" maxlength="60" required value="${esc(OPERATOR.name)}" autocomplete="name"></label>
+          <div class="err" role="alert">${S.formErr?.form === "myname" ? esc(S.formErr.text) : ""}</div>
+          <div class="actions"><button class="btn primary">Save name</button>${LIVE ? `<button type="button" class="btn" data-act="setPass">Set a new password</button>` : ""}</div>
+        </form></section>
+      <section class="panel"><div class="panel-h"><h2>Roles</h2></div><div class="panel-b"><dl class="kv">
+        ${Object.values(ROLES).map(([l, d]) => `<dt>${l}</dt><dd>${esc(d)}</dd>`).join("")}</dl>
+        <p class="muted" style="margin:10px 0 0;font-size:13px">There's always at least one owner. Nobody here can see inside a customer's dashboard.</p></div></section>
+    </div></div>`;
+}
+
+/* ---- Hardware ---- */
+const custOptions = (sel, none = "No customer") => `<option value="">${none}</option>` + [...DB.customers].sort((a, b) => a.name.localeCompare(b.name))
+  .map((c) => `<option value="${esc(c.id)}" ${c.id === sel ? "selected" : ""}>${esc(c.name)}</option>`).join("");
+const stationOptions = (orgId, sel) => { const c = custOf(orgId);
+  return `<option value="">${c ? "No specific station" : "Pick a customer first"}</option>` + (c ? c.stations.filter((s) => !s.revoked || s.id === sel)
+    .map((s) => { const other = hwForStation(s.id); return `<option value="${esc(s.id)}" ${s.id === sel ? "selected" : ""}>${esc(s.name)}${other && other.id !== S.id ? ` (has ${esc(other.serial)})` : !s.activated_at ? " (waiting for setup)" : ""}</option>`; }).join("") : ""); };
+const carrierOptions = (sel) => `<option value="">—</option>` + Object.keys(CARRIERS).map((k) => `<option ${k === sel ? "selected" : ""}>${esc(k)}</option>`).join("");
+const today = () => { const d = new Date(); return new Date(d.getTime() - d.getTimezoneOffset() * MIN).toISOString().slice(0, 10); };
+function hwWhere(u) {
+  const c = hwCustomer(u), st = hwStation(u);
+  if (!c) return `<span class="muted">${u.status === "ready" || u.status === "building" ? "On the shelf" : "—"}</span>`;
+  const state = st && custOf(u.org_id) && st.activated_at !== undefined ? stationState(st, custOf(u.org_id)) : null;
+  return `<b>${esc(c)}</b><span class="sub">${st ? esc(st.name) : "No specific station"}${state && u.status === "installed" ? ` · <span style="color:var(--${state.tone === "ok" ? "ok" : state.tone === "bad" ? "bad" : "muted"})">${esc(state.label)}</span>` : ""}</span>`;
+}
+function vHardware() {
+  const all = api.hardware();
+  if (!all) return `<div class="head"><div><h1>Hardware</h1></div></div><div class="warnbox">Run the database update <span class="mono">20261016000009_hardware.sql</span> in Supabase to turn on hardware tracking.</div>`;
+  const live = all.filter((u) => u.status !== "retired"), cnt = (st) => all.filter((u) => u.status === st).length;
+  const fix = cnt("repair") + cnt("returned");
+  const groups = { all: (u) => u.status !== "retired", ready: (u) => u.status === "ready", building: (u) => u.status === "building", shipped: (u) => u.status === "shipped",
+    installed: (u) => u.status === "installed", fix: (u) => u.status === "repair" || u.status === "returned", retired: (u) => u.status === "retired" };
+  const q = S.f.hwq.trim().toLowerCase();
+  const rows = all.filter(groups[S.f.hw] || groups.all).filter((u) => !q || [u.serial, u.pi_serial, u.tracking, hwCustomer(u), hwStation(u)?.name, HW_KIND[u.kind], u.notes].join(" ").toLowerCase().includes(q));
+  const oldShip = all.filter((u) => u.status === "shipped" && u.shipped_at && Date.now() - Date.parse(u.shipped_at) > 10 * DAY);
+  return `<div class="head"><div><h1>Hardware</h1><p>Every unit you've built: where it is, who has it and how it got there.</p></div><a class="btn primary" href="#unit/new">Add unit</a></div>
+    <div class="kpis">
+      <div class="kpi ${cnt("ready") ? "ok" : "warn"}"><b class="num">${cnt("ready")}</b><span>In stock</span><small>${all.filter((u) => u.status === "ready" && u.kind === "station").length} station kits ready to ship</small></div>
+      <div class="kpi"><b class="num">${cnt("building")}</b><span>Building</span><small>On the bench</small></div>
+      <div class="kpi ${oldShip.length ? "warn" : ""}"><b class="num">${cnt("shipped")}</b><span>Shipped</span><small>${oldShip.length ? `${oldShip.length} not set up after 10 days` : "Turns installed when activated"}</small></div>
+      <div class="kpi ok"><b class="num">${cnt("installed")}</b><span>Installed</span><small>At ${new Set(all.filter((u) => u.status === "installed" && u.org_id).map((u) => u.org_id)).size} customers</small></div>
+      <div class="kpi ${fix ? "bad" : ""}"><b class="num">${fix}</b><span>Repairs and returns</span><small>${fix ? "Need a look" : "None"}</small></div>
+    </div>
+    <section class="panel"><div class="panel-h">
+      <div class="seg" role="group" aria-label="Show">${[["all", "All"], ["ready", "In stock"], ["building", "Building"], ["shipped", "Shipped"], ["installed", "Installed"], ["fix", "Repairs and returns"], ["retired", "Retired"]]
+        .map(([k, l]) => `<button data-seg="hw:${k}" class="${S.f.hw === k ? "on" : ""}" aria-pressed="${S.f.hw === k}">${l}</button>`).join("")}</div>
+      <div class="filters"><input class="field" type="search" data-f="hwq" placeholder="Unit, Pi serial, tracking, customer" aria-label="Search hardware" value="${esc(S.f.hwq)}"></div></div>
+      <div class="tablewrap"><table><thead><tr><th>Unit</th><th>Status</th><th>Customer and station</th><th>Shipping</th><th>Pi serial</th><th>Built</th></tr></thead><tbody>
+      ${rows.map((u) => `<tr class="click" data-go="unit/${u.id}" tabindex="0"><td><b class="mono">${esc(u.serial)}</b><span class="sub">${esc(HW_KIND[u.kind])}</span></td>
+        <td>${hwChip(u.status)}${u.status === "shipped" && u.shipped_at ? `<span class="sub">${esc(fmtDay(u.shipped_at))}</span>` : ""}</td>
+        <td>${hwWhere(u)}</td>
+        <td>${u.carrier || u.tracking ? `${esc(u.carrier || "")}${u.tracking ? `<span class="sub mono">${trackLink(u)}</span>` : ""}` : `<span class="muted">—</span>`}</td>
+        <td class="mono" style="font-size:13px">${esc(u.pi_serial || "—")}</td>
+        <td>${esc(fmtDay(u.built_at))}<span class="sub">${esc(u.built_by_name || "")}</span></td></tr>`).join("")
+        || `<tr><td colspan="6" class="empty">${all.length ? "Nothing matches." : "No hardware yet. Add the first unit you build."}</td></tr>`}
+      </tbody></table></div></section>
+    <p class="muted" style="font-size:13px;margin:0">${live.length} unit${live.length === 1 ? "" : "s"} in service, ${cnt("retired")} retired. A shipped unit linked to a station turns Installed by itself when that station is activated.</p>`;
+}
+const NEXT = { building: [["ready", "Mark in stock"]], ready: [], shipped: [["installed", "Mark installed"], ["returned", "Mark returned"]],
+  installed: [["repair", "Send to repair"], ["returned", "Mark returned"]], repair: [["ready", "Back in stock"], ["retired", "Retire"]],
+  returned: [["ready", "Back in stock"], ["repair", "Send to repair"], ["retired", "Retire"]], retired: [["ready", "Back in stock"]] };
+function vUnit() {
+  const isNew = S.id === "new"; const u = isNew ? null : api.hardwareUnit(S.id); const e = S.formErr; const cf = S.confirm;
+  const err = (form) => `<div class="err full" role="alert">${e?.form === form ? esc(e.text) : ""}</div>`;
+  if (isNew) {
+    return `<div><a class="back" href="#hardware">‹ All hardware</a></div>
+      <div class="head"><div><h1>Add unit</h1><p>Log it when you start building. You can fill in the rest as you go.</p></div></div>
+      <div class="cols"><div class="stack"><section class="panel"><form class="panel-b fgrid" data-form="hwnew">
+        <label>Unit ID<small>Leave blank for the next number. Write it on the label.</small><input class="field mono" name="serial" maxlength="40" placeholder="Automatic"></label>
+        <label>Type<select class="field" name="kind">${Object.entries(HW_KIND).map(([k, l]) => `<option value="${k}">${esc(l)}</option>`).join("")}</select></label>
+        <label>Status<select class="field" name="status"><option value="building">Building</option><option value="ready">In stock (ready to ship)</option></select></label>
+        <label>Pi serial<small>On the Pi: <span class="mono">cat /proc/cpuinfo</span>, last line</small><input class="field mono" name="pi_serial" maxlength="40"></label>
+        <label>Software<input class="field mono" name="software" maxlength="40" placeholder="station-0.1.0"></label>
+        <label>Built<input class="field" type="date" name="built_at" value="${today()}"></label>
+        <label class="full">Parts<small>What went into it, so you know what to replace</small><textarea class="field" name="parts" maxlength="2000">Pi 5 2GB (CanaKit), SmartiPi Touch Pro 3 Large, Touch Display 2, PN532 reader, NS4168 amp, RTC battery, active cooler</textarea></label>
+        <label class="full">Notes<textarea class="field" name="notes" maxlength="2000"></textarea></label>
+        ${err("hwnew")}<div class="actions full"><button class="btn primary">Add unit</button><a class="btn" href="#hardware">Cancel</a></div>
+      </form></section></div><div></div></div>`;
+  }
+  const c = custOf(u.org_id), st = hwStation(u), state = st && c && st.activated_at !== undefined ? stationState(st, c) : null;
+  const A = S.hwAssign || (S.hwAssign = { org: u.org_id || "" });
+  const canShip = ["building", "ready", "repair", "returned"].includes(u.status);
+  return `<div><a class="back" href="#hardware">‹ All hardware</a></div>
+    <div class="head"><div><h1 class="mono" style="font-family:var(--display)">${esc(u.serial)}</h1><p>${hwChip(u.status)} · ${esc(HW_KIND[u.kind])}${c ? ` · <a href="#customer/${c.id}" style="color:var(--brand-text)">${esc(c.name)}</a>` : ""}${st ? ` · ${esc(st.name)}` : ""}</p></div>
+      <div class="actions">${NEXT[u.status].map(([to, l]) => `<button class="btn ${to === "retired" ? "danger" : ""}" data-act="hwStatus" data-status="${to}">${l}</button>`).join("")}</div></div>
+    <div class="cols"><div class="stack">
+      ${canShip ? `<section class="panel"><div class="panel-h"><h2>Ship it</h2>${u.kind === "station" ? `<span class="muted" style="font-size:13px">Pick the station so it turns Installed when they activate it</span>` : ""}</div>
+        <form class="panel-b fgrid" data-form="hwship">
+          <label>Customer<select class="field" name="org_id" data-hwcust>${custOptions(A.org, "Pick a customer")}</select></label>
+          <label>Station<select class="field" name="station_id">${stationOptions(A.org, null)}</select></label>
+          <label>Carrier<select class="field" name="carrier">${carrierOptions("UPS")}</select></label>
+          <label>Tracking number<input class="field mono" name="tracking" maxlength="60" autocomplete="off"></label>
+          <label>Ship date<input class="field" type="date" name="shipped_at" value="${today()}"></label>
+          <label>Ship to<small>Name and address on the label</small><input class="field" name="ship_to" maxlength="300" value="${esc(c ? [c.contact_name, c.name].filter(Boolean).join(", ") : "")}"></label>
+          ${err("hwship")}<div class="actions full"><button class="btn primary">Mark shipped</button></div>
+        </form></section>` : ""}
+
+      <section class="panel"><div class="panel-h"><h2>Details</h2></div>
+        <form class="panel-b fgrid" data-form="hwedit">
+          <label>Unit ID<input class="field mono" name="serial" maxlength="40" required value="${esc(u.serial)}"></label>
+          <label>Type<select class="field" name="kind">${Object.entries(HW_KIND).map(([k, l]) => `<option value="${k}" ${u.kind === k ? "selected" : ""}>${esc(l)}</option>`).join("")}</select></label>
+          <label>Status<small>To correct a mistake. The buttons above are quicker.</small><select class="field" name="status">${Object.entries(HW_STATUS).map(([k, [l]]) => `<option value="${k}" ${u.status === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
+          <label>Pi serial<input class="field mono" name="pi_serial" maxlength="40" value="${esc(u.pi_serial || "")}"></label>
+          <label>Software<input class="field mono" name="software" maxlength="40" value="${esc(u.software || "")}"></label>
+          <label>Built<input class="field" type="date" name="built_at" value="${esc(u.built_at || "")}"></label>
+          <label>Customer<select class="field" name="org_id" data-hwcust>${custOptions(A.org)}</select></label>
+          <label>Station<select class="field" name="station_id">${stationOptions(A.org, A.org === (u.org_id || "") ? u.station_id : null)}</select></label>
+          <label>Carrier<select class="field" name="carrier">${carrierOptions(u.carrier)}</select></label>
+          <label>Tracking number<input class="field mono" name="tracking" maxlength="60" value="${esc(u.tracking || "")}"></label>
+          <label>Shipped<input class="field" type="date" name="shipped_at" value="${esc(u.shipped_at || "")}"></label>
+          <label>Ship to<input class="field" name="ship_to" maxlength="300" value="${esc(u.ship_to || "")}"></label>
+          <label class="full">Parts<textarea class="field" name="parts" maxlength="2000">${esc(u.parts || "")}</textarea></label>
+          <label class="full">Notes<textarea class="field" name="notes" maxlength="2000">${esc(u.notes || "")}</textarea></label>
+          ${err("hwedit")}<div class="actions full"><button class="btn primary">Save details</button></div>
+        </form></section>
+    </div>
+    <div class="stack">
+      <section class="panel"><div class="panel-h"><h2>Where it is</h2></div><div class="panel-b"><dl class="kv">
+        <dt>Status</dt><dd>${hwChip(u.status)}</dd>
+        <dt>Customer</dt><dd>${c ? `<a href="#customer/${c.id}" style="color:var(--brand-text)">${esc(c.name)}</a>` : esc(hwCustomer(u) || "None")}</dd>
+        <dt>Station</dt><dd>${st ? `${esc(st.name)}${state ? ` <span class="chip ${state.tone}">${esc(state.label)}</span>` : ""}` : "None"}</dd>
+        <dt>Shipped</dt><dd>${u.shipped_at ? `${esc(fmtDay(u.shipped_at))}${u.carrier ? ` by ${esc(u.carrier)}` : ""}` : "Not yet"}</dd>
+        ${u.tracking ? `<dt>Tracking</dt><dd class="mono">${trackLink(u)}</dd>` : ""}
+        ${u.ship_to ? `<dt>Ship to</dt><dd>${esc(u.ship_to)}</dd>` : ""}
+        <dt>Built</dt><dd>${esc(fmtDay(u.built_at))}${u.built_by_name ? ` by ${esc(u.built_by_name)}` : ""}</dd>
+      </dl></div></section>
+      <section class="panel"><div class="panel-h"><h2>History</h2></div>
+        <form class="panel-b inline-form" data-form="hwnote" style="border-bottom:1px solid var(--line)"><input class="field" name="note" maxlength="500" placeholder="Add a note: swapped the reader, customer called..." aria-label="Add a note" required><button class="btn">Add note</button></form>
+        <div class="list feed">${(u.events || []).map((ev) => `<div class="row"><time>${esc(fmtWhen(ev.at))}</time><span><b>${esc(ev.by)}</b> ${esc(hwAction(ev.action))}${changeText(ev.details) ? `<span class="sub">${esc(changeText(ev.details))}</span>` : ""}</span></div>`).join("")
+          || `<div class="empty">${u.events ? "Nothing yet." : "Loading…"}</div>`}</div></section>
+      ${OPERATOR.role === "owner" ? `<div class="actions" style="justify-content:flex-end">${cf === "hwdel" ? `<span class="confirm">Delete ${esc(u.serial)} and its history? Use Retire for real units. <button class="btn sm danger" data-act="hwDelete">Delete</button><button class="btn sm" data-act="noConfirm">Cancel</button></span>`
+        : `<button class="btn sm" data-act="askHwDelete" style="color:var(--muted)">Added by mistake? Delete</button>`}</div>` : ""}
+    </div></div>`;
+}
+const hwAction = (a) => a === "added" ? "added this unit" : a === "updated" ? "updated details" : a === "note" ? "added a note" : a.startsWith("status: ") ? `marked it ${HW_STATUS[a.slice(8)]?.[0].toLowerCase() || a.slice(8)}` : a;
+
+const VIEWS = { customers: vCustomers, customer: vCustomer, new: vNew, fleet: vFleet, log: vLog, team: vTeam, hardware: vHardware, unit: vUnit };
+function render() {
+  if (LIVE && !S.ready) return renderAuth();
+  const att = attention().filter((a) => a.tone !== "info").length;
+  const nav = [["customers", "Customers", att], ["new", "New customer"], ["fleet", "Stations"], ["hardware", "Hardware"], ["log", "Activity"], ["team", "Team"]];
+  const cur = S.route === "customer" ? "customers" : S.route === "unit" ? "hardware" : S.route;
+  $("#app").innerHTML = `<aside class="rail"><div class="org">${LIVE ? `<img src="brand/mark-180.png" alt="" style="width:46px;height:46px;flex:none">` : `<div class="mark" aria-hidden="true">${esc(VENDOR.short)}</div>`}<div><b>${esc(VENDOR.name)}</b><small>Operator console</small></div></div>
+      <nav class="nav" aria-label="Sections">${nav.map(([r, l, n]) => `<a href="#${r}" class="${cur === r ? "on" : ""}" ${cur === r ? 'aria-current="page"' : ""}>${l}${n ? `<span class="n" aria-label="${n} need attention">${n}</span>` : ""}</a>`).join("")}</nav>
+      <div class="me">${LIVE ? "" : `<span class="pill">Demo data</span>`}<b>${esc(OPERATOR.name)}</b><span>${esc(ROLES[OPERATOR.role]?.[0] || "Operator")}</span>${LIVE ? `<button class="btn sm" data-act="signOut" style="margin-top:6px;align-self:flex-start;background:transparent;color:inherit;border-color:rgba(255,255,255,.3)">Sign out</button>` : ""}</div></aside>
+    <main class="main"><div class="wrap">${VIEWS[S.route]()}</div></main>`;
+  renderLayer();
+}
+
+/* =====================================================================
+   Events
+   ===================================================================== */
+function readNewForm(form) {
+  const f = S.newForm; const fd = new FormData(form);
+  for (const k of ["name", "slug", "timezone", "primary", "accent", "logo_url", "status", "trial_days", "plan", "station_limit", "owner_email", "contact_name", "contact_phone", "notes"]) if (fd.has(k)) f[k] = fd.get(k);
+  TERMS.forEach(([k]) => { if (fd.has("t_" + k)) f.terms[k] = fd.get("t_" + k) || DEFAULT_TERMS[k]; });
+  form.querySelectorAll("[data-station]").forEach((el) => { f.stations[+el.dataset.station] = el.value; });
+}
+document.addEventListener("input", (e) => {
+  const t = e.target;
+  if (t.dataset.f) { S.f[t.dataset.f] = t.value; const pos = t.selectionStart; render(); const el = $(`[data-f="${t.dataset.f}"]`); el.focus(); try { el.setSelectionRange(pos, pos); } catch {} return; }
+  if (t.dataset.pair) { const box = t.form.elements[t.dataset.pair]; box.value = t.value.toUpperCase(); box.dispatchEvent(new Event("input", { bubbles: true })); return; }
+  if (S.route === "new" && t.form?.dataset.form === "new" && (t.dataset.new || t.dataset.station != null)) {
+    readNewForm(t.form);
+    if (t.dataset.new === "slug") S.newForm.slugTouched = !!t.value;
+    if (t.dataset.new === "name" && !S.newForm.slugTouched) { S.newForm.slug = slugify(t.value); t.form.elements.slug.value = S.newForm.slug; }
+    // Update the preview and summary in place (re-drawing the form would close an open color picker).
+    const nf = S.newForm; t.form.querySelector(".pv").outerHTML = stationPreview(nf, nf.terms);
+    $("#newSum").innerHTML = `<dt>Company</dt><dd>${esc(nf.name || "—")}</dd><dt>Plan</dt><dd>${esc(planName(nf.plan))} · ${nf.status === "trial" ? `${esc(nf.trial_days)}-day trial` : "Active"}</dd>
+      <dt>Owner</dt><dd>${esc(nf.owner_email || "—")}</dd><dt>Stations</dt><dd>${nf.stations.filter((x) => x.trim()).length}</dd>`;
+    if (t.dataset.new === "primary" && hex(t.value)) t.form.querySelector('[data-pair="primary"]').value = t.value;
+    if (t.dataset.new === "accent" && hex(t.value)) t.form.querySelector('[data-pair="accent"]').value = t.value;
+    return;
+  }
+  if (S.route === "customer" && t.form?.dataset.form === "brand" && (["name", "primary", "accent", "logo_url"].includes(t.name) || t.name?.startsWith("t_"))) {
+    const fd = new FormData(t.form); const c = custOf(S.id);
+    const tmp = { name: fd.get("name"), primary: fd.get("primary"), accent: fd.get("accent"), logo_url: fd.get("logo_url") };
+    const terms = Object.fromEntries(TERMS.map(([k]) => [k, fd.get("t_" + k) || DEFAULT_TERMS[k]]));
+    t.form.querySelector(".pv").outerHTML = stationPreview({ ...c, ...tmp }, terms);
+    if (hex(tmp.primary)) t.form.querySelector('[data-pair="primary"]').value = tmp.primary; if (hex(tmp.accent)) t.form.querySelector('[data-pair="accent"]').value = tmp.accent;
+  }
+});
+document.addEventListener("change", async (e) => {
+  const t = e.target;
+  if (t.dataset.mod) { const c = custOf(S.id); const mods = new Set(c.modules); t.checked ? mods.add(t.dataset.mod) : mods.delete(t.dataset.mod);
+    const mr = await api.updateCustomer(c.id, { modules: [...mods], _note: `${MODULES.find((m) => m.id === t.dataset.mod).name} ${t.checked ? "on" : "off"}` }); if (mr && !mr.ok) { toast(mr.error); return render(); } toast(`${MODULES.find((m) => m.id === t.dataset.mod).name} ${t.checked ? "on" : "off"}`); return render(); }
+  if (t.matches("[data-hwcust]")) { if (S.hwAssign) S.hwAssign.org = t.value; const sel = t.form.elements.station_id; sel.innerHTML = stationOptions(t.value, null);
+    if (t.form.dataset.form === "hwship" && t.form.elements.ship_to) { const c = custOf(t.value); t.form.elements.ship_to.value = c ? [c.contact_name, c.name].filter(Boolean).join(", ") : ""; } return; }
+  if (t.dataset.oprole) { const r = await api.setOperatorRole(t.dataset.oprole, t.value); toast(r.ok ? "Role changed" : r.error); return render(); }
+  if (t.dataset.newmod) { const mods = new Set(S.newForm.modules); t.checked ? mods.add(t.dataset.newmod) : mods.delete(t.dataset.newmod); S.newForm.modules = [...mods]; return; }
+  if (t.dataset.new === "status" || t.dataset.new === "plan" || t.dataset.new === "timezone") { readNewForm(t.form); return render(); }
+});
+document.addEventListener("keydown", (e) => { if ((e.key === "Enter" || e.key === " ") && e.target.matches("tr[data-go]")) { e.preventDefault(); location.hash = e.target.dataset.go; } });
+document.addEventListener("click", async (e) => {
+  const go = e.target.closest("tr[data-go]"); if (go) { location.hash = go.dataset.go; return; }
+  if (e.target.closest('a[href="#new"]')) { S.made = null; S.newForm = null; S.formErr = null; if (location.hash === "#new") { e.preventDefault(); render(); window.scrollTo(0, 0); } return; }
+  const seg = e.target.closest("[data-seg]"); if (seg) { const [k, v] = seg.dataset.seg.split(":"); S.f[k] = v; return render(); }
+  const cp = e.target.closest("[data-copy]"); if (cp) { try { await navigator.clipboard.writeText(cp.dataset.copy); toast("Copied"); } catch { toast("Select it and copy"); } return; }
+  const t = e.target.closest("[data-act]"); if (!t) return;
+  const a = t.dataset.act, c = S.id ? custOf(S.id) : null;
+  if (a === "noConfirm") { S.confirm = null; return render(); }
+  if (a === "askPause") { S.confirm = "pause"; return render(); }
+  if (a === "signOut") { await sb.auth.signOut(); return; }
+  if (a === "magic" || a === "forgot") return authAction(a);
+  if (a === "doPause") { const pr = await api.updateCustomer(c.id, { status: "paused" }); if (!pr.ok) { S.confirm = null; toast(pr.error); return render(); } S.confirm = null; toast("Account paused"); return render(); }
+  if (a === "resume") { const rr = await api.updateCustomer(c.id, { status: "active" }); if (!rr.ok) { toast(rr.error); return render(); } toast("Account resumed. Their stations come back on their own."); return render(); }
+  if (a === "askCode") { S.confirm = "code:" + t.dataset.id; return render(); }
+  if (a === "askRevoke") { S.confirm = "revoke:" + t.dataset.id; return render(); }
+  if (a === "doCode") { const stName = c.stations.find((s) => s.id === t.dataset.id).name; const r = await api.stationCode(c.id, t.dataset.id); S.confirm = null; if (!r.ok) { toast(r.error || "Couldn't make a code"); return render(); } S.lastCode = { name: stName, code: r.code }; toast("New code made"); return render(); }
+  if (a === "doRevoke") { await api.revokeStation(c.id, t.dataset.id); S.confirm = null; toast("Station disconnected"); return render(); }
+  if (a === "hideCode") { S.lastCode = null; return render(); }
+  if (a === "resend") { const r = await api.inviteOwner(c.id, t.dataset.email); if (!r.ok) { toast(r.error); return render(); } S.lastInvite = r; toast(r.mailErr ? "Invite made, but the email didn't send. Copy the link below." : "Invite sent again"); return render(); }
+  if (a === "addStationRow") { readNewForm(t.closest("form")); S.newForm.stations.push(""); render(); $(`[data-station="${S.newForm.stations.length - 1}"]`)?.focus(); return; }
+  if (a === "rmStation") { readNewForm(t.closest("form")); S.newForm.stations.splice(+t.dataset.i, 1); return render(); }
+  if (a === "print") { window.print(); return; }
+  if (a === "hwStatus") { const r = await api.saveHardware({ id: S.id, status: t.dataset.status }); toast(r.ok ? `${r.serial}: ${HW_STATUS[t.dataset.status][0]}` : r.error); S.hwAssign = null; return render(); }
+  if (a === "askHwDelete") { S.confirm = "hwdel"; return render(); }
+  if (a === "hwDelete") { const r = await api.deleteHardware(S.id); S.confirm = null; if (!r.ok) { toast(r.error); return render(); } toast("Deleted"); location.hash = "hardware"; return; }
+  if (a === "askRmOp") { S.confirm = "rmop:" + t.dataset.id; return render(); }
+  if (a === "doRmOp") { const r = await api.removeOperator(t.dataset.id); S.confirm = null; toast(r.ok ? "Removed" : r.error); return render(); }
+  if (a === "cancelOp") { const r = await api.cancelOperatorInvite(t.dataset.id); toast(r.ok ? "Invite cancelled" : r.error); return render(); }
+  if (a === "resendOp") { const r = await api.inviteOperator(t.dataset.email, t.dataset.role, t.dataset.name); if (!r.ok) { toast(r.error); return render(); }
+    S.lastOpInvite = r; toast(r.mailErr ? "Invite made, but the email didn't send. Copy the link below." : "Invite sent again"); return render(); }
+  if (a === "backIn") return afterSignIn();
+  if (a === "setPass") { S.ready = false; AUTH.view = "newpass"; AUTH.err = ""; return renderAuth(); }
+});
+document.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const f = e.target, kind = f.dataset.form, fd = new FormData(f), d = Object.fromEntries(fd);
+  if (kind === "signin" || kind === "newpass") return authAction(kind, f);
+  if (S.busy) return; S.busy = true; f.querySelectorAll("button").forEach((b) => (b.disabled = true));
+  try { await onSubmit(f, kind, fd, d); } finally { S.busy = false; f.querySelectorAll("button").forEach((b) => (b.disabled = false)); }
+});
+async function onSubmit(f, kind, fd, d) {
+  const c = S.id ? custOf(S.id) : null;
+  if (kind === "addStation") { const r = await api.addStation(c.id, d.name); if (!r.ok) return toast(r.error); S.lastCode = { name: r.station.name, code: r.station.code }; toast(`Added ${r.station.name}`); return render(); }
+  if (kind === "invite") { const r = await api.inviteOwner(c.id, d.email); if (!r.ok) { $("#invErr").textContent = r.error; return; } S.lastInvite = r; toast(r.mailErr ? "Invite made, but the email didn't send. Copy the link below." : `Invite sent to ${r.email}`); return render(); }
+  if (kind === "account") {
+    const patch = { status: d.status, plan: d.plan, trial_ends: d.trial_ends ? Date.parse(d.trial_ends + "T23:59:00") : null, station_limit: d.station_limit === "" ? null : Number(d.station_limit),
+      contact_name: d.contact_name.trim(), contact_phone: d.contact_phone.trim(), contact_email: d.contact_email.trim().toLowerCase(), notes: d.notes.trim() };
+    if (patch.status === "trial" && !patch.trial_ends) { S.formErr = { form: "account", text: "Pick when the trial ends." }; return render(); }
+    const r = await api.updateCustomer(c.id, patch); if (!r.ok) { S.formErr = { form: "account", text: r.error }; return render(); }
+    S.formErr = null; toast(patch.status === "paused" ? "Saved. Account paused." : "Account saved"); return render();
+  }
+  if (kind === "brand") {
+    const patch = { name: d.name.trim(), primary: d.primary.trim(), accent: d.accent.trim(), logo_url: d.logo_url.trim(), terms: Object.fromEntries(TERMS.map(([k]) => [k, (d["t_" + k] || "").trim() || DEFAULT_TERMS[k]])) };
+    const r = await api.updateCustomer(c.id, patch, "updated look"); if (!r.ok) { S.formErr = { form: "brand", text: r.error }; return render(); }
+    S.formErr = null; toast("Look saved"); return render();
+  }
+  if (kind === "hwnew") {
+    const r = await api.saveHardware({ serial: d.serial, kind: d.kind, status: d.status, pi_serial: d.pi_serial, software: d.software, built_at: d.built_at, parts: d.parts, notes: d.notes });
+    if (!r.ok) { S.formErr = { form: "hwnew", text: r.error }; return render(); }
+    S.formErr = null; toast(`Added ${r.serial}`); location.hash = "unit/" + r.id; return;
+  }
+  if (kind === "hwship") {
+    if (!d.org_id) { S.formErr = { form: "hwship", text: "Pick the customer it's going to." }; return render(); }
+    const r = await api.saveHardware({ id: S.id, status: "shipped", org_id: d.org_id, station_id: d.station_id || null, carrier: d.carrier, tracking: d.tracking, shipped_at: d.shipped_at, ship_to: d.ship_to });
+    if (!r.ok) { S.formErr = { form: "hwship", text: r.error }; return render(); }
+    S.formErr = null; S.hwAssign = null; toast(`${r.serial} shipped`); return render();
+  }
+  if (kind === "hwedit") {
+    const r = await api.saveHardware({ id: S.id, serial: d.serial, kind: d.kind, status: d.status, pi_serial: d.pi_serial, software: d.software, built_at: d.built_at,
+      org_id: d.org_id || null, station_id: d.station_id || null, carrier: d.carrier, tracking: d.tracking, shipped_at: d.shipped_at, ship_to: d.ship_to, parts: d.parts, notes: d.notes });
+    if (!r.ok) { S.formErr = { form: "hwedit", text: r.error }; return render(); }
+    S.formErr = null; S.hwAssign = null; toast("Saved"); return render();
+  }
+  if (kind === "hwnote") { const r = await api.saveHardware({ id: S.id, note: d.note }); if (!r.ok) return toast(r.error); toast("Note added"); return render(); }
+  if (kind === "myname") { const r = await api.setMyName(d.name); if (!r.ok) { S.formErr = { form: "myname", text: r.error }; return render(); } S.formErr = null; toast("Name saved"); return render(); }
+  if (kind === "opinvite") {
+    const r = await api.inviteOperator(d.email, d.role, d.name); if (!r.ok) { S.formErr = { form: "opinvite", text: r.error }; render(); $('[data-form="opinvite"] [name=email]')?.focus(); return; }
+    S.formErr = null; S.lastOpInvite = r; toast(r.mailErr ? "Invite made, but the email didn't send. Copy the link below." : `Invite sent to ${r.email}`); return render();
+  }
+  if (kind === "new") {
+    readNewForm(f);
+    const r = await api.createCustomer(S.newForm);
+    if (!r.ok) { S.formErr = { form: "new", text: r.error }; render(); const el = $(`[data-new="${r.field}"]`) || $("[data-station]"); el?.focus(); return; }
+    S.formErr = null; S.newForm = null; S.made = r; render(); window.scrollTo(0, 0); return;
+  }
+}
+
+boot();
+setInterval(() => { if (!document.activeElement?.matches("input,select,textarea")) render(); }, 60000);
+</script>

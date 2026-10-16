@@ -1,0 +1,2393 @@
+<title>Equipment Station Test Bench</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: the station's 7" touchscreen (5:3) in its case on the left; the test bench panel on the right, stacking below on narrow screens.
+   The station screen is a fixed kiosk look (it's a device), branded at runtime from the company's colors. The bench follows the viewer's theme. */
+:root {
+  /* bench (follows theme) */
+  --bg: #eef1f4;
+  --panel: #ffffff;
+  --ink: #18202b;
+  --muted: #5d6a79;
+  --line: #d6dde5;
+  --chip: #e8edf2;
+  --focus: #2b6cb0;
+  /* station hardware + screen (fixed look) */
+  --bezel: #1c1f24;
+  --bezel-edge: #30353d;
+  --screen: #f7f8fa;
+  --screen-ink: #121820;
+  --screen-muted: #5b6573;
+  --screen-line: #dde2e8;
+  --screen-card: #ffffff;
+  /* semantic */
+  --ok: #1d7a45;      --ok-bg: #e3f4ea;
+  --ret: #1f5f9e;     --ret-bg: #e2eef9;
+  --warn: #9a5b00;    --warn-bg: #fdf1dc;
+  --bad: #b3261e;     --bad-bg: #fbe6e4;
+  /* brand (replaced from the company's settings at runtime) */
+  --brand: #1f4e79;
+  --brand-ink: #ffffff;
+  --brand-accent: #f2a900;
+  /* type */
+  --display: "Barlow Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
+  --body: "Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12161b; --panel: #1a2027; --ink: #e6ebf1; --muted: #93a0b0; --line: #2c3540; --chip: #232b35; --focus: #7fb2ea;
+    --bezel: #0b0d10; --bezel-edge: #262b33;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12161b; --panel: #1a2027; --ink: #e6ebf1; --muted: #93a0b0; --line: #2c3540; --chip: #232b35; --focus: #7fb2ea;
+  --bezel: #0b0d10; --bezel-edge: #262b33;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 15px; line-height: 1.45;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 20px 32px;
+}
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+.bench { max-width: 1240px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 24px; align-items: start; }
+@media (max-width: 1000px) { .bench { grid-template-columns: minmax(0, 1fr); } }
+.bench-head { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: baseline; justify-content: space-between; }
+.bench-head h1 { font-family: var(--display); font-weight: 600; font-size: 28px; letter-spacing: .01em; margin: 0; text-wrap: balance; }
+.bench-head p { margin: 0; color: var(--muted); max-width: 62ch; }
+
+/* ---------- Station device ---------- */
+.device { background: var(--bezel); border: 1px solid var(--bezel-edge); border-radius: 22px; padding: clamp(10px, 2.2%, 22px); box-shadow: 0 18px 40px -18px rgba(0,0,0,.45); position: sticky; top: calc(env(safe-area-inset-top, 0px) + 12px); }
+.device-foot { display: flex; justify-content: space-between; align-items: center; color: #8a939e; font-family: var(--mono); font-size: 11px; padding: 8px 4px 0; letter-spacing: .04em; }
+.reader-dot { width: 8px; height: 8px; border-radius: 50%; background: #3b434d; display: inline-block; margin-right: 6px; vertical-align: middle; transition: background .15s; }
+.reader-dot.on { background: #4cc38a; }
+/* On the Pi: just the station, full screen (the 1280x720 display, kept at the tested 5:3 shape). */
+html.kiosk, html.kiosk body { height: 100%; margin: 0; padding: 0; background: #000; overflow: hidden; }
+html.kiosk .bench-head, html.kiosk .panel, html.kiosk .device-foot { display: none !important; }
+html.kiosk .bench { display: grid; place-items: center; height: 100%; max-width: none; grid-template-columns: minmax(0, 1fr); }
+html.kiosk .device { background: none; border: 0; padding: 0; box-shadow: none; border-radius: 0; position: static; width: min(100vw, calc(100vh * 5 / 3)); }
+html.kiosk .screen { border-radius: 0; }
+.screen { aspect-ratio: 5 / 3; max-width: 100%; width: 100%; background: var(--screen); color: var(--screen-ink); border-radius: 6px; overflow: hidden; position: relative; container-type: inline-size; display: flex; flex-direction: column; font-size: 2.3cqw; user-select: none; }
+
+.topbar { background: var(--brand); color: var(--brand-ink); display: flex; align-items: center; gap: 1.6cqw; padding: 1.3cqw 2cqw; min-height: 9cqw; }
+.logo { width: 6.2cqw; height: 6.2cqw; border-radius: 1cqw; background: var(--brand-accent); color: #1a1a1a; display: grid; place-items: center; font-family: var(--display); font-weight: 700; font-size: 3cqw; flex: none; overflow: hidden; touch-action: none; }
+.logo img { width: 100%; height: 100%; object-fit: contain; background: #fff; }
+.org { min-width: 0; flex: 1; }
+.org-name { font-family: var(--display); font-weight: 600; font-size: 3.2cqw; line-height: 1.05; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.org-sub { font-size: 1.7cqw; opacity: .85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.clock { text-align: right; font-variant-numeric: tabular-nums; }
+.clock b { display: block; font-family: var(--display); font-weight: 600; font-size: 3.6cqw; line-height: 1; }
+.clock span { font-size: 1.6cqw; opacity: .85; }
+.net { font-size: 1.55cqw; font-weight: 700; padding: .5cqw 1.1cqw; border-radius: 99px; background: rgba(255,255,255,.18); white-space: nowrap; }
+.net.off { background: var(--bad-bg); color: var(--bad); }
+
+.main { flex: 1; min-height: 0; position: relative; display: flex; }
+
+/* idle */
+.idle { flex: 1; display: grid; grid-template-columns: 1fr 1.25fr; align-items: center; gap: 3cqw; padding: 3cqw 5cqw; }
+.rings { position: relative; aspect-ratio: 1; width: 100%; max-width: 26cqw; justify-self: center; display: grid; place-items: center; }
+.rings span { position: absolute; inset: 0; border-radius: 50%; border: .5cqw solid var(--brand); opacity: 0; animation: ring 2.4s ease-out infinite; }
+.rings span:nth-child(2) { animation-delay: .8s; } .rings span:nth-child(3) { animation-delay: 1.6s; }
+.rings .badge-ico { width: 46%; height: auto; position: relative; }
+@keyframes ring { 0% { transform: scale(.45); opacity: .55; } 100% { transform: scale(1); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .rings span { animation: none; opacity: .25; } .rings span:nth-child(2){ transform: scale(.75);} .rings span:nth-child(3){ transform: scale(.5);} }
+.idle h2 { font-family: var(--display); font-weight: 700; font-size: 7.4cqw; line-height: .95; margin: 0 0 1.4cqw; letter-spacing: .005em; }
+.idle.paused h2 { font-size: 5.6cqw; } .idle.paused p { font-size: 2.3cqw; }
+.idle p { margin: 0; font-size: 2.6cqw; color: var(--screen-muted); max-width: 30ch; }
+.steps { display: flex; gap: 1.2cqw; margin-top: 2.6cqw; font-size: 1.9cqw; color: var(--screen-muted); flex-wrap: wrap; }
+.steps span { background: var(--screen-card); border: 1px solid var(--screen-line); border-radius: 99px; padding: .5cqw 1.4cqw; }
+.steps b { color: var(--screen-ink); }
+
+/* session */
+.session { flex: 1; display: grid; grid-template-columns: 1fr 1.35fr; min-height: 0; }
+.mine { border-right: 1px solid var(--screen-line); padding: 2.2cqw 2.4cqw; display: flex; flex-direction: column; gap: 1.2cqw; min-height: 0; background: var(--screen-card); }
+.hello { font-family: var(--display); font-weight: 700; font-size: 4.6cqw; line-height: 1; margin: 0; }
+.mine h3, .feed h3 { margin: 0; font-size: 1.7cqw; letter-spacing: .08em; text-transform: uppercase; color: var(--screen-muted); font-weight: 700; }
+.mine ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .9cqw; overflow: hidden; }
+.mine li { display: grid; grid-template-columns: 1fr auto; gap: .2cqw 1cqw; align-items: center; padding: 1cqw 1.2cqw; border: 1px solid var(--screen-line); border-radius: 1cqw; }
+.mine li b { font-size: 2.2cqw; }
+.mine li small { grid-column: 1; font-size: 1.65cqw; color: var(--screen-muted); }
+.mine .empty { color: var(--screen-muted); font-size: 2cqw; }
+.chip { font-size: 1.45cqw; font-weight: 700; padding: .3cqw .9cqw; border-radius: 99px; white-space: nowrap; grid-row: 1 / span 2; grid-column: 2; letter-spacing: .03em; }
+.chip.over { background: var(--bad-bg); color: var(--bad); }
+.chip.ext { background: var(--warn-bg); color: var(--warn); }
+.chip.okc { background: var(--ok-bg); color: var(--ok); }
+.feed { padding: 2.2cqw 2.4cqw 0; display: flex; flex-direction: column; gap: 1.2cqw; min-height: 0; }
+.prompt { font-family: var(--display); font-weight: 600; font-size: 3.6cqw; line-height: 1.05; margin: 0; }
+.prompt small { display: block; font-family: var(--body); font-weight: 400; font-size: 1.9cqw; color: var(--screen-muted); margin-top: .5cqw; }
+.results { display: flex; flex-direction: column; gap: 1cqw; overflow: hidden; flex: 1; min-height: 0; }
+.result { border-radius: 1.1cqw; padding: 1.2cqw 1.6cqw; display: grid; grid-template-columns: auto 1fr; gap: .2cqw 1.4cqw; align-items: center; border: 1px solid transparent; animation: pop .22s ease-out; }
+@keyframes pop { from { transform: translateY(-.6cqw); opacity: .4; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .result { animation: none; } }
+.result .ico { grid-row: 1 / span 3; width: 4.4cqw; height: 4.4cqw; border-radius: 50%; display: grid; place-items: center; color: #fff; font-weight: 700; font-size: 2.4cqw; }
+.result .t { font-family: var(--display); font-weight: 700; font-size: 2.9cqw; line-height: 1.05; }
+.result .t em { font-style: normal; font-weight: 600; }
+.result .l { font-size: 1.85cqw; }
+.result .l.note { font-weight: 700; }
+.result.ok { background: var(--ok-bg); border-color: color-mix(in srgb, var(--ok) 25%, transparent); } .result.ok .ico { background: var(--ok); }
+.result.ret { background: var(--ret-bg); border-color: color-mix(in srgb, var(--ret) 25%, transparent); } .result.ret .ico { background: var(--ret); }
+.result.warn { background: var(--warn-bg); border-color: color-mix(in srgb, var(--warn) 30%, transparent); } .result.warn .ico { background: var(--warn); }
+.result.bad { background: var(--bad-bg); border-color: color-mix(in srgb, var(--bad) 25%, transparent); } .result.bad .ico { background: var(--bad); }
+.result.wait { background: var(--screen-card); border-color: var(--screen-line); } .result.wait .ico { background: var(--screen-muted); }
+.sessbar { display: flex; align-items: center; gap: 2cqw; padding: 1.4cqw 2.4cqw; border-top: 1px solid var(--screen-line); grid-column: 1 / -1; background: var(--screen); }
+.timer { flex: 1; height: .9cqw; background: var(--screen-line); border-radius: 99px; overflow: hidden; }
+.timer i { display: block; height: 100%; background: var(--brand); width: 100%; transition: width .25s linear; }
+.sessbar .sbtn { font-size: 2cqw; padding: 1cqw 2cqw; }
+.sessbar span { font-size: 1.7cqw; color: var(--screen-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.done { background: var(--brand); color: var(--brand-ink); border: 0; border-radius: 1cqw; font-family: var(--display); font-weight: 700; font-size: 2.8cqw; padding: 1cqw 4cqw; letter-spacing: .02em; }
+.session-wrap { flex: 1; display: grid; grid-template-rows: 1fr auto; min-height: 0; }
+/* Lists shrink to fit (see fitLists). No scrollbars on the kiosk: if something still
+   doesn't fit at the tightest size it scrolls with a finger and fades at the bottom. */
+.fit { overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; -webkit-overflow-scrolling: touch;
+       scrollbar-width: none; -ms-overflow-style: none; }
+.fit::-webkit-scrollbar { display: none; }
+.fit.more { -webkit-mask-image: linear-gradient(to bottom, #000 82%, transparent); mask-image: linear-gradient(to bottom, #000 82%, transparent); }
+.screen ::-webkit-scrollbar { display: none; }
+.tally { font-size: 1.7cqw; color: var(--screen-muted); font-weight: 700; letter-spacing: .04em; }
+.rrow { display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto; gap: 1.1cqw; align-items: center; padding: .6cqw 1.2cqw;
+        border-radius: .8cqw; font-size: 1.85cqw; border: 1px solid var(--screen-line); background: var(--screen-card); flex: none; }
+.rrow .dot { width: 2.6cqw; height: 2.6cqw; border-radius: 50%; display: grid; place-items: center; color: #fff; font-weight: 700; font-size: 1.5cqw; }
+.rrow .what { font-weight: 700; white-space: nowrap; }
+.rrow .nm { font-family: var(--display); font-weight: 600; font-size: 2.3cqw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rrow .det { color: var(--screen-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: right; max-width: 22cqw; }
+.rrow.ok .dot { background: var(--ok); } .rrow.ret .dot { background: var(--ret); } .rrow.warn .dot { background: var(--warn); }
+.rrow.bad .dot { background: var(--bad); } .rrow.wait .dot { background: var(--screen-muted); }
+.rrow.bad .det, .rrow.warn .det { color: var(--screen-ink); font-weight: 700; }
+.results.dense { gap: .6cqw; }
+.results.dense .rrow { padding: .35cqw 1cqw; font-size: 1.6cqw; } .results.dense .rrow .nm { font-size: 2cqw; } .results.dense .rrow .dot { width: 2.2cqw; height: 2.2cqw; }
+.results.dense .result { padding: .8cqw 1.4cqw; } .results.dense .result .l:not(.note) { display: none; }
+.results.tight { gap: .4cqw; }
+.results.tight .rrow { padding: .2cqw .8cqw; font-size: 1.4cqw; gap: .8cqw; } .results.tight .rrow .nm { font-size: 1.7cqw; }
+.results.tight .rrow .dot { width: 1.8cqw; height: 1.8cqw; font-size: 1.1cqw; }
+.results.tight .result { padding: .5cqw 1.2cqw; } .results.tight .result .ico { width: 3cqw; height: 3cqw; font-size: 1.6cqw; }
+.results.tight .result .t { font-size: 2.3cqw; } .results.tight .result .l { font-size: 1.5cqw; }
+.feed.compact { gap: .8cqw; padding-top: 1.6cqw; } .feed.compact .prompt { font-size: 2.6cqw; } .feed.compact .prompt small { display: none; }
+.results.cols2 { display: grid; grid-template-columns: 1fr 1fr; align-content: start; }
+.results.cols3 { grid-template-columns: 1fr 1fr 1fr; } .results.cols3 .rrow .det { display: none; }
+.results.cols3 .rrow { grid-template-columns: auto minmax(0, 1fr); }
+.results.cols2 .result { grid-column: 1 / -1; } .results.cols2 .rrow .what { display: none; } .results.cols2 .rrow .det { max-width: 11cqw; }
+.mine ul { flex: 1; min-height: 0; }
+.mine ul.dense { gap: .5cqw; } .mine ul.dense li { padding: .5cqw 1cqw; } .mine ul.dense li b { font-size: 1.9cqw; } .mine ul.dense li small { font-size: 1.45cqw; }
+.mine ul.tight { gap: .3cqw; } .mine ul.tight li { padding: .25cqw .9cqw; } .mine ul.tight li b { font-size: 1.6cqw; }
+.mine ul.tight li small { font-size: 1.25cqw; } .mine ul.tight .chip { font-size: 1.15cqw; padding: .15cqw .6cqw; }
+.mine ul.cols2 { display: grid; grid-template-columns: 1fr 1fr; align-content: start; } .mine ul.cols2 li small { display: none; }
+.mine ul.cols2 .chip { grid-row: auto; }
+
+/* confirmation after a visit */
+.summary { flex: 1; display: grid; grid-template-rows: auto 1fr auto; padding: 2.4cqw 3.4cqw 1.6cqw; gap: 1.6cqw; min-height: 0; }
+.sum-head { display: flex; align-items: center; gap: 2cqw; }
+.sum-check { width: 7cqw; height: 7cqw; border-radius: 50%; background: var(--ok); color: #fff; display: grid; place-items: center; font-size: 4cqw; font-weight: 700; flex: none; }
+.sum-head h2 { margin: 0; font-family: var(--display); font-weight: 700; font-size: 5.4cqw; line-height: 1; }
+.sum-head p { margin: .4cqw 0 0; font-size: 2cqw; color: var(--screen-muted); }
+.sum-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 2cqw; min-height: 0; }
+.sum-col { display: flex; flex-direction: column; gap: .7cqw; min-height: 0; min-width: 0; }
+.sum-col h3 { margin: 0; font-size: 1.7cqw; letter-spacing: .08em; text-transform: uppercase; color: var(--screen-muted); }
+.sum-col ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .6cqw; flex: 1; min-height: 0; }
+.sum-col ul.dense { gap: .4cqw; } .sum-col ul.dense li { padding: .4cqw 1cqw; } .sum-col ul.dense li b { font-size: 2.1cqw; } .sum-col ul.dense li span { font-size: 1.5cqw; }
+.sum-col ul.tight { gap: .25cqw; } .sum-col ul.tight li { padding: .2cqw .9cqw; flex-direction: row; gap: 1cqw; align-items: baseline; }
+.sum-col ul.tight li b { font-size: 1.75cqw; white-space: nowrap; } .sum-col ul.tight li span { font-size: 1.35cqw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sum-col li { background: var(--screen-card); border: 1px solid var(--screen-line); border-left: .7cqw solid var(--ok); border-radius: .8cqw; padding: .7cqw 1.2cqw; display: flex; flex-direction: column; }
+.sum-col.ins li { border-left-color: var(--ret); } .sum-col.refused li { border-left-color: var(--bad); }
+.sum-col li b { font-family: var(--display); font-size: 2.5cqw; font-weight: 600; line-height: 1.1; }
+.sum-col li span { font-size: 1.7cqw; color: var(--screen-muted); } .sum-col li span.hl { color: var(--warn); font-weight: 700; }
+.sum-foot { display: flex; align-items: center; gap: 2cqw; }
+.sum-foot span { font-size: 2cqw; font-weight: 700; flex: none; }
+.sum-foot .timer { flex: 1; }
+
+/* item lookup (tapped equipment without a badge) */
+.lookup { flex: 1; display: grid; grid-template-columns: 1.15fr 1fr; gap: 3cqw; padding: 3cqw 4cqw; align-items: center; }
+.lk-cat { font-size: 1.8cqw; letter-spacing: .08em; text-transform: uppercase; color: var(--screen-muted); font-weight: 700; }
+.lk-name { font-family: var(--display); font-weight: 700; font-size: 7cqw; line-height: .95; margin: .4cqw 0 1.4cqw; }
+.pill { display: inline-block; font-weight: 700; font-size: 2.1cqw; letter-spacing: .06em; padding: .6cqw 1.6cqw; border-radius: 99px; }
+.pill.in { background: var(--ok-bg); color: var(--ok); } .pill.out { background: var(--warn-bg); color: var(--warn); }
+.pill.lost { background: var(--bad-bg); color: var(--bad); } .pill.maint { background: var(--screen-line); color: var(--screen-ink); }
+.lk-who { margin: 1.6cqw 0 0; font-size: 2.6cqw; } .lk-who b { font-weight: 700; }
+.lk-meta { margin: .6cqw 0 0; font-size: 2cqw; color: var(--screen-muted); } .lk-meta .late { color: var(--bad); font-weight: 700; }
+.lk-next { background: var(--screen-card); border: 1px solid var(--screen-line); border-radius: 1.6cqw; padding: 2.4cqw; display: flex; flex-direction: column; gap: 1.4cqw; align-items: flex-start; }
+.lk-next .badge-ico { width: 8cqw; }
+.lk-next b { font-family: var(--display); font-size: 3.8cqw; line-height: 1; }
+.lk-next span { font-size: 1.9cqw; color: var(--screen-muted); }
+.lk-bar { display: flex; align-items: center; gap: 1.6cqw; width: 100%; }
+.lk-bar .timer { flex: 1; }
+
+/* first-time setup wizard */
+.wiz { flex: 1; display: grid; grid-template-rows: auto 1fr; padding: 1.4cqw 3cqw 1.6cqw; gap: 1.2cqw; min-height: 0; }
+.wsteps { display: flex; gap: 2.2cqw; font-size: 1.6cqw; color: var(--screen-muted); font-weight: 700; letter-spacing: .04em; }
+.wsteps span { display: flex; align-items: center; gap: .7cqw; }
+.wsteps i { font-style: normal; width: 2.6cqw; height: 2.6cqw; border-radius: 50%; display: grid; place-items: center; border: .25cqw solid var(--screen-line); font-size: 1.4cqw; }
+.wsteps .ws-on { color: var(--screen-ink); } .wsteps .ws-on i { border-color: var(--brand); background: var(--brand); color: var(--brand-ink); }
+.wsteps .ws-done { color: var(--screen-ink); } .wsteps .ws-done i { border-color: var(--ok); background: var(--ok); color: #fff; }
+.wbody { display: grid; grid-template-columns: .85fr 1.15fr; gap: 3cqw; min-height: 0; align-items: start; }
+.wbody.center { align-items: center; }
+.wbody h2 { font-family: var(--display); font-weight: 700; font-size: 5cqw; line-height: 1; margin: 0 0 1cqw; text-wrap: balance; }
+.wbody p { margin: 0 0 .9cqw; font-size: 2cqw; color: var(--screen-muted); }
+.wbody .err { margin-top: .4cqw; }
+.nets { display: flex; flex-direction: column; gap: .7cqw; }
+.net-row { display: grid; grid-template-columns: auto 1fr auto; gap: 1.4cqw; align-items: center; border: 2px solid var(--screen-line); background: var(--screen-card); color: var(--screen-ink); border-radius: 1cqw; padding: 1cqw 1.4cqw; text-align: left; font-size: 2.2cqw; font-weight: 700; }
+.net-row small { font-size: 1.5cqw; font-weight: 400; color: var(--screen-muted); }
+.net-row.on { border-color: var(--ok); }
+.bars { display: flex; align-items: flex-end; gap: .3cqw; height: 2.4cqw; }
+.bars b { width: .6cqw; background: var(--screen-line); border-radius: .2cqw; }
+.bars b:nth-child(1) { height: 25%; } .bars b:nth-child(2) { height: 50%; } .bars b:nth-child(3) { height: 75%; } .bars b:nth-child(4) { height: 100%; }
+.bars b.f { background: var(--screen-ink); }
+.lock { font-size: 1.5cqw; color: var(--screen-muted); }
+.wlinks { display: flex; gap: 1cqw; margin-top: 1cqw; flex-wrap: wrap; }
+.pw { display: flex; align-items: center; gap: 1cqw; border: 2px solid var(--brand); border-radius: 1cqw; padding: .8cqw 1.2cqw; background: var(--screen-card); margin-bottom: 1cqw; }
+.pw .v { flex: 1; font-family: var(--mono); font-size: 2.3cqw; min-height: 3cqw; overflow: hidden; white-space: nowrap; }
+.pw .v::after { content: ""; display: inline-block; width: .25cqw; height: 2.4cqw; background: var(--brand); margin-left: .2cqw; vertical-align: -.35cqw; animation: blink 1s steps(1) infinite; }
+.fkb { display: flex; flex-direction: column; gap: .55cqw; }
+.fkb .r { display: flex; gap: .55cqw; }
+.fkb .key { flex: 1; height: 5cqw; }
+.fkb .key.w15 { flex: 1.5; } .fkb .key.w4 { flex: 4; }
+.codebox { display: flex; gap: .7cqw; align-items: center; margin: .6cqw 0 1.2cqw; }
+.codebox b { width: 4.6cqw; height: 6cqw; border: 2px solid var(--screen-line); border-radius: .8cqw; display: grid; place-items: center; font-family: var(--mono); font-size: 3.2cqw; background: var(--screen-card); }
+.codebox b.cur { border-color: var(--brand); }
+.codebox span { font-size: 3cqw; color: var(--screen-muted); }
+.brandcard { display: flex; align-items: center; gap: 1.6cqw; background: var(--brand); color: var(--brand-ink); border-radius: 1.4cqw; padding: 1.6cqw 2cqw; margin: .6cqw 0 1.2cqw; }
+.brandcard .logo { width: 7cqw; height: 7cqw; font-size: 3.4cqw; }
+.brandcard b { font-family: var(--display); font-size: 3.4cqw; line-height: 1; display: block; } .brandcard span { font-size: 1.8cqw; opacity: .9; }
+.setrows { display: flex; flex-direction: column; gap: .8cqw; }
+.setrow { display: grid; grid-template-columns: 13cqw minmax(0, 1fr) auto; gap: 1.4cqw; align-items: center; background: var(--screen-card); border: 1px solid var(--screen-line); border-radius: 1cqw; padding: .9cqw 1.4cqw; }
+.setrow small { font-size: 1.5cqw; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--screen-muted); }
+.setrow .v { font-size: 2.1cqw; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.setrow .v i { font-style: normal; font-weight: 400; color: var(--screen-muted); }
+
+.wtop { display: flex; align-items: center; justify-content: space-between; gap: 2cqw; }
+.helpbtn { font-size: 1.6cqw; padding: .5cqw 1.4cqw; }
+.need { list-style: none; margin: 1cqw 0 0; padding: 0; display: flex; flex-direction: column; gap: .9cqw; }
+.need li { display: grid; grid-template-columns: 4.4cqw 1fr; gap: 1.2cqw; align-items: center; background: var(--screen-card); border: 1px solid var(--screen-line); border-radius: 1cqw; padding: 1cqw 1.4cqw; }
+.need .n { width: 4.4cqw; height: 4.4cqw; border-radius: 50%; background: color-mix(in srgb, var(--brand) 12%, var(--screen-card)); color: var(--brand); display: grid; place-items: center; font-family: var(--display); font-weight: 700; font-size: 2.4cqw; }
+.need b { display: block; font-size: 2.1cqw; } .need span { font-size: 1.6cqw; color: var(--screen-muted); }
+.qs { display: flex; flex-direction: column; gap: .9cqw; }
+.qs-row { display: grid; grid-template-columns: 4.4cqw 1fr auto; gap: 1.4cqw; align-items: center; background: var(--screen-card); border: 2px solid var(--screen-line); border-radius: 1.1cqw; padding: 1cqw 1.4cqw; text-align: left; color: var(--screen-ink); }
+.qs-row .n { width: 4.4cqw; height: 4.4cqw; border-radius: 50%; border: .3cqw solid var(--screen-line); display: grid; place-items: center; font-weight: 700; font-size: 2cqw; color: var(--screen-muted); }
+.qs-row.did { border-color: color-mix(in srgb, var(--ok) 45%, var(--screen-line)); } .qs-row.did .n { background: var(--ok); border-color: var(--ok); color: #fff; }
+.qs-row b { display: block; font-size: 2.2cqw; } .qs-row span { font-size: 1.6cqw; color: var(--screen-muted); }
+.qs-row .go-arrow { font-family: var(--display); font-size: 2cqw; font-weight: 700; color: var(--brand); white-space: nowrap; }
+.tour { display: grid; grid-template-columns: .9fr 1.1fr; gap: 3cqw; align-items: center; }
+.tour-art { aspect-ratio: 1; max-width: 22cqw; justify-self: center; display: grid; place-items: center; border-radius: 50%; background: color-mix(in srgb, var(--brand) 9%, var(--screen-card)); width: 100%; }
+.tour-art .big { font-family: var(--display); font-size: 9cqw; font-weight: 700; color: var(--brand); line-height: 1; }
+.tour h2 { font-family: var(--display); font-weight: 700; font-size: 4.6cqw; line-height: 1; margin: 0 0 1cqw; }
+.tour p { margin: 0 0 1cqw; font-size: 2.1cqw; color: var(--screen-muted); }
+.dotsrow { display: flex; gap: .8cqw; margin: 1cqw 0 1.4cqw; } .dotsrow i { width: 1.4cqw; height: 1.4cqw; border-radius: 50%; background: var(--screen-line); } .dotsrow i.f { background: var(--brand); }
+.hint { background: var(--warn-bg); color: var(--warn); border-radius: 1cqw; padding: .9cqw 1.3cqw; font-size: 1.8cqw; font-weight: 700; margin-top: .8cqw; }
+.sheet.help ul { margin: 0; padding-left: 2.4cqw; display: flex; flex-direction: column; gap: .6cqw; font-size: 1.9cqw; }
+.sheet.help .sup { font-size: 1.8cqw; color: var(--screen-muted); margin: 0; }
+
+/* setup */
+.setup { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 3cqw; padding: 3cqw 4cqw; align-items: center; }
+.setup h2 { font-family: var(--display); font-weight: 700; font-size: 5.6cqw; line-height: 1; margin: 0 0 1.2cqw; }
+.setup p { margin: 0 0 1cqw; font-size: 2cqw; color: var(--screen-muted); }
+.setup form { background: var(--screen-card); border: 1px solid var(--screen-line); border-radius: 1.4cqw; padding: 2.4cqw; display: flex; flex-direction: column; gap: 1.3cqw; }
+.setup label { font-size: 1.7cqw; font-weight: 700; color: var(--screen-muted); letter-spacing: .05em; text-transform: uppercase; }
+.setup input[type=text] { font-family: var(--mono); font-size: 3.4cqw; letter-spacing: .12em; text-transform: uppercase; padding: 1cqw 1.4cqw; border: 2px solid var(--screen-line); border-radius: 1cqw; background: var(--screen); color: var(--screen-ink); width: 100%; }
+.setup input.small { font-size: 1.8cqw; letter-spacing: 0; text-transform: none; font-family: var(--body); }
+.seg { display: flex; gap: .8cqw; }
+.seg label { flex: 1; text-transform: none; letter-spacing: 0; font-size: 1.8cqw; border: 2px solid var(--screen-line); border-radius: 1cqw; padding: .8cqw 1cqw; color: var(--screen-ink); display: flex; align-items: center; gap: .8cqw; cursor: pointer; }
+.seg input { accent-color: var(--brand); width: 2cqw; height: 2cqw; }
+.go { background: var(--brand); color: var(--brand-ink); border: 0; border-radius: 1cqw; font-family: var(--display); font-weight: 700; font-size: 3cqw; padding: 1.1cqw; }
+.go[disabled] { opacity: .55; cursor: wait; }
+.err { color: var(--bad); font-size: 1.8cqw; font-weight: 700; min-height: 2.4cqw; }
+.hint { font-size: 1.6cqw; color: var(--screen-muted); }
+
+/* toast + overlay on the screen */
+.toast { position: absolute; left: 50%; bottom: 4cqw; transform: translateX(-50%); min-width: 55%; max-width: 88%; padding: 1.6cqw 2.4cqw; border-radius: 1.4cqw; box-shadow: 0 1cqw 3cqw rgba(0,0,0,.18); display: flex; flex-direction: column; gap: .3cqw; z-index: 4; animation: pop .2s ease-out; }
+.toast b { font-family: var(--display); font-size: 3cqw; font-weight: 700; line-height: 1.05; }
+.toast span { font-size: 1.9cqw; }
+.toast.bad { background: var(--bad); color: #fff; } .toast.warn { background: #3a2a07; color: #fff4dc; } .toast.ok { background: var(--ok); color: #fff; }
+.statusbar { display: flex; justify-content: space-between; gap: 2cqw; font-size: 1.5cqw; color: var(--screen-muted); padding: .7cqw 2cqw; border-top: 1px solid var(--screen-line); background: var(--screen); }
+.statusbar .q { color: var(--warn); font-weight: 700; }
+.overlay { position: absolute; inset: 0; background: rgba(12,16,22,.55); display: grid; place-items: center; z-index: 5; }
+.sheet { background: var(--screen-card); color: var(--screen-ink); width: 70%; border-radius: 1.6cqw; padding: 2.6cqw; display: flex; flex-direction: column; gap: 1.4cqw; }
+.sheet h2 { margin: 0; font-family: var(--display); font-size: 4cqw; line-height: 1; }
+.sheet dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: .5cqw 2cqw; font-size: 1.9cqw; }
+.sheet dt { color: var(--screen-muted); } .sheet dd { margin: 0; font-weight: 700; min-width: 0; overflow-wrap: anywhere; }
+.sheet .row { display: flex; gap: 1cqw; flex-wrap: wrap; }
+.sbtn { border: 2px solid var(--screen-line); background: var(--screen); color: var(--screen-ink); border-radius: 1cqw; padding: .9cqw 1.8cqw; font-size: 1.9cqw; font-weight: 700; }
+.sbtn.danger { border-color: var(--bad); color: var(--bad); }
+.sbtn.primary { background: var(--brand); color: var(--brand-ink); border-color: var(--brand); }
+
+/* ---------- Staff mode (manager / admin fobs) ---------- */
+.staff { flex: 1; display: grid; grid-template-rows: auto 1fr; padding: 1.5cqw 2.4cqw 1.6cqw; gap: 1.2cqw; min-height: 0; }
+.st-head { display: flex; align-items: center; gap: 1.4cqw; min-width: 0; }
+.st-role { background: var(--brand-accent); color: #1a1a1a; font-weight: 700; font-size: 1.5cqw; letter-spacing: .08em; text-transform: uppercase; padding: .4cqw 1.1cqw; border-radius: 99px; flex: none; }
+.st-head h2 { margin: 0; font-family: var(--display); font-weight: 700; font-size: 3.2cqw; line-height: 1; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.st-body { min-height: 0; display: flex; flex-direction: column; gap: 1.2cqw; }
+.st-msg { border-radius: 1cqw; padding: .8cqw 1.4cqw; font-size: 1.9cqw; font-weight: 700; }
+.st-msg.bad { background: var(--bad-bg); color: var(--bad); } .st-msg.ok { background: var(--ok-bg); color: var(--ok); }
+.tiles { display: grid; grid-template-columns: repeat(3, 1fr); grid-auto-rows: 1fr; gap: 1.2cqw; flex: 1; min-height: 0; }
+.tile { background: var(--screen-card); border: 2px solid var(--screen-line); border-radius: 1.3cqw; padding: 1.4cqw 1.6cqw; text-align: left; display: flex; flex-direction: column; justify-content: flex-end; gap: .4cqw; color: var(--screen-ink); }
+.tile b { font-family: var(--display); font-size: 3cqw; font-weight: 700; line-height: 1; }
+.tile span { font-size: 1.6cqw; color: var(--screen-muted); }
+.tile.primary { background: var(--brand); border-color: var(--brand); color: var(--brand-ink); } .tile.primary span { color: inherit; opacity: .85; }
+.tile:active, .key:active, .pickb:active, .person:active { transform: translateY(1px); }
+.form { flex: 1; display: grid; grid-template-columns: 1fr 1.3fr; gap: 2cqw; min-height: 0; }
+.fields { display: flex; flex-direction: column; gap: .7cqw; min-height: 0; }
+.fld { display: grid; grid-template-columns: 12cqw minmax(0, 1fr); align-items: center; border: 2px solid var(--screen-line); border-radius: 1cqw; padding: .6cqw 1.2cqw; background: var(--screen-card); text-align: left; color: var(--screen-ink); min-height: 5cqw; }
+.fld.on { border-color: var(--brand); box-shadow: 0 0 0 .35cqw color-mix(in srgb, var(--brand) 22%, transparent); }
+.fld small { font-size: 1.4cqw; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--screen-muted); }
+.fld .v { font-size: 2.3cqw; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fld .v i { font-style: normal; font-weight: 400; color: var(--screen-muted); }
+.fld.on .v::after { content: ""; display: inline-block; width: .25cqw; height: 2.4cqw; background: var(--brand); margin-left: .2cqw; vertical-align: -.35cqw; animation: blink 1s steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+.fld.choice.on .v::after { display: none; }
+@media (prefers-reduced-motion: reduce) { .fld.on .v::after { animation: none; } }
+.form-actions { margin-top: auto; display: flex; gap: 1cqw; }
+.form-actions .go { flex: 1; font-size: 2.6cqw; padding: .9cqw; }
+.kb { display: grid; grid-template-columns: repeat(10, 1fr); gap: .55cqw; align-content: start; }
+.key { height: 5.3cqw; border-radius: .8cqw; border: 1px solid var(--screen-line); background: var(--screen-card); color: var(--screen-ink); font-weight: 700; font-size: 2.1cqw; padding: 0; }
+.key.w2 { grid-column: span 2; } .key.w3 { grid-column: span 3; } .key.w5 { grid-column: span 5; }
+.key.go2 { background: var(--brand); color: var(--brand-ink); border-color: var(--brand); }
+.kb.num { grid-template-columns: repeat(3, 1fr); } .kb.num .key { height: 6.6cqw; font-size: 3cqw; }
+.picks { display: grid; grid-template-columns: repeat(2, 1fr); gap: .8cqw; align-content: start; }
+.pickb { border: 2px solid var(--screen-line); background: var(--screen-card); color: var(--screen-ink); border-radius: 1cqw; padding: 1.1cqw 1.4cqw; text-align: left; font-size: 2.2cqw; font-weight: 700; }
+.pickb small { display: block; font-size: 1.45cqw; font-weight: 400; color: var(--screen-muted); }
+.pickb.on { border-color: var(--brand); background: color-mix(in srgb, var(--brand) 10%, var(--screen-card)); }
+.capture { flex: 1; display: grid; grid-template-columns: .8fr 1.2fr; gap: 3cqw; align-items: center; }
+.capture .rings { max-width: 20cqw; }
+.capture h3 { margin: 0 0 1cqw; font-family: var(--display); font-weight: 700; font-size: 4.6cqw; line-height: 1; }
+.capture p { margin: 0 0 .6cqw; font-size: 2cqw; color: var(--screen-muted); }
+.capture .row { margin-top: 1.4cqw; }
+.detail { flex: 1; display: grid; grid-template-columns: 1.1fr 1fr; gap: 2.4cqw; align-items: start; min-height: 0; }
+.detail h3 { margin: 0 0 .8cqw; font-family: var(--display); font-weight: 700; font-size: 4.4cqw; line-height: 1; }
+.detail p { margin: .6cqw 0 0; font-size: 2cqw; }
+.detail .muted { color: var(--screen-muted); }
+.btncol { display: flex; flex-direction: column; gap: .8cqw; }
+.btncol .sbtn { text-align: left; font-size: 2.1cqw; padding: 1cqw 1.6cqw; }
+.btncol .seg3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: .6cqw; }
+.btncol .seg3 .sbtn { text-align: center; padding: .9cqw .4cqw; }
+.sbtn.on { background: var(--brand); color: var(--brand-ink); border-color: var(--brand); }
+.sbtn[disabled] { opacity: .45; }
+.people { display: grid; grid-template-columns: repeat(3, 1fr); gap: .7cqw; align-content: start; }
+.person { border: 2px solid var(--screen-line); background: var(--screen-card); color: var(--screen-ink); border-radius: 1cqw; padding: .9cqw 1.2cqw; text-align: left; display: flex; flex-direction: column; gap: .1cqw; min-width: 0; }
+.person b { font-size: 2.1cqw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.person small { font-size: 1.45cqw; color: var(--screen-muted); }
+.person .r { color: var(--brand); font-weight: 700; }
+.person.off { opacity: .5; }
+.people.dense .person { padding: .5cqw 1cqw; } .people.dense .person b { font-size: 1.8cqw; }
+.people.tight { grid-template-columns: repeat(4, 1fr); } .people.tight .person small { display: none; }
+.donebox { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 1cqw; }
+.donebox h3 { margin: 0; font-family: var(--display); font-weight: 700; font-size: 4.6cqw; line-height: 1; }
+.donebox p { margin: 0; font-size: 2.1cqw; color: var(--screen-muted); max-width: 60ch; }
+.donebox .row { display: flex; gap: 1.2cqw; margin-top: 1cqw; }
+.pinscreen { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 3cqw; padding: 2.4cqw 4cqw; align-items: center; }
+.pinscreen h2 { margin: 0 0 .6cqw; font-family: var(--display); font-weight: 700; font-size: 4.8cqw; line-height: 1; }
+.pinscreen p { margin: 0; font-size: 2cqw; color: var(--screen-muted); }
+.dots { display: flex; gap: 1.4cqw; margin: 2.2cqw 0 1cqw; }
+.dots i { width: 2.6cqw; height: 2.6cqw; border-radius: 50%; border: .35cqw solid var(--brand); }
+.dots i.f { background: var(--brand); }
+
+/* ---------- Test bench panel ---------- */
+.panel { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.box { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+.box h2 { margin: 0; font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); font-weight: 700; display: flex; justify-content: space-between; gap: 8px; }
+.box p { margin: 0; color: var(--muted); font-size: 13px; }
+.tags { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 6px; }
+.tag { text-align: left; background: var(--chip); border: 1px solid transparent; border-radius: 8px; padding: 7px 9px; display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.tag:hover { border-color: var(--line); }
+.tag:active { transform: translateY(1px); }
+.tag b { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tag small { font-family: var(--mono); font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tag .who { font-family: var(--body); color: var(--warn); font-weight: 700; }
+.tag .who.lost { color: var(--bad); }
+.tag.unknown { border: 1px dashed var(--muted); background: transparent; }
+.cat { font-size: 12px; color: var(--muted); font-weight: 700; margin-top: 4px; }
+.ctrl { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.ctrl label { font-weight: 700; font-size: 14px; }
+.ctrl small { display: block; font-weight: 400; color: var(--muted); font-size: 12px; }
+.switch { position: relative; width: 46px; height: 26px; flex: none; }
+.switch input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; z-index: 1; }
+.switch span { position: absolute; inset: 0; border-radius: 99px; background: var(--line); transition: background .15s; }
+.switch span::after { content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; transition: transform .15s; box-shadow: 0 1px 2px rgba(0,0,0,.3); }
+.switch input:checked + span { background: var(--ok); }
+.switch input:checked + span::after { transform: translateX(20px); }
+.switch input:focus-visible + span { outline: 3px solid var(--focus); outline-offset: 2px; }
+select, .field { background: var(--chip); border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; min-width: 0; }
+.field { width: 100%; font-family: var(--mono); font-size: 13px; }
+.btns { display: flex; gap: 8px; flex-wrap: wrap; }
+.pbtn { background: var(--chip); border: 1px solid var(--line); border-radius: 8px; padding: 7px 12px; font-size: 13px; font-weight: 700; }
+.pbtn.danger { color: var(--bad); }
+.log { font-family: var(--mono); font-size: 11.5px; max-height: 190px; overflow: auto; display: flex; flex-direction: column; gap: 3px; }
+.log div { display: grid; grid-template-columns: 58px 1fr auto; gap: 8px; min-width: 0; }
+.log span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.log .e { color: var(--bad); } .log .k { color: var(--ok); }
+.code { font-family: var(--mono); font-weight: 600; background: var(--chip); padding: 1px 6px; border-radius: 5px; }
+.confirm { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 13px; }
+</style>
+
+<div class="bench">
+  <header class="bench-head">
+    <h1>Equipment Station Test Bench</h1>
+    <p>The checkout station as it will run on the Pi. Use the panel to tap badges and tags, cut the Wi-Fi, or change the time of day.</p>
+  </header>
+
+  <section aria-label="Station">
+    <div class="device">
+      <div class="screen" id="screen"></div>
+      <div class="device-foot"><span><i class="reader-dot" id="readerDot"></i>NFC READER</span><span id="ver"></span></div>
+    </div>
+  </section>
+
+  <aside class="panel" aria-label="Test bench">
+    <div class="box" id="boxSetup">
+      <h2>Setup</h2>
+      <p>Setup: Wi-Fi password for the demo networks is <span class="code">ramp2026</span> (or skip). Activation code <span class="code">DEMO-0001</span>. Then tap <b>Admin tag (in the box)</b>. Admin menu: tap <b>Dana Brooks</b> (manager, PIN 2468) or <b>Morgan Reyes</b> (admin, PIN 1357), then <b>Admin menu</b>.</p>
+      <div class="btns">
+        <button class="pbtn" id="btnMenu">Station menu</button>
+        <button class="pbtn" id="btnNewCode">Issue new activation code</button>
+      </div>
+      <div class="confirm" id="newCodeMsg" hidden></div>
+    </div>
+
+    <div class="box">
+      <h2>Tap a badge</h2>
+      <div class="tags" id="badgeList"></div>
+    </div>
+
+    <div class="box">
+      <h2><span>Tap equipment</span><span id="outCount"></span></h2>
+      <div id="itemList"></div>
+    </div>
+
+    <div class="box">
+      <h2>Supervisor actions</h2>
+      <p>What a supervisor does from the dashboard.</p>
+      <select id="supItem" aria-label="Equipment"></select>
+      <div class="btns">
+        <button class="pbtn danger" data-status="lost">Mark lost</button>
+        <button class="pbtn" data-status="maintenance">Send to maintenance</button>
+        <button class="pbtn" data-status="available">Back in service</button>
+      </div>
+      <div class="ctrl">
+        <label for="ruleReturn">Return items for others<small>Tapping someone else's item returns it for them</small></label>
+        <span class="switch"><input type="checkbox" id="ruleReturn"><span></span></span>
+      </div>
+      <div class="ctrl">
+        <label for="ruleTake">Take items others have<small>Off: an item must be returned before anyone else can check it out</small></label>
+        <span class="switch"><input type="checkbox" id="ruleTake"><span></span></span>
+      </div>
+    </div>
+
+    <div class="box">
+      <h2>Conditions</h2>
+      <div class="ctrl">
+        <label for="wifi">Network available<small>Turn off to simulate an outage (taps are saved, then sync)</small></label>
+        <span class="switch"><input type="checkbox" id="wifi" checked><span></span></span>
+      </div>
+      <div class="ctrl">
+        <label for="acct">Customer account on<small>Turn off = you paused them in your console</small></label>
+        <span class="switch"><input type="checkbox" id="acct" checked><span></span></span>
+      </div>
+      <div class="ctrl">
+        <label for="timeSel">Pretend it's<small>Shifts: AM 5:00–1:30, Overnight 9:00 PM–5:30</small></label>
+        <select id="timeSel">
+          <option value="">Real time</option>
+          <option value="04:30">4:30 AM</option>
+          <option value="09:00">9:00 AM</option>
+          <option value="13:20">1:20 PM</option>
+          <option value="17:00">5:00 PM</option>
+          <option value="23:00">11:00 PM</option>
+        </select>
+      </div>
+      <div class="ctrl">
+        <label for="sound">Confirmation sounds<small>Beep on success, buzz on errors</small></label>
+        <span class="switch"><input type="checkbox" id="sound"><span></span></span>
+      </div>
+      <label for="readerInput" style="font-weight:700;font-size:14px">Reader input<small style="display:block;font-weight:400;color:var(--muted);font-size:12px">USB readers type the tag ID and press Enter. Type one here, or just type on the page.</small></label>
+      <input class="field" id="readerInput" placeholder="04:BA:00:00:00:01" autocomplete="off" spellcheck="false">
+    </div>
+
+    <div class="box">
+      <h2><span>Activity log</span><span style="text-transform:none;letter-spacing:0;font-weight:400">what the dashboard will show</span></h2>
+      <div class="log" id="activity"></div>
+    </div>
+
+    <div class="box">
+      <h2><span>Server calls</span><button class="pbtn danger" id="btnReset" style="text-transform:none;letter-spacing:0">Reset demo data</button></h2>
+      <div class="confirm" id="resetConfirm" hidden>
+        <span>Clear all checkouts and unpair the station?</span>
+        <button class="pbtn danger" id="resetYes">Reset</button>
+        <button class="pbtn" id="resetNo">Cancel</button>
+      </div>
+      <div class="log" id="log"><div><span></span><span style="color:var(--muted)">Calls the station makes will show here.</span><span></span></div></div>
+    </div>
+  </aside>
+</div>
+
+<script>
+"use strict";
+const VERSION = "station-0.1.0";
+/* Shown on the setup screens. Replace with your real support details before shipping. */
+const SUPPORT = { name: "Station support", email: "support@sonoranpoint.com", phone: "(555) 010-0100", web: "sonoranpoint.com/help" };
+
+/* ================= Utilities ================= */
+const $ = (s) => document.querySelector(s);
+const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const normUid = (u) => String(u || "").replace(/[^0-9a-f]/gi, "").toUpperCase();
+const normCode = (c) => String(c || "").replace(/[^0-9a-z]/gi, "").toUpperCase();
+const fmtUid = (u) => ((u || "").match(/.{1,2}/g) || []).join(":");
+const uuid = () => (crypto.randomUUID ? crypto.randomUUID() :
+  "10000000-1000-4000-8000-100000000000".replace(/[018]/g, (c) => (c ^ (crypto.getRandomValues(new Uint8Array(1))[0] & (15 >> (c / 4)))).toString(16)));
+const randHex = (n) => Array.from(crypto.getRandomValues(new Uint8Array(n)), (b) => b.toString(16).padStart(2, "0")).join("");
+const clone = (o) => JSON.parse(JSON.stringify(o));
+const validPin = (p) => /^[0-9]{4,8}$/.test(p || "");
+const store = {
+  get(k) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : null; } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+  del(k) { try { localStorage.removeItem(k); } catch {} },
+};
+class NetError extends Error {}
+
+/* Shared pretend clock (in real life the Pi and server each use real time). */
+const clock = { offset: 0, now() { return Date.now() + this.offset; } };
+
+/* ---- Time zone math (company time zone, e.g. America/Phoenix) ---- */
+function tzParts(ms, tz) {
+  const p = {};
+  new Intl.DateTimeFormat("en-US", { timeZone: tz, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" })
+    .formatToParts(new Date(ms)).forEach((x) => { if (x.type !== "literal") p[x.type] = +x.value; });
+  return { y: p.year, m: p.month, d: p.day, h: p.hour % 24, mi: p.minute, s: p.second };
+}
+function tzOffset(ms, tz) { const p = tzParts(ms, tz); return Date.UTC(p.y, p.m - 1, p.d, p.h, p.mi, p.s) - (ms - (ms % 1000)); }
+function zoned(day, hhmm, tz) { // local date {y,m,d} + "HH:MM" -> epoch ms
+  const [h, mi] = hhmm.split(":").map(Number);
+  const guess = Date.UTC(day.y, day.m - 1, day.d, h, mi);
+  let t = guess - tzOffset(guess, tz);
+  return guess - tzOffset(t, tz);
+}
+function localDay(ms, tz) { const p = tzParts(ms, tz); return { y: p.y, m: p.m, d: p.d }; }
+function addDays(day, n) { const dt = new Date(Date.UTC(day.y, day.m - 1, day.d + n)); return { y: dt.getUTCFullYear(), m: dt.getUTCMonth() + 1, d: dt.getUTCDate() }; }
+function isoDow(day) { const w = new Date(Date.UTC(day.y, day.m - 1, day.d)).getUTCDay(); return w === 0 ? 7 : w; }
+
+/* =====================================================================
+   DEMO SERVER — an in-browser copy of the database's station functions
+   (activate_station, station_config, station_sync_cache, station_tap,
+   station_heartbeat) with the same rules. On a real install these calls
+   go to Supabase instead.
+   ===================================================================== */
+function demoSeed() {
+  const cats = [
+    ["Vacuum", "hours", 8], ["Blower", "hours", 8], ["Battery", "hours", 12],
+    ["PDA", "hours", 10], ["Radio", "shift_end", 10], ["Van Keys", "none", null],
+  ].map(([name, rule, hours], i) => ({ id: "c" + (i + 1), name, rule, hours, sort: i + 1, extended: null }));
+  const equipment = [];
+  cats.forEach((c) => { for (let n = 1; n <= 2; n++) equipment.push({
+    id: "q" + c.sort + n, category_id: c.id, name: `${c.name} 0${n}`,
+    nfc_uid: "04DE00" + String(c.sort).padStart(2, "0") + String(n).padStart(2, "0"),
+    status: "available", mode: "category", hours: null, extended: null,
+    current_employee_id: null, checked_out_at: null, due_at: null, last_event_at: null }); });
+  return {
+    org: { name: "Demo Air Services", timezone: "America/Phoenix", primary_color: "#1F4E79", accent_color: "#F2A900", logo_url: null,
+      extended_checkout_hours: 9, enabled_modules: ["shifts"],
+      terminology: { equipment: "Equipment", equipment_plural: "Equipment", employee: "Employee", employee_plural: "Employees", checkout: "Check Out", checkin: "Return" },
+      settings: { allow_return_by_other: true, allow_checkout_while_held: false } },
+    categories: cats,
+    employees: [
+      { id: "e1", employee_number: "E1001", name: "Alex Rivera", badge_uid: "04BA00000001", active: true },
+      { id: "e2", employee_number: "E1002", name: "Jordan Lee", badge_uid: "04BA00000002", active: true },
+      { id: "e3", employee_number: "E1003", name: "Sam Patel", badge_uid: "04BA00000003", active: true },
+      { id: "e4", employee_number: "M2001", name: "Dana Brooks", badge_uid: "04BA0000000A", active: true, role: "manager", pin: "2468" },
+      { id: "e5", employee_number: "A3001", name: "Morgan Reyes", badge_uid: "04BA0000000B", active: true, role: "admin", pin: "1357" },
+    ].map((e) => ({ role: "employee", pin: null, ...e })),
+    equipment,
+    shifts: [
+      { id: "s1", name: "AM", start: "05:00", end: "13:30", days: null, early: 60, active: true },
+      { id: "s2", name: "PM", start: "13:00", end: "21:30", days: null, early: 60, active: true },
+      { id: "s3", name: "Overnight", start: "21:00", end: "05:30", days: null, early: 60, active: true },
+    ],
+    assignments: [["s1", "e1"], ["s1", "e2"], ["s3", "e3"]],
+    stations: [{ id: "st1", name: "Equipment Room 01", location: "Terminal 3", code: "DEMO0001", key_hash: null, activated: false, revoked: false, last_seen: null }],
+    txns: [],
+    audit: [],   // staff actions (what the audit log records)
+  };
+}
+
+const demo = {
+  db: null, wifi: true, listeners: [],
+  load() { this.db = store.get("demoServer.v2") || demoSeed(); },
+  save() { store.set("demoServer.v2", this.db); this.listeners.forEach((f) => f()); },
+  reset() { this.db = demoSeed(); this.save(); },
+  station(key) { return key ? this.db.stations.find((s) => s.key_hash === key && s.activated && !s.revoked) : null; },
+  cat(id) { return this.db.categories.find((c) => c.id === id); },
+  emp(id) { return this.db.employees.find((e) => e.id === id); },
+  extendedHours(eq) { return eq.extended ?? this.cat(eq.category_id)?.extended ?? this.db.org.extended_checkout_hours; },
+  resolveLimit(eq) {
+    const c = this.cat(eq.category_id) || {};
+    const rule = eq.mode === "category" ? (c.rule || "none") : eq.mode;
+    const hours = rule === "none" ? null : rule === "hours" ? (eq.mode === "hours" ? eq.hours : c.hours) : (eq.hours ?? c.hours);
+    return { rule, hours };
+  },
+  employeeShiftEnd(empId, at) {
+    const org = this.db.org; if (!org.enabled_modules.includes("shifts")) return null;
+    const tz = org.timezone; let best = null;
+    for (const [sid, eid] of this.db.assignments) {
+      if (eid !== empId) continue;
+      const s = this.db.shifts.find((x) => x.id === sid); if (!s || !s.active) continue;
+      for (const k of [0, -1]) {
+        const day = addDays(localDay(at, tz), k);
+        if (s.days && !s.days.includes(isoDow(day))) continue;
+        const start = zoned(day, s.start, tz);
+        const end = zoned(s.end < s.start ? addDays(day, 1) : day, s.end, tz);
+        if (at >= start - s.early * 60000 && at < end) best = Math.max(best ?? 0, end);
+      }
+    }
+    return best;
+  },
+  config(st) {
+    const o = this.db.org;
+    return { ok: true,
+      station: { id: st.id, name: st.name, location: st.location },
+      organization: { name: o.name, logo_url: o.logo_url, primary_color: o.primary_color, accent_color: o.accent_color,
+        timezone: o.timezone, terminology: o.terminology, settings: o.settings, enabled_modules: o.enabled_modules },
+      categories: [...this.db.categories].sort((a, b) => a.sort - b.sort).map((c) => ({ id: c.id, name: c.name, icon: null })) };
+  },
+  fns: {
+    activate_station({ p_activation_code, p_software_version }) {
+      const st = demo.db.stations.find((s) => s.code && s.code === normCode(p_activation_code));
+      if (!st) return { ok: false, error: "invalid_or_expired_code" };
+      const key = randHex(32);
+      Object.assign(st, { key_hash: key, code: null, activated: true, revoked: false, last_seen: clock.now(), software_version: p_software_version,
+                          activated_at: clock.now(), admin_claimed_at: null });
+      return { ok: true, station_id: st.id, device_key: key, ...demo.config(st),
+               has_admin_fob: demo.db.employees.some((e) => e.active && e.role === "admin" && e.badge_uid) };
+    },
+    station_config({ p_device_key }) {
+      const st = demo.station(p_device_key); if (!st) return { ok: false, error: "station_not_authorized" };
+      return demo.config(st);
+    },
+    station_sync_cache({ p_device_key }) {
+      const st = demo.station(p_device_key); if (!st) return { ok: false, error: "station_not_authorized" };
+      return { ok: true, generated_at: new Date(clock.now()).toISOString(),
+        employees: demo.db.employees.filter((e) => e.active && e.badge_uid).map((e) => ({ id: e.id, badge_uid: e.badge_uid, name: e.name, role: e.role, has_pin: !!e.pin })),
+        equipment: demo.db.equipment.filter((q) => q.nfc_uid && q.status !== "retired").map((q) => ({
+          id: q.id, nfc_uid: q.nfc_uid, name: q.name, category_id: q.category_id, status: q.status,
+          current_employee_id: q.current_employee_id, checked_out_at: q.checked_out_at, due_at: q.due_at,
+          extended_alert_hours: demo.extendedHours(q) })) };
+    },
+    station_heartbeat({ p_device_key }) {
+      const st = demo.station(p_device_key); if (!st) return { ok: false, error: "station_not_authorized" };
+      st.last_seen = clock.now(); return { ok: true, server_time: new Date(clock.now()).toISOString() };
+    },
+    station_item_status({ p_device_key, p_equipment_uid }) {
+      const st = demo.station(p_device_key); if (!st) return { ok: false, error: "station_not_authorized" };
+      const eq = demo.db.equipment.find((q) => q.nfc_uid === normUid(p_equipment_uid));
+      if (!eq) return { ok: false, error: "unknown_equipment" };
+      const h = eq.current_employee_id && demo.emp(eq.current_employee_id);
+      return { ok: true, equipment: { id: eq.id, name: eq.name, status: eq.status, category: demo.cat(eq.category_id)?.name },
+        holder: h ? { id: h.id, name: h.name } : null, checked_out_at: eq.checked_out_at, due_at: eq.due_at,
+        is_overdue: !!(eq.due_at && eq.due_at < clock.now()) };
+    },
+    /* ---- Staff fobs (same checks as the database's station_staff_* functions) ---- */
+    station_staff_login(a) {
+      const ss = demo.staffSession(a, "manager"); if (!ss.ok) return ss;
+      return { ok: true, staff: { id: ss.e.id, name: ss.e.name, role: ss.e.role },
+        categories: [...demo.db.categories].sort((x, y) => x.sort - y.sort).map((c) => ({ id: c.id, name: c.name,
+          names: demo.db.equipment.filter((q) => q.category_id === c.id).map((q) => q.name).sort() })),
+        employees: [...demo.db.employees].sort((x, y) => (y.active - x.active) || x.name.localeCompare(y.name)).map((e) => ({
+          id: e.id, name: e.name, employee_number: e.employee_number, role: e.role, active: e.active, has_badge: !!e.badge_uid, has_pin: !!e.pin })),
+        untagged: demo.db.equipment.filter((q) => !q.nfc_uid && q.status !== "retired").map((q) => ({ id: q.id, name: q.name, category: demo.cat(q.category_id)?.name })) };
+    },
+    station_add_employee(a) {
+      const ss = demo.staffSession(a, "manager"); if (!ss.ok) return ss;
+      const role = a.p_role || "employee"; const num = (a.p_employee_number || "").trim() || null; const uid = normUid(a.p_new_badge_uid);
+      if (!(a.p_first_name || "").trim()) return { ok: false, error: "name_required" };
+      if (role !== "employee" && ss.e.role !== "admin") return { ok: false, error: "admin_only" };
+      if (role !== "employee" && !validPin(a.p_new_pin)) return { ok: false, error: "pin_needed" };
+      if (!uid) return { ok: false, error: "no_badge" };
+      const own = demo.uidOwner(uid); if (own) return { ok: false, error: own.kind === "badge" ? "badge_in_use" : "tag_is_equipment", used_by: own.name };
+      const dup = num && demo.db.employees.find((e) => e.employee_number === num); if (dup) return { ok: false, error: "number_in_use", used_by: dup.name };
+      const name = [a.p_first_name.trim(), (a.p_last_name || "").trim()].filter(Boolean).join(" ");
+      const e = { id: "e" + randHex(4), employee_number: num, name, badge_uid: uid, active: true, role, pin: role !== "employee" ? a.p_new_pin : null };
+      demo.db.employees.push(e); demo.log(ss.e, `added employee ${name}${role !== "employee" ? " (" + role + ")" : ""}`);
+      return { ok: true, employee: { id: e.id, name, role } };
+    },
+    station_add_equipment(a) {
+      const ss = demo.staffSession(a, "manager"); if (!ss.ok) return ss;
+      const name = (a.p_name || "").trim(); const uid = normUid(a.p_tag_uid);
+      if (!name) return { ok: false, error: "name_required" };
+      if (!demo.cat(a.p_category_id)) return { ok: false, error: "unknown_category" };
+      if (!uid) return { ok: false, error: "no_tag" };
+      const own = demo.uidOwner(uid); if (own) return { ok: false, error: own.kind === "tag" ? "tag_in_use" : "tag_is_badge", used_by: own.name };
+      const q = { id: "q" + randHex(4), category_id: a.p_category_id, name, nfc_uid: uid, asset_tag: (a.p_asset_tag || "").trim() || null, status: "available",
+        mode: "category", hours: null, extended: null, current_employee_id: null, checked_out_at: null, due_at: null, last_event_at: null };
+      demo.db.equipment.push(q); demo.log(ss.e, `added equipment ${name}`);
+      return { ok: true, equipment: { id: q.id, name } };
+    },
+    station_set_item_status(a) {
+      const ss = demo.staffSession(a, a.p_status === "retired" ? "admin" : "manager"); if (!ss.ok) return ss;
+      const q = demo.db.equipment.find((x) => x.nfc_uid === normUid(a.p_equipment_uid)); if (!q) return { ok: false, error: "unknown_equipment" };
+      q.status = a.p_status === "available" ? (q.current_employee_id ? "checked_out" : "available") : a.p_status;
+      demo.log(ss.e, { lost: `marked ${q.name} lost`, maintenance: `sent ${q.name} to maintenance`, retired: `retired ${q.name}` }[a.p_status] || `put ${q.name} back in service`);
+      return { ok: true, equipment: { id: q.id, name: q.name, status: q.status } };
+    },
+    station_replace_uid(a) {
+      const ss = demo.staffSession(a, "manager"); if (!ss.ok) return ss;
+      const uid = normUid(a.p_new_uid); if (!uid) return { ok: false, error: "no_tag" };
+      const own = demo.uidOwner(uid, a.p_target); if (own) return { ok: false, error: own.kind === "badge" ? "badge_in_use" : "tag_in_use", used_by: own.name };
+      if (a.p_kind === "employee") {
+        const e = demo.emp(a.p_target); if (!e) return { ok: false, error: "unknown_employee" };
+        if (e.role !== "employee" && ss.e.role !== "admin") return { ok: false, error: "admin_only" };
+        e.badge_uid = uid; demo.log(ss.e, `gave ${e.name} a new badge`);
+      } else {
+        const q = demo.db.equipment.find((x) => x.id === a.p_target); if (!q) return { ok: false, error: "unknown_equipment" };
+        q.nfc_uid = uid; demo.log(ss.e, `put a new tag on ${q.name}`);
+      }
+      return { ok: true };
+    },
+    station_update_employee(a) {
+      const ss = demo.staffSession(a, "admin"); if (!ss.ok) return ss;
+      const e = demo.emp(a.p_employee); if (!e) return { ok: false, error: "unknown_employee" };
+      if (e.id === ss.e.id && (a.p_active === false || (a.p_role && a.p_role !== e.role))) return { ok: false, error: "cant_change_self" };
+      if (a.p_new_pin != null && !validPin(a.p_new_pin)) return { ok: false, error: "pin_needed" };
+      const role = a.p_role || e.role;
+      if (role !== "employee" && a.p_new_pin == null && !e.pin) return { ok: false, error: "pin_needed" };
+      const changes = [];
+      if (role !== e.role) changes.push(`made ${e.name} ${role === "employee" ? "a regular employee" : "a " + role}`);
+      if (a.p_active != null && a.p_active !== e.active) changes.push(`${a.p_active ? "reactivated" : "deactivated"} ${e.name}`);
+      if (a.p_new_pin != null) changes.push(`set a new PIN for ${e.name}`);
+      e.role = role; if (a.p_active != null) e.active = a.p_active; if (a.p_new_pin != null) e.pin = a.p_new_pin; if (role === "employee") e.pin = null;
+      changes.forEach((c) => demo.log(ss.e, c));
+      return { ok: true, employee: { id: e.id, role: e.role, active: e.active } };
+    },
+    station_claim_admin_tag(a) {
+      const st = demo.station(a.p_device_key); if (!st) return { ok: false, error: "station_not_authorized" };
+      if (st.admin_claimed_at || clock.now() - (st.activated_at || 0) > 3600000) return { ok: false, error: "setup_window_closed" };
+      const uid = normUid(a.p_tag_uid); if (!uid) return { ok: false, error: "no_tag" };
+      const e = demo.db.employees.find((x) => x.badge_uid === uid);
+      if (e) {
+        if (e.role !== "admin" || !e.active) return { ok: false, error: "badge_in_use", used_by: e.name };
+        if (a.p_pin != null) { if (!validPin(a.p_pin)) return { ok: false, error: "pin_needed" }; e.pin = a.p_pin; }
+        st.admin_claimed_at = clock.now();
+        return { ok: true, existing: true, employee: { id: e.id, name: e.name, role: "admin" }, has_pin: !!e.pin };
+      }
+      const own = demo.uidOwner(uid); if (own) return { ok: false, error: "tag_is_equipment", used_by: own.name };
+      if (a.p_first_name == null) return { ok: true, existing: false, needs: "name_and_pin" };
+      if (!(a.p_first_name || "").trim()) return { ok: false, error: "name_required" };
+      if (!validPin(a.p_pin)) return { ok: false, error: "pin_needed" };
+      const name = [a.p_first_name.trim(), (a.p_last_name || "").trim()].filter(Boolean).join(" ");
+      const ne = { id: "e" + randHex(4), employee_number: null, name, badge_uid: uid, active: true, role: "admin", pin: a.p_pin };
+      demo.db.employees.push(ne); st.admin_claimed_at = clock.now(); demo.log(ne, "registered the admin tag that came with the station");
+      return { ok: true, existing: false, employee: { id: ne.id, name, role: "admin" } };
+    },
+    station_tap({ p_device_key, p_client_txn_id, p_badge_uid, p_equipment_uid, p_occurred_at, p_action, p_queued }) {
+      const st = demo.station(p_device_key); if (!st) return { ok: false, error: "station_not_authorized" };
+      if (!p_client_txn_id) return { ok: false, error: "missing_client_txn_id" };
+      st.last_seen = clock.now();
+      const dup = demo.db.txns.find((t) => t.station_id === st.id && t.client_txn_id === p_client_txn_id);
+      if (dup) return { ok: true, duplicate: true, transaction_id: dup.id, action: dup.action, flags: dup.flags };
+      const emp = demo.db.employees.find((e) => e.active && e.badge_uid === normUid(p_badge_uid));
+      if (!emp) return { ok: false, error: "unknown_badge" };
+      const eq = demo.db.equipment.find((q) => q.nfc_uid === normUid(p_equipment_uid));
+      if (!eq) return { ok: false, error: "unknown_equipment" };
+      return demo.recordEvent(eq, emp, p_action || null, p_occurred_at ? Date.parse(p_occurred_at) : clock.now(), st.id, p_client_txn_id, !p_queued);
+    },
+  },
+  /* Same decisions as private.record_event in the database. */
+  recordEvent(eq, emp, action, when, stationId, clientTxnId, enforce) {
+    const now = clock.now(); const flags = [];
+    const set = this.db.org.settings;
+    if (when > now + 5 * 60000) { flags.push("clock_skew"); when = now; }
+    const latest = eq.last_event_at == null || when >= eq.last_event_at;
+    const heldByOther = eq.current_employee_id && eq.current_employee_id !== emp.id;
+    if (!action) action = eq.status === "lost" || eq.current_employee_id === emp.id || (heldByOther && set.allow_return_by_other) ? "checkin" : "checkout";
+    if (enforce && latest) {
+      let block = null;
+      if (action === "checkout") block = ["maintenance", "retired"].includes(eq.status) ? "item_unavailable"
+        : eq.status === "lost" ? "item_lost" : heldByOther && !set.allow_checkout_while_held ? "checked_out_to_other" : null;
+      else if (heldByOther && !set.allow_return_by_other && eq.status !== "lost") block = "not_your_item";
+      if (block) { const h = eq.current_employee_id && this.emp(eq.current_employee_id);
+        return { ok: false, error: block, equipment: { id: eq.id, name: eq.name, status: eq.status }, holder: h ? { id: h.id, name: h.name } : null,
+          checked_out_at: eq.checked_out_at ? new Date(eq.checked_out_at).toISOString() : null, due_at: eq.due_at ? new Date(eq.due_at).toISOString() : null }; }
+    }
+    let due = null, rule = null;
+    if (!latest) flags.push("late_sync");
+    else if (action === "checkout") {
+      if (eq.current_employee_id && eq.current_employee_id !== emp.id) flags.push("conflict_already_held");
+      if (["maintenance", "retired", "lost"].includes(eq.status)) flags.push("item_" + eq.status);
+      const lim = this.resolveLimit(eq); rule = lim.rule;
+      if (rule === "shift_end") {
+        due = this.employeeShiftEnd(emp.id, when);
+        if (due == null) { flags.push("no_active_shift"); rule = lim.hours != null ? "hours" : "none"; }
+      }
+      if (rule === "hours") due = when + lim.hours * 3600000;
+    } else {
+      if (eq.status === "lost") flags.push("found_lost_item");
+      else if (!eq.current_employee_id) flags.push("return_not_checked_out");
+      else if (eq.current_employee_id !== emp.id) flags.push("returned_by_other");
+      const ext = this.extendedHours(eq);
+      if (eq.checked_out_at && ext != null && when - eq.checked_out_at > ext * 3600000) flags.push("returned_after_extended");
+    }
+    const prev = latest ? eq.current_employee_id : null;
+    const txn = { id: uuid(), equipment_id: eq.id, employee_id: emp.id, previous_employee_id: prev, station_id: stationId, action, occurred_at: when, client_txn_id: clientTxnId, flags };
+    this.db.txns.push(txn);
+    if (latest) {
+      if (action === "checkout") Object.assign(eq, { current_employee_id: emp.id, checked_out_at: when, due_at: due, last_event_at: when,
+        status: ["available", "checked_out"].includes(eq.status) ? "checked_out" : eq.status });
+      else Object.assign(eq, { current_employee_id: null, checked_out_at: null, due_at: null, last_event_at: when,
+        status: ["checked_out", "lost"].includes(eq.status) ? "available" : eq.status });
+    }
+    const ph = prev && prev !== emp.id ? this.emp(prev) : null;
+    return { ok: true, transaction_id: txn.id, action, flags, equipment: { id: eq.id, name: eq.name }, employee: { id: emp.id, name: emp.name },
+      previous_holder: ph ? { id: ph.id, name: ph.name } : null,
+      due_at: due ? new Date(due).toISOString() : null, due_rule: rule };
+  },
+  staffSession(a, min) {
+    const st = this.station(a.p_device_key); if (!st) return { ok: false, error: "station_not_authorized" };
+    const rank = { employee: 0, manager: 1, admin: 2 };
+    const e = this.db.employees.find((x) => x.active && x.badge_uid === normUid(a.p_badge_uid));
+    if (!e || rank[e.role] < 1) return { ok: false, error: "not_staff" };
+    if (rank[e.role] < rank[min]) return { ok: false, error: "admin_only" };
+    if (e.pin) {
+      if ((e.locked_until || 0) > clock.now()) return { ok: false, error: "pin_locked" };
+      if (!a.p_pin) return { ok: false, error: "pin_required" };
+      if (a.p_pin !== e.pin) {
+        e.failures = (e.failures || 0) + 1;
+        if (e.failures >= 5) { e.failures = 0; e.locked_until = clock.now() + 15 * 60000; return { ok: false, error: "pin_locked" }; }
+        return { ok: false, error: "wrong_pin", tries_left: 5 - e.failures };
+      }
+      e.failures = 0;
+    }
+    st.last_seen = clock.now();
+    return { ok: true, st, e };
+  },
+  uidOwner(uid, except) {
+    const e = this.db.employees.find((x) => x.badge_uid === uid && x.id !== except); if (e) return { kind: "badge", name: e.name };
+    const q = this.db.equipment.find((x) => x.nfc_uid === uid && x.id !== except); if (q) return { kind: "tag", name: q.name };
+    return null;
+  },
+  log(actor, text) { this.db.audit.push({ at: clock.now(), actor: actor.name, text }); },
+  /* What a supervisor does from the dashboard (set_equipment_status). */
+  setStatus(id, status) {
+    const eq = this.db.equipment.find((q) => q.id === id); if (!eq) return;
+    eq.status = status === "available" ? (eq.current_employee_id ? "checked_out" : "available") : status;
+    this.save();
+  },
+  async call(fn, args) {
+    const t0 = performance.now();
+    await new Promise((r) => setTimeout(r, 90 + Math.random() * 140));
+    if (!this.wifi || !demoDevice.online()) { logCall(fn, "no connection", true, 0); throw new NetError("offline"); }
+    // Account paused from the operator console (same as private.station_denied in the database).
+    if (this.db.org.status === "paused" && (fn === "activate_station" ? this.db.stations.some((x) => x.code && x.code === normCode(args.p_activation_code)) : this.station(args?.p_device_key))) {
+      logCall(fn, "account_paused", true, performance.now() - t0); return { ok: false, error: "account_paused" };
+    }
+    const res = clone(this.fns[fn](clone(args)));
+    // The database stores times as timestamps; send them as ISO strings like Supabase does.
+    ["checked_out_at", "due_at"].forEach((k) => { if (typeof res[k] === "number") res[k] = new Date(res[k]).toISOString(); });
+    if (res.equipment && Array.isArray(res.equipment)) res.equipment.forEach((q) => { ["checked_out_at", "due_at"].forEach((k) => { if (q[k]) q[k] = new Date(q[k]).toISOString(); }); });
+    this.save();
+    logCall(fn, res.ok ? (res.action || "ok") + (res.flags?.length ? " · " + res.flags.join(", ") : "") : res.error, !res.ok, performance.now() - t0);
+    return res;
+  },
+};
+
+/* =====================================================================
+   DEVICE — Wi-Fi. A web page can't control Wi-Fi, so on the Pi a small
+   helper (station/pi/wifi_helper.py) runs at 127.0.0.1:8765 and the page
+   asks it. In this test page the Wi-Fi is simulated.
+   ===================================================================== */
+const demoDevice = {
+  st: store.get("device.v1") || { ssid: null, wired: false },
+  nets: [
+    { ssid: "T3-Operations", signal: 4, secure: true, pass: "ramp2026" },
+    { ssid: "Ramp-Crew", signal: 3, secure: true, pass: "ramp2026" },
+    { ssid: "Airport-Free-WiFi", signal: 2, secure: false },
+    { ssid: "Bag-Room-5G", signal: 1, secure: true, pass: "ramp2026" },
+  ],
+  save() { store.set("device.v1", this.st); },
+  online() { return !!(this.st.ssid || this.st.wired); },
+  async scan() { await new Promise((r) => setTimeout(r, 650)); return this.nets.map(({ pass, ...n }) => ({ ...n, connected: n.ssid === this.st.ssid })); },
+  async connect(ssid, password) {
+    await new Promise((r) => setTimeout(r, 1100));
+    const n = this.nets.find((x) => x.ssid === ssid); if (!n) return { ok: false, error: "not_found" };
+    if (n.secure && password !== n.pass) return { ok: false, error: "wrong_password" };
+    this.st = { ssid, wired: false }; this.save(); return { ok: true };
+  },
+  async status() { return { ...this.st }; },
+  skip() { if (!this.st.ssid) { this.st.wired = true; this.save(); } },   // "use a network cable"
+  reset() { this.st = { ssid: null, wired: false }; this.save(); },
+};
+const piDevice = {
+  base: "http://127.0.0.1:8765",
+  online() { return true; },
+  async scan() { const r = await fetch(this.base + "/wifi/scan"); return r.json(); },
+  async connect(ssid, password) {
+    const r = await fetch(this.base + "/wifi/connect", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ssid, password }) });
+    return r.json();
+  },
+  async status() { const r = await fetch(this.base + "/wifi/status"); return r.json(); },
+  skip() {}, reset() {},
+};
+const device = ["127.0.0.1", "localhost"].includes(location.hostname) ? piDevice : demoDevice;
+
+/* The reader built into the case (PN532) is read by pi/nfc_reader.py, which sends each tap here.
+   A USB reader that types the ID still works too (see the keydown handler). */
+function connectReader(base = "http://127.0.0.1:8766") {
+  if (typeof EventSource === "undefined") return;
+  const es = new EventSource(base + "/nfc/events");
+  es.addEventListener("tag", (e) => { try { handleTag(JSON.parse(e.data).uid); } catch {} });
+  es.addEventListener("status", (e) => { try { const d = JSON.parse(e.data); if (S.reader !== d.reader) { S.reader = d.reader; renderStatus(); } } catch {} });
+  es.onerror = () => { if (S.reader !== false) { S.reader = false; renderStatus(); } };   // reconnects by itself
+  return es;
+}
+
+/* Real server (Supabase). Used when the station runs on the Pi; this test page can only reach the demo server. */
+const supabaseLink = (url, key) => ({
+  async call(fn, args) {
+    let res;
+    try {
+      res = await fetch(url.replace(/\/$/, "") + "/rest/v1/rpc/" + fn, {
+        method: "POST", headers: { apikey: key, Authorization: "Bearer " + key, "Content-Type": "application/json" }, body: JSON.stringify(args) });
+    } catch { logCall(fn, "no connection", true, 0); throw new NetError("offline"); }
+    if (res.status >= 500) throw new NetError("server " + res.status);
+    const body = await res.json().catch(() => ({ ok: false, error: "bad_response" }));
+    logCall(fn, body.ok ? (body.action || "ok") : body.error || res.status, !body.ok, 0);
+    return body;
+  },
+});
+
+/* ================= Station app ================= */
+const S = {
+  saved: store.get("station.v2") || { mode: "demo", url: "", anonKey: "", deviceKey: null, config: null, cache: null, queue: [], lastSync: null, syncIssues: [] },
+  screen: "setup", session: null, online: true, toast: null, overlay: null, setupError: "", busy: false, flushing: false,
+};
+const persist = () => store.set("station.v2", S.saved);
+const usingCustomServer = () => S.saved.mode === "supabase" && !!(S.saved.url || "").trim();
+/* The hosted server every station uses unless an admin sets another one (Admin menu › Station).
+   On the Pi (page served from the Pi itself) that's the real one; in this test page it's the built-in demo. */
+const HOSTED = Object.assign({ url: "https://qzzukfjefqwifnqzxhhu.supabase.co", key: "sb_publishable_4mIH45QwuL5gTupgIX-2oQ_0sFp8y92" }, window.SP_CONFIG || {});
+const KIOSK = device === piDevice || /[?&]kiosk\b/.test(location.search);
+if (KIOSK) document.documentElement.classList.add("kiosk");
+const link = () => (usingCustomServer() ? supabaseLink(S.saved.url, S.saved.anonKey) : KIOSK ? supabaseLink(HOSTED.url, HOSTED.key) : demo);
+const tz = () => S.saved.config?.organization?.timezone || "America/Phoenix";
+const term = () => S.saved.config?.organization?.terminology || { equipment: "Equipment", checkout: "Check Out", checkin: "Return" };
+
+async function call(fn, args) {
+  try { const r = await link().call(fn, args); setOnline(true);
+    if (r && r.error === "account_paused") setPaused(true); else if (r && r.ok && S.saved.paused) setPaused(false);
+    return r; }
+  catch (e) { if (e instanceof NetError) { setOnline(false); throw e; } throw e; }
+}
+// The company's account was paused by the vendor: nothing is recorded until it's back on.
+// The station keeps its pairing and checks every 10 seconds, so it comes back on its own.
+function setPaused(v) {
+  if (!!S.saved.paused === v) return;
+  S.saved.paused = v; persist();
+  if (v) { Object.assign(S, { session: null, staff: null, pinEntry: null, lookup: null, summary: null }); if (S.screen !== "setup") S.screen = "idle"; }
+  render();
+  if (!v) { refreshData(true); flush(); }
+}
+function setOnline(v) { if (S.online !== v) { S.online = v; renderTop(); renderStatus(); } }
+
+function fmtTime(iso) {
+  if (!iso) return "";
+  const ms = typeof iso === "number" ? iso : Date.parse(iso);
+  const sameDay = JSON.stringify(localDay(ms, tz())) === JSON.stringify(localDay(clock.now(), tz()));
+  const t = new Intl.DateTimeFormat("en-US", { timeZone: tz(), hour: "numeric", minute: "2-digit" }).format(new Date(ms));
+  return sameDay ? t : new Intl.DateTimeFormat("en-US", { timeZone: tz(), weekday: "short" }).format(new Date(ms)) + " " + t;
+}
+const hoursOut = (iso) => (clock.now() - Date.parse(iso)) / 3600000;
+const empName = (id) => S.saved.cache?.employees.find((e) => e.id === id)?.name || demo.emp(id)?.name || "someone else";
+
+/* ---------- Branding ---------- */
+function applyBrand() {
+  const o = S.saved.config?.organization; const r = document.documentElement.style;
+  const brand = o?.primary_color || "#1F4E79";
+  r.setProperty("--brand", brand);
+  r.setProperty("--brand-accent", o?.accent_color || "#F2A900");
+  const [R, G, B] = [1, 3, 5].map((i) => parseInt(brand.slice(i, i + 2), 16) / 255).map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
+  r.setProperty("--brand-ink", 0.2126 * R + 0.7152 * G + 0.0722 * B > 0.4 ? "#111" : "#fff");
+}
+const initials = (n) => (n || "?").split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
+
+/* ---------- Rendering ---------- */
+function render() {
+  const sc = $("#screen");
+  sc.innerHTML = `<div class="topbar" id="top"></div><div class="main" id="main"></div><div class="statusbar" id="status"></div><div id="layer"></div>`;
+  renderTop(); renderMain(); renderStatus(); renderLayer();
+}
+function renderTop() {
+  const el = $("#top"); if (!el) return;
+  const cfg = S.saved.config; const o = cfg?.organization;
+  const now = clock.now();
+  const time = new Intl.DateTimeFormat("en-US", { timeZone: tz(), hour: "numeric", minute: "2-digit" }).format(new Date(now));
+  const date = new Intl.DateTimeFormat("en-US", { timeZone: tz(), weekday: "short", month: "short", day: "numeric" }).format(new Date(now));
+  const q = S.saved.queue.length;
+  el.innerHTML = `
+    <div class="logo" id="logo" title="Hold for station menu">${o?.logo_url ? `<img src="${esc(o.logo_url)}" alt="">` : esc(initials(o?.name || "Equipment Station"))}</div>
+    <div class="org"><div class="org-name">${esc(o?.name || "Equipment Station")}</div>
+      <div class="org-sub">${cfg ? esc(cfg.station.name) + (cfg.station.location ? " · " + esc(cfg.station.location) : "") : "Not set up yet"}</div></div>
+    ${cfg ? `<div class="net ${S.online ? "" : "off"}">${S.online ? "Online" : "Offline" + (q ? ` · ${q} saved` : "")}</div>` : ""}
+    <div class="clock"><b>${esc(time)}</b><span>${esc(date)}</span></div>`;
+  bindLongPress($("#logo"));
+}
+function renderStatus() {
+  const el = $("#status"); if (!el) return;
+  const q = S.saved.queue.length;
+  if (S.reader === false) { el.innerHTML = `<span><span class="q">NFC reader not responding. Check its cable inside the case, or restart the station.</span></span><span>${VERSION}</span>`; return; }
+  el.innerHTML = `<span>${q ? `<span class="q">${q} tap${q > 1 ? "s" : ""} saved on this station, will sync when the connection is back</span>` :
+    S.saved.lastSync ? "Everything synced · " + esc(fmtTime(S.saved.lastSync)) : ""}</span><span>${VERSION}</span>`;
+}
+/* Step each list down through its sizes until it fits; only scroll (by finger) if the tightest size still doesn't. */
+function fitLists() {
+  document.querySelectorAll("#screen [data-fit]").forEach((el) => {
+    const base = el.dataset.base ?? (el.dataset.base = el.className);
+    const levels = el.dataset.fit.split(",");
+    for (const lv of levels) {
+      el.className = (base + " " + lv).trim();
+      if (el.scrollHeight <= el.clientHeight + 1) return;
+    }
+    el.classList.add("more");
+    el.addEventListener("scroll", () => el.classList.toggle("more", el.scrollTop + el.clientHeight < el.scrollHeight - 2), { passive: true });
+  });
+}
+let fitQueued = false;
+function queueFit() { if (fitQueued) return; fitQueued = true; requestAnimationFrame(() => { fitQueued = false; fitLists(); }); }
+window.addEventListener("resize", queueFit);
+
+function renderMain() {
+  const el = $("#main"); if (!el) return;
+  queueFit();
+  if (S.screen === "setup") return renderSetup(el);
+  if (S.screen === "session" && S.session) return renderSession(el);
+  if (S.screen === "lookup" && S.lookup) return renderLookup(el);
+  if (S.screen === "summary" && S.summary) return renderSummary(el);
+  if (S.screen === "pin" && S.pinEntry) return renderPin(el);
+  if (S.screen === "staff" && S.staff) return renderStaff(el);
+  if (S.saved.paused) {
+    el.innerHTML = `<div class="idle paused">
+      <div class="rings" aria-hidden="true" style="opacity:.35">${BADGE_SVG}</div>
+      <div><h2>This station is paused</h2>
+        <p>${esc(S.saved.config?.organization?.name || "This company")}'s account is paused, so checkouts and returns aren't being recorded right now. Ask your manager.</p>
+        <p class="sup" style="font-size:1.8cqw;margin-top:1.4cqw">It starts working again on its own when the account is back on. ${esc(SUPPORT.name)}: ${esc(SUPPORT.phone)} · ${esc(SUPPORT.email)}</p></div>
+    </div>`; return;
+  }
+  el.innerHTML = `
+    <div class="idle">
+      <div class="rings" aria-hidden="true"><span></span><span></span><span></span>${BADGE_SVG}</div>
+      <div><h2>Tap your badge</h2>
+        <p>Then tap each item to check it out, or tap one you have to return it. Tap any ${esc(term().equipment.toLowerCase())} on its own to see who has it.</p>
+        <div class="steps"><span><b>1</b> Badge</span><span><b>2</b> ${esc(term().equipment)}</span><span><b>3</b> Done</span></div></div>
+    </div>`;
+}
+const BADGE_SVG = `<svg class="badge-ico" viewBox="0 0 64 64" fill="none" aria-hidden="true">
+  <rect x="14" y="6" width="36" height="52" rx="5" fill="var(--screen-card)" stroke="var(--brand)" stroke-width="3"/>
+  <rect x="25" y="12" width="14" height="3" rx="1.5" fill="var(--brand)"/>
+  <circle cx="32" cy="29" r="7" fill="var(--brand)" opacity=".85"/>
+  <rect x="21" y="41" width="22" height="3" rx="1.5" fill="var(--screen-muted)"/><rect x="24" y="47" width="16" height="3" rx="1.5" fill="var(--screen-muted)" opacity=".6"/>
+</svg>`;
+
+const LOOKUP_MS = 15000;
+const settings = () => S.saved.config?.organization?.settings || { allow_return_by_other: true, allow_checkout_while_held: false };
+function renderLookup(el) {
+  const L = S.lookup; const i = L.info; const st = i.equipment.status;
+  const holder = i.holder?.name; const first = holder ? holder.split(" ")[0] : "";
+  const pill = st === "lost" ? ["lost", "LOST"] : ["maintenance", "retired"].includes(st) ? ["maint", st === "retired" ? "RETIRED" : "IN MAINTENANCE"]
+             : holder ? ["out", "CHECKED OUT"] : ["in", "AVAILABLE"];
+  let who = "", meta = "", nextTitle, nextText, wantBadge = true;
+  if (st === "lost") {
+    who = holder ? `Reported lost while checked out to <b>${esc(holder)}</b>` : "Reported lost";
+    nextTitle = "Found it? Tap your badge"; nextText = "It will be returned to the room as found.";
+  } else if (["maintenance", "retired"].includes(st)) {
+    who = st === "retired" ? "This item has been taken out of service." : "Being repaired or checked.";
+    nextTitle = "Can't be checked out"; nextText = "Ask a supervisor if you need it."; wantBadge = false;
+  } else if (holder) {
+    who = `<b>${esc(holder)}</b> has it`;
+    const late = i.due_at && Date.parse(i.due_at) < clock.now();
+    meta = `Since ${esc(fmtTime(i.checked_out_at))}` + (i.due_at ? ` · <span class="${late ? "late" : ""}">${late ? "Overdue, was due" : "Due"} ${esc(fmtTime(i.due_at))}</span>` : "");
+    if (settings().allow_return_by_other) { nextTitle = "Returning it? Tap your badge"; nextText = `It goes back to the room. ${esc(first)} won't have it anymore.`; }
+    else { nextTitle = `${esc(first)} needs to return it`; nextText = `It has to be returned before anyone else can take it. ${esc(first)} can tap a badge to return it.`; }
+  } else {
+    who = "In the room and ready to go.";
+    nextTitle = "Tap your badge to check it out"; nextText = "Then tap any other items you need.";
+  }
+  const left = Math.max(0, LOOKUP_MS - (Date.now() - L.at));
+  el.innerHTML = `
+    <div class="lookup">
+      <div>
+        <div class="lk-cat">${esc(i.equipment.category || term().equipment)}</div>
+        <div class="lk-name">${esc(i.equipment.name)}</div>
+        <span class="pill ${pill[0]}">${pill[1]}</span>
+        <p class="lk-who">${who}</p>
+        ${meta ? `<p class="lk-meta">${meta}</p>` : ""}
+        ${L.cached ? `<p class="lk-meta">Offline: showing the last synced status.</p>` : ""}
+      </div>
+      <div class="lk-next">
+        ${wantBadge ? BADGE_SVG : ""}
+        <b>${nextTitle}</b><span>${nextText}</span>
+        <div class="lk-bar"><div class="timer" aria-hidden="true"><i id="lkBar" style="width:${(left / LOOKUP_MS) * 100}%"></i></div>
+          <button class="sbtn" id="lkCancel">Cancel</button></div>
+      </div>
+    </div>`;
+  $("#lkCancel").addEventListener("click", endLookup);
+}
+function endLookup() { S.lookup = null; if (S.screen === "lookup") { S.screen = "idle"; renderMain(); } }
+
+/* ================= First-time setup wizard: Wi-Fi → activation code → admin tag ================= */
+const FK = {
+  lower: ["1234567890", "qwertyuiop", "asdfghjkl", "zxcvbnm.-_"],
+  upper: ["1234567890", "QWERTYUIOP", "ASDFGHJKL", "ZXCVBNM.-_"],
+  sym:   ["1234567890", "!@#$%^&*()", "/\\:;'\"=+?", "<>[]{},~`|"],
+};
+function wizStart(msg) {
+  // Brand new box: welcome first. Re-setup after an unpair: straight to the code (or Wi-Fi if offline).
+  const first = !msg && !S.saved.everActivated;
+  S.wiz = { step: first ? "welcome" : device.online() ? "code" : "wifi", code: "", err: msg || "", busy: false, act: null, admin: null,
+            form: {}, field: null, added: { employees: 0, equipment: 0 }, toured: false, slide: 0 };
+  S.wifi = null; S.screen = "setup";
+  if (S.wiz.step === "wifi") wifiOpen("setup");
+}
+/* Power cut mid-setup: pick up where they left off instead of skipping steps. */
+function wizResume() {
+  S.wiz = { step: S.saved.setupStep, code: "", err: "", busy: false, act: { has_admin_fob: !!S.saved.setupHasAdmin }, admin: null,
+            form: {}, field: null, added: S.saved.setupAdded || { employees: 0, equipment: 0 }, toured: !!S.saved.setupToured, slide: 0 };
+  S.screen = "setup";
+}
+function saveProgress(step) {
+  S.saved.setupStep = step;
+  if (S.wiz) { S.saved.setupAdded = S.wiz.added; S.saved.setupToured = S.wiz.toured; }
+  persist();
+}
+function stepsHtml() {
+  const st = S.wiz.step;
+  const at = st === "welcome" ? -1 : ["wifi", "code", "admin", "quickstart"].indexOf(
+    st === "adminDetails" ? "admin" : st === "tour" ? "quickstart" : st === "done" ? "done" : st);
+  const steps = st === "welcome" ? "" : `<div class="wsteps">${[["wifi", "Wi-Fi"], ["code", "Activate"], ["admin", "Admin tag"], ["quickstart", "Get started"]].map(([k, l], i) =>
+    `<span class="${i < at || at === -2 || st === "done" ? "ws-done" : i === at ? "ws-on" : ""}"><i>${i < at || st === "done" ? "✓" : i + 1}</i>${l}</span>`).join("")}</div>`;
+  return `<div class="wtop">${steps || "<span></span>"}<button class="sbtn helpbtn" data-w="help">Need help?</button></div>`;
+}
+function renderSetup(el) {
+  const W = S.wiz; let body = "";
+  if (W.step === "wifi") body = `<div class="wbody"><div><h2>Connect to Wi-Fi</h2>
+      <p>The station needs a connection to set up. Pick the network it will use every day.</p>
+      <p>Using a network cable, or setting up Wi-Fi later? Skip this step.</p>
+      ${S.wifi?.sel ? `<button class="sbtn" data-w="back">Choose a different network</button>` : `<button class="sbtn" data-w="skip">Skip for now</button>`}
+      <div class="err" role="alert">${esc(S.wifi?.err || "")}</div></div>${wifiPanelHtml()}</div>`;
+  else if (W.step === "code") body = `<div class="wbody"><div><h2>Enter the activation code</h2>
+      <p>It's on your welcome email or in the dashboard under Stations. It sets this station up with your company's name, logo and colors.</p>
+      <div class="codebox" aria-label="Activation code">${Array.from({ length: 8 }, (_, i) =>
+        `${i === 4 ? "<span>–</span>" : ""}<b class="${i === W.code.length ? "cur" : ""}">${esc(W.code[i] || "")}</b>`).join("")}</div>
+      <div class="err" role="alert">${esc(W.err)}</div>
+      <div class="wlinks"><button class="go" data-w="activate" ${W.busy || W.code.length < 8 ? "disabled" : ""} style="padding:.9cqw 3cqw;font-size:2.6cqw">${W.busy ? "Activating…" : "Activate"}</button>
+        ${!device.online() ? "" : `<button class="sbtn" data-w="wifi">Wi-Fi settings</button>`}</div>
+      ${usingCustomServer() ? `<p style="margin-top:1cqw;font-size:1.6cqw">Server: <b>${esc(S.saved.url)}</b>
+        <button class="sbtn" data-w="hosted" style="margin-left:.6cqw">Use hosted server</button></p>` : ""}</div>
+      <div class="kb">${KB_ROWS.map((row) => [...row.replace("-", "")].map((c) => `<button class="key" data-ck="${c}">${c}</button>`).join("")).join("")}
+        <button class="key w3" data-ck="DEL">⌫</button></div></div>`;
+  else if (W.step === "admin") {
+    const o = S.saved.config.organization;
+    body = `<div class="wbody center"><div>
+        <h2>Tap the admin tag</h2>
+        ${!W.err && W.adminAt && Date.now() - W.adminAt > 20000
+          ? `<div class="hint" style="margin:0 0 1cqw">Nothing happening? Hold the tag flat on the reader spot and keep it still for 2 seconds.</div>`
+          : `<p>Hold the admin tag from the box flat against the reader for a second. It becomes the key to the Admin menu, protected by a PIN.</p>`}
+        <div class="err" role="alert">${esc(W.err)}</div>
+        ${W.act?.has_admin_fob ? `<button class="sbtn" data-w="skipAdmin">Skip, we already have an admin fob</button>` : ""}</div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:1.4cqw">
+        <div class="brandcard" style="margin:0;align-self:stretch"><div class="logo">${o.logo_url ? `<img src="${esc(o.logo_url)}" alt="">` : esc(initials(o.name))}</div>
+          <div><b>${esc(o.name)}</b><span>${esc(S.saved.config.station.name)} is activated</span></div></div>
+        <div class="rings" aria-hidden="true" style="max-width:17cqw"><span></span><span></span><span></span>${BADGE_SVG}</div></div></div>`;
+  } else if (W.step === "adminDetails") body = wizFormHtml();
+  else if (W.step === "welcome") body = `<div class="wbody center"><div>
+      <h2>Welcome to your equipment station</h2>
+      <p>Setup takes about 5 minutes. The screen will walk you through it.</p>
+      <p>Have these ready, then tap Let's start.</p>
+      <button class="go" data-w="start" style="padding:1cqw 5cqw;font-size:2.8cqw;margin-top:.6cqw">Let's start</button></div>
+    <ul class="need">
+      <li><span class="n">1</span><div><b>Your Wi-Fi name and password</b><span>Or plug in a network cable</span></div></li>
+      <li><span class="n">2</span><div><b>Your activation code</b><span>In your welcome email, like K7QM-3XPA</span></div></li>
+      <li><span class="n">3</span><div><b>The admin tag</b><span>In the box, marked ADMIN</span></div></li>
+    </ul></div>`;
+  else if (W.step === "quickstart") {
+    const a = W.added, canOpen = !!W.adminPin;
+    const row = (k, did, n, title, sub, arrow) => `<button class="qs-row ${did ? "did" : ""}" data-w="${k}">
+        <span class="n">${did ? "✓" : n}</span><div><b>${title}</b><span>${sub}</span></div><span class="go-arrow">${arrow}</span></button>`;
+    body = `<div class="wbody"><div>
+        <h2>Let's get your team set up</h2>
+        <p>${canOpen ? "Do these now, or later from the Admin menu." : "Tap your admin fob to add people and equipment, or do it later from the Admin menu."}</p>
+        <div class="wlinks" style="margin-top:1.4cqw"><button class="go" data-w="toDone" style="padding:.9cqw 3.4cqw;font-size:2.6cqw">${a.employees || a.equipment ? "Finish setup" : "I'll do this later"}</button></div></div>
+      <div class="qs">
+        ${row("qsEmp", a.employees, 1, "Add your employees", a.employees ? `${a.employees} added. Tap to add more.` : "Name, then tap their badge", canOpen ? "Add ›" : "Tap fob")}
+        ${row("qsEq", a.equipment, 2, "Add your equipment", a.equipment ? `${a.equipment} added. Tap to add more.` : "Pick a type, then tap its tag", canOpen ? "Add ›" : "Tap fob")}
+        ${row("qsTour", W.toured, 3, "See how checkout works", "Three quick screens", "Show ›")}
+      </div></div>`;
+  } else if (W.step === "tour") {
+    const slides = [
+      ["1", "Tap your badge", "Everyone taps their own badge on the reader to start. Their name appears on the screen."],
+      ["2", "Tap each item", "New items are checked out to them. Items they already have are returned. The screen lists everything as they go."],
+      ["3", "Tap Done", "They see what they took and when it's due. Tapping an item without a badge shows who has it."],
+    ];
+    const [n, h, p] = slides[W.slide];
+    body = `<div class="tour"><div class="tour-art"><span class="big">${n}</span></div><div>
+        <h2>${h}</h2><p>${p}</p>
+        <div class="dotsrow">${slides.map((_, i) => `<i class="${i === W.slide ? "f" : ""}"></i>`).join("")}</div>
+        <div class="wlinks">${W.slide ? `<button class="sbtn" data-w="tourBack">Back</button>` : ""}
+          <button class="go" data-w="tourNext" style="padding:.8cqw 3.4cqw;font-size:2.4cqw">${W.slide < slides.length - 1 ? "Next" : "Got it"}</button></div></div></div>`;
+  } else if (W.step === "done") {
+    const o = S.saved.config.organization;
+    body = `<div class="wbody center"><div>
+        <h2>You're ready</h2>
+        <p>Employees tap their badge, then their ${esc(term().equipment.toLowerCase())}.${W.admin ? ` ${esc(W.admin.name)}'s admin fob opens the Admin menu (tap it, then Admin menu).` : " An admin fob opens the Admin menu."}</p>
+        <button class="go" data-w="finish" style="padding:1cqw 4cqw;font-size:2.8cqw;white-space:nowrap">Start using the station</button></div>
+      <div class="rings" aria-hidden="true"><span></span><span></span><span></span>${BADGE_SVG}</div></div>`;
+  }
+  el.innerHTML = `<div class="wiz">${stepsHtml()}${body}</div>`;
+  if (W.step === "wifi" && !S.wifi?.nets && !S.wifi?.scanning) wifiScan();
+}
+
+/* --- Wi-Fi picker (used by setup and by the Admin menu) --- */
+function wifiOpen(ctx) { S.wifi = { ctx, nets: null, scanning: false, sel: null, pass: "", show: false, mode: "lower", err: "", busy: false }; }
+async function wifiScan() {
+  const F = S.wifi; F.scanning = true; F.err = ""; rerender();
+  try { F.nets = await device.scan(); } catch { F.nets = []; F.err = "Couldn't look for networks. Restart the station if this keeps happening."; }
+  F.scanning = false; rerender();
+}
+function rerender() { if (S.screen === "setup") renderMain(); else if (S.staff) renderMain(); }
+function bars(n) { return `<span class="bars" aria-label="Signal ${n} of 4">${[1, 2, 3, 4].map((i) => `<b class="${i <= n ? "f" : ""}"></b>`).join("")}</span>`; }
+function wifiPanelHtml() {
+  const F = S.wifi;
+  if (!F) return "";
+  if (F.sel) {
+    const shown = F.show ? F.pass : "•".repeat(F.pass.length);
+    return `<div><div class="pw"><span class="v">${esc(shown)}</span><button class="sbtn" data-w="show">${F.show ? "Hide" : "Show"}</button></div>
+      ${fullKbHtml()}
+      <div class="wlinks"><button class="go" data-w="connect" ${F.busy ? "disabled" : ""} style="flex:1;padding:.8cqw;font-size:2.4cqw">${F.busy ? "Connecting…" : `Connect to ${esc(F.sel.ssid)}`}</button></div></div>`;
+  }
+  if (F.scanning || !F.nets) return `<div class="nets"><p>Looking for networks…</p></div>`;
+  return `<div class="nets fit" data-fit=",dense">${F.nets.map((n) =>
+      `<button class="net-row ${n.connected ? "on" : ""}" data-net="${esc(n.ssid)}">${bars(n.signal)}<span>${esc(n.ssid)}<small>${n.connected ? " · Connected" : ""}</small></span>
+        <span class="lock">${n.secure ? "Password" : "Open"}</span></button>`).join("") || `<p>No networks found.</p>`}
+    <button class="sbtn" data-w="rescan">Search again</button></div>`;
+}
+function fullKbHtml() {
+  const m = S.wifi?.mode || S.kbMode || "lower";
+  const rows = FK[m].map((row) => `<div class="r">${[...row].map((c) => `<button class="key" data-fk="${esc(c)}">${esc(c)}</button>`).join("")}</div>`).join("");
+  return `<div class="fkb">${rows}<div class="r">
+    <button class="key w15" data-fk="SHIFT">${m === "upper" ? "abc" : m === "sym" ? "abc" : "⇧ ABC"}</button>
+    <button class="key w15" data-fk="SYM">#+=</button><button class="key w4" data-fk="SPACE">space</button><button class="key w15" data-fk="DEL">⌫</button></div></div>`;
+}
+function fkPress(k) {
+  const T = S.kbTarget; if (!T) return;
+  const setMode = (m) => { if (S.wifi && T.obj === S.wifi) S.wifi.mode = m; else S.kbMode = m; };
+  const mode = (S.wifi && T.obj === S.wifi ? S.wifi.mode : S.kbMode) || "lower";
+  let v = T.obj[T.key] || "";
+  if (k === "SHIFT") setMode(mode === "lower" ? "upper" : "lower");
+  else if (k === "SYM") setMode(mode === "sym" ? "lower" : "sym");
+  else if (k === "DEL") v = v.slice(0, -1);
+  else if (v.length < (T.max || 120)) { v += k === "SPACE" ? " " : k; if (mode === "upper") setMode("lower"); }
+  T.obj[T.key] = v; if (S.wifi) S.wifi.err = ""; if (S.staff) S.staff.at = Date.now(); rerender();
+}
+async function wifiConnect() {
+  const F = S.wifi; F.busy = true; F.err = ""; rerender();
+  let r; try { r = await device.connect(F.sel.ssid, F.pass); } catch { r = { ok: false, error: "helper" }; }
+  F.busy = false;
+  if (r.ok) return wifiDone(`Connected to ${F.sel.ssid}.`);
+  F.err = r.error === "wrong_password" ? "That password didn't work. Check it and try again." : "Couldn't connect. Move closer to the access point or try another network.";
+  F.pass = ""; rerender();
+}
+function wifiDone(text) {
+  const ctx = S.wifi.ctx; S.wifi = null; S.kbTarget = null;
+  if (ctx === "setup") { S.wiz.step = "code"; S.wiz.err = ""; beep("ok"); renderMain(); }
+  else { S.staff.view = "station"; setMsg("ok", text); renderMain(); flush().then(() => refreshData()); }
+}
+
+/* --- Activation --- */
+async function activate() {
+  const W = S.wiz; const code = normCode(W.code);
+  if (code.length < 8) { W.err = "Enter all 8 characters, like K7QM-3XPA."; return renderMain(); }
+  W.busy = true; W.err = ""; renderMain();
+  try {
+    const r = await call("activate_station", { p_activation_code: code, p_software_version: VERSION });
+    if (!r.ok) W.err = r.error === "invalid_or_expired_code" ? "That code didn't work. Check it, or ask for a new one. Codes expire after 7 days."
+      : r.error === "account_paused" ? `This company's account is paused. Contact ${SUPPORT.name}: ${SUPPORT.phone}.`
+      : r.error === "bad_response" || /^\d+$/.test(String(r.error)) ? `${S.saved.url} isn't answering like a station server. Check the address, or use the hosted server.`
+      : "Activation failed: " + r.error;
+    else {
+      Object.assign(S.saved, { deviceKey: r.device_key, config: { station: r.station, organization: r.organization, categories: r.categories }, queue: [], syncIssues: [],
+                               everActivated: true, setupDone: false, setupHasAdmin: !!r.has_admin_fob });
+      applyBrand(); renderTop();
+      await refreshData();
+      W.act = r; W.step = "admin"; W.adminAt = Date.now(); W.code = ""; saveProgress("admin"); beep("ok");
+    }
+  } catch { W.err = "Couldn't reach the server. Check the Wi-Fi or network cable."; }
+  W.busy = false; if (S.screen === "setup") renderMain();
+}
+async function claimAdminTag(uid) {
+  const W = S.wiz; if (W.busy) return; W.busy = true; W.err = "";
+  let r; try { r = await call("station_claim_admin_tag", { p_device_key: S.saved.deviceKey, p_tag_uid: uid }); } catch { r = { ok: false, error: "offline" }; }
+  W.busy = false;
+  if (r.ok && r.existing) {
+    if (r.has_pin) { W.admin = r.employee; W.step = "quickstart"; saveProgress("quickstart"); beep("ok"); await refreshData(); return renderMain(); }
+    W.form = { uid, pinOnly: true, name: r.employee.name }; W.field = "pin"; W.step = "adminDetails"; beep("ok"); return renderMain();
+  }
+  if (r.ok) { W.form = { uid }; W.field = "first"; W.step = "adminDetails"; beep("ok"); return renderMain(); }
+  beep("bad");
+  W.err = r.error === "badge_in_use" ? `That's ${r.used_by}'s badge. Tap the admin tag from the box.`
+        : r.error === "tag_is_equipment" ? `That's the tag on ${r.used_by}. Tap the admin tag from the box.`
+        : r.error === "setup_window_closed" ? "Setup timed out. Add admins from the dashboard, or ask for a new activation code."
+        : r.error === "offline" ? "This needs a connection. Check the Wi-Fi." : "That didn't work: " + r.error;
+  renderMain();
+}
+function wizFields() {
+  const f = S.wiz.form;
+  return [...(f.pinOnly ? [] : [{ k: "first", label: "First name", type: "text" }, { k: "last", label: "Last name", type: "text" }]),
+          { k: "pin", label: "PIN", type: "pin" }, { k: "pin2", label: "PIN again", type: "pin" }];
+}
+function wizFormHtml() {
+  const W = S.wiz, f = W.form; const fields = wizFields(); const fd = fields.find((x) => x.k === W.field) || fields[0]; W.field = fd.k;
+  const list = fields.map((x) => `<button class="fld ${x.k === W.field ? "on" : ""}" data-wf="${x.k}"><small>${esc(x.label)}</small>
+      <span class="v">${esc(x.type === "pin" ? "•".repeat((f[x.k] || "").length) : f[x.k] || "")}</span></button>`).join("");
+  const right = fd.type === "pin"
+    ? `<div class="kb num">${["1","2","3","4","5","6","7","8","9","DEL","0","NEXT"].map((k) => `<button class="key ${k === "NEXT" ? "go2" : ""}" data-wk="${k}">${k === "DEL" ? "⌫" : k === "NEXT" ? "OK" : k}</button>`).join("")}</div>`
+    : `<div class="kb">${KB_ROWS.map((row) => [...row].map((c) => `<button class="key" data-wk="${c}">${c}</button>`).join("")).join("")}
+        <button class="key w3" data-wk="DEL">⌫</button><button class="key w5" data-wk="SPACE">space</button><button class="key w2 go2" data-wk="NEXT">Next</button></div>`;
+  return `<div class="form"><div class="fields">
+      <p style="margin:0 0 .4cqw;font-size:1.9cqw;color:var(--screen-muted)">${f.pinOnly ? `Set a PIN for ${esc(f.name)}'s admin fob.` : `Admin tag ${esc(fmtUid(f.uid))}: who will use it?`} PINs are 4 to 8 digits.</p>
+      ${list}<div class="err" role="alert">${esc(W.err)}</div>
+      <div class="form-actions"><button class="go" data-w="saveAdmin" ${W.busy ? "disabled" : ""}>${W.busy ? "Saving…" : "Save admin fob"}</button></div></div>${right}</div>`;
+}
+function wkPress(k) {
+  const W = S.wiz, fields = wizFields(), fd = fields.find((x) => x.k === W.field); if (!fd) return;
+  let v = W.form[fd.k] || "";
+  if (k === "NEXT") { const i = fields.indexOf(fd); if (fields[i + 1]) W.field = fields[i + 1].k; else return saveAdmin(); }
+  else if (k === "DEL") v = v.slice(0, -1);
+  else if (k === "SPACE") { if (fd.type === "text" && v && !v.endsWith(" ")) v += " "; }
+  else if (fd.type === "pin") { if (/^[0-9]$/.test(k) && v.length < 8) v += k; }
+  else if (v.length < 40) v += v && !v.endsWith(" ") && !v.endsWith("-") ? k.toLowerCase() : k;
+  W.form[fd.k] = v; W.err = ""; renderMain();
+}
+async function saveAdmin() {
+  const W = S.wiz, f = W.form;
+  if (!f.pinOnly && !(f.first || "").trim()) { W.field = "first"; W.err = "Enter a first name."; return renderMain(); }
+  if (!validPin(f.pin)) { W.field = "pin"; W.err = "Choose a PIN of 4 to 8 digits."; return renderMain(); }
+  if (f.pin !== f.pin2) { W.field = "pin2"; W.form.pin2 = ""; W.err = "The two PINs don't match. Enter it again."; return renderMain(); }
+  W.busy = true; renderMain();
+  let r; try { r = await call("station_claim_admin_tag", { p_device_key: S.saved.deviceKey, p_tag_uid: f.uid,
+            p_first_name: f.pinOnly ? null : f.first, p_last_name: f.pinOnly ? null : (f.last || ""), p_pin: f.pin }); }
+  catch { r = { ok: false, error: "offline" }; }
+  W.busy = false;
+  if (r.ok) { W.admin = r.employee; W.adminUid = f.uid; W.adminPin = f.pin; W.step = "quickstart"; W.err = ""; saveProgress("quickstart"); beep("ok"); await refreshData(); return renderMain(); }
+  beep("bad"); W.err = r.error === "offline" ? "This needs a connection. Check the Wi-Fi." : r.error === "setup_window_closed" ? "Setup timed out. Add admins from the dashboard." : "That didn't work: " + r.error;
+  renderMain();
+}
+function finishSetup() {
+  S.saved.setupDone = true; S.saved.setupStep = null; persist();
+  S.wiz = null; S.screen = "idle"; render();
+  toast("Station ready", `${S.saved.config.station.name} is connected to ${S.saved.config.organization.name}.`, "ok");
+}
+function unpair(msg) {
+  Object.assign(S.saved, { deviceKey: null, config: null, cache: null, queue: [], lastSync: null, syncIssues: [] });
+  persist(); S.session = null; S.staff = null; S.overlay = null; applyBrand(); wizStart(msg); render();
+}
+
+/* One click handler for the setup wizard and the Wi-Fi picker. */
+document.addEventListener("click", (e) => {
+  const t = e.target.closest("#screen [data-w], #screen [data-net], #screen [data-fk], #screen [data-ck], #screen [data-wk], #screen [data-wf]");
+  if (!t) return;
+  if (t.dataset.fk) return fkPress(t.dataset.fk);
+  if (t.dataset.net) {
+    const n = S.wifi.nets.find((x) => x.ssid === t.dataset.net);
+    S.wifi.sel = n; S.wifi.pass = ""; S.wifi.err = ""; S.kbTarget = { obj: S.wifi, key: "pass", max: 63 };
+    if (!n.secure) return wifiConnect();
+    return rerender();
+  }
+  if (t.dataset.ck) { const W = S.wiz; if (t.dataset.ck === "DEL") W.code = W.code.slice(0, -1); else if (W.code.length < 8) W.code += t.dataset.ck; W.err = ""; return renderMain(); }
+  if (t.dataset.wk) return wkPress(t.dataset.wk);
+  if (t.dataset.wf) { S.wiz.field = t.dataset.wf; return renderMain(); }
+  const a = t.dataset.w;
+  if (a === "skip") { device.skip(); S.wifi = null; S.wiz.step = "code"; return renderMain(); }
+  if (a === "back") { S.wifi.sel = null; S.wifi.err = ""; S.kbTarget = null; return rerender(); }
+  if (a === "rescan") return wifiScan();
+  if (a === "show") { S.wifi.show = !S.wifi.show; return rerender(); }
+  if (a === "connect") return wifiConnect();
+  if (a === "wifi") { wifiOpen("setup"); S.wiz.step = "wifi"; return renderMain(); }
+  if (a === "activate") return activate();
+  if (a === "hosted") { S.saved.mode = "demo"; S.saved.url = ""; S.saved.anonKey = ""; persist(); S.wiz.err = ""; return renderMain(); }
+  if (a === "skipAdmin") { S.wiz.step = "quickstart"; saveProgress("quickstart"); return renderMain(); }
+  if (a === "start") { S.wiz.step = device.online() ? "code" : "wifi"; if (S.wiz.step === "wifi") wifiOpen("setup"); return renderMain(); }
+  if (a === "help") { S.overlay = "help"; return renderLayer(); }
+  if (a === "toDone") { S.wiz.step = "done"; return renderMain(); }
+  if (a === "qsTour") { S.wiz.step = "tour"; S.wiz.slide = 0; return renderMain(); }
+  if (a === "tourBack") { S.wiz.slide--; return renderMain(); }
+  if (a === "tourNext") { if (S.wiz.slide < 2) S.wiz.slide++; else { S.wiz.toured = true; S.wiz.step = "quickstart"; saveProgress("quickstart"); } return renderMain(); }
+  if (a === "qsEmp" || a === "qsEq") {
+    const W = S.wiz, view = a === "qsEmp" ? "addEmp" : "addEq";
+    if (!W.adminPin) { toast("Tap your admin fob", "Then enter its PIN. The Admin menu opens right here.", "warn"); return; }
+    const emp = S.saved.cache?.employees.find((x) => x.badge_uid === normUid(W.adminUid));
+    return staffLogin(emp || { badge_uid: normUid(W.adminUid), name: W.admin.name, role: "admin", has_pin: true }, W.adminPin, { fromSetup: true, view });
+  }
+  if (a === "saveAdmin") return saveAdmin();
+  if (a === "finish") return finishSetup();
+});
+
+function myItems() {
+  if (!S.session || !S.saved.cache) return [];
+  return S.saved.cache.equipment.filter((q) => q.current_employee_id === S.session.emp.id)
+    .sort((a, b) => Date.parse(a.checked_out_at || 0) - Date.parse(b.checked_out_at || 0));
+}
+function renderSession(el) {
+  const s = S.session; const mine = myItems(); const now = clock.now();
+  // One row per item, showing the latest thing that happened to it (newest first).
+  const seen = new Set(); const shown = s.results.filter((r) => { const k = r.item || Math.random(); if (seen.has(k)) return false; seen.add(k); return true; });
+  const first = s.emp.name.split(" ")[0];
+  const items = mine.map((q) => {
+    let chip = "", sub;
+    const overdue = q.due_at && Date.parse(q.due_at) < now;
+    const ext = q.checked_out_at && q.extended_alert_hours && hoursOut(q.checked_out_at) > q.extended_alert_hours;
+    if (overdue) chip = `<span class="chip over">OVERDUE</span>`;
+    else if (ext) chip = `<span class="chip ext">OUT ${Math.floor(hoursOut(q.checked_out_at))} H</span>`;
+    sub = q.due_at ? (overdue ? "Was due " : "Due ") + fmtTime(q.due_at) : q.checked_out_at ? "Out since " + fmtTime(q.checked_out_at) : "Saved offline";
+    return `<li><b>${esc(q.name)}</b>${chip}<small>${esc(sub)}</small></li>`;
+  }).join("");
+  const left = Math.max(0, SESSION_MS - (Date.now() - s.last));
+  el.innerHTML = `
+    <div class="session-wrap">
+      <div class="session">
+        <div class="mine">
+          <p class="hello">Hi, ${esc(first)}</p>
+          <h3>You have ${mine.length || "nothing"}${mine.length ? " item" + (mine.length > 1 ? "s" : "") : " checked out"}</h3>
+          ${mine.length ? `<ul class="fit" data-fit=",dense,tight,tight cols2">${items}</ul>` : `<div class="empty">Tap an item to check it out.</div>`}
+        </div>
+        <div class="feed ${shown.length > 2 ? "compact" : ""}">
+          <p class="prompt">Tap ${esc(term().equipment.toLowerCase())} now<small>New items are checked out to you. Items you have are returned.</small></p>
+          ${tallyHtml(shown)}
+          <div class="results fit" data-fit=",dense,dense tight,dense tight cols2,dense tight cols2 cols3">${shown.map((r, i) => (i === 0 ? resultHtml(r) : rowHtml(r))).join("")}</div>
+        </div>
+      </div>
+      <div class="sessbar">
+        <div class="timer" aria-hidden="true"><i id="timerBar" style="width:${(left / SESSION_MS) * 100}%"></i></div>
+        <span id="timerTxt">Signs out in ${Math.ceil(left / 1000)}s</span>
+        ${s.emp.role === "manager" || s.emp.role === "admin" ? `<button class="sbtn" id="staffBtn">Admin menu</button>` : ""}
+        <button class="done" id="doneBtn">Done</button>
+      </div>
+    </div>`;
+  $("#doneBtn").addEventListener("click", () => endSession());
+  $("#staffBtn")?.addEventListener("click", () => beginStaff(s.emp));   // manager/admin fobs only, PIN next
+}
+function rowHtml(r) {
+  const ico = { ok: "✓", ret: "↩", warn: "!", bad: "×", wait: "…" }[r.tone];
+  return `<div class="rrow ${r.tone}"><span class="dot" aria-hidden="true">${ico}</span><span class="what">${esc(r.title)}</span>
+    <span class="nm">${esc(r.item || "")}</span><span class="det">${esc(r.detail || "")}</span></div>`;
+}
+function tallyHtml(results) {
+  const n = (k) => results.filter((r) => r.kind === k).length;
+  const parts = [[n("out"), "checked out"], [n("in"), "returned"], [n("refused"), "not done"]].filter(([c]) => c).map(([c, w]) => `${c} ${w}`);
+  return parts.length ? `<div class="tally">This visit: ${parts.join(" · ")}</div>` : "";
+}
+function resultHtml(r) {
+  const ico = { ok: "✓", ret: "↩", warn: "!", bad: "×", wait: "…" }[r.tone];
+  return `<div class="result ${r.tone}"><div class="ico" aria-hidden="true">${ico}</div>
+    <div class="t">${esc(r.title)} <em>${esc(r.item || "")}</em></div>
+    ${r.lines.map((l) => `<div class="l ${l.note ? "note" : ""}">${esc(l.text)}</div>`).join("")}</div>`;
+}
+function renderLayer() {
+  const el = $("#layer"); if (!el) return;
+  let html = "";
+  if (S.toast) html += `<div class="toast ${S.toast.tone}" role="status"><b>${esc(S.toast.title)}</b>${S.toast.text ? `<span>${esc(S.toast.text)}</span>` : ""}</div>`;
+  if (S.overlay) html += overlayHtml();
+  el.innerHTML = html;
+  if (S.overlay) bindOverlay();
+}
+function overlayHtml() {
+  const c = S.saved.config; const q = S.saved.queue.length;
+  if (S.overlay === "help") {
+    const st = S.wiz?.step || "welcome";
+    const tips = {
+      welcome: ["Setup has 4 short steps: Wi-Fi, activation code, admin tag, and adding your team.", "You can stop and come back. The station remembers where you were, even if it's unplugged."],
+      wifi: ["Pick the network your staff devices use, not a guest network with a sign-in page.", "Don't see it? Tap Search again, or move the station closer to the access point.", "Passwords are case-sensitive. Tap Show to check what you typed.", "Using a network cable? Plug it in and tap Skip for now."],
+      code: ["The code is in your welcome email, like K7QM-3XPA. Letters and numbers only.", "Codes work once and expire after 7 days. Ask for a new one if it's expired.", "\"Couldn't reach the server\" means no connection. Tap Wi-Fi settings to check."],
+      admin: ["The admin tag is in the box, marked ADMIN.", "Hold it flat on the reader spot for 2 seconds. The station beeps when it reads it.", "Lost the tag? Use any new, unregistered badge, or contact support."],
+      adminDetails: ["Enter the name of the person who'll manage the station.", "The PIN protects the Admin menu, so a lost tag isn't enough to get in. Pick something easy to remember but not 1234."],
+      quickstart: ["You can do all of this later: tap the admin fob, then Admin menu.", "Adding someone: type their name, then tap the badge you're giving them.", "Adding equipment: pick a type, then tap the tag you've stuck on it."],
+      tour: ["Employees only ever tap: badge first, then their equipment."],
+      done: ["Tap the admin fob, then Admin menu, any time you need to add people or equipment."],
+    }[st] || [];
+    return `<div class="overlay"><div class="sheet help"><h2>Need help?</h2><ul>${tips.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>
+      <p class="sup">Still stuck? ${esc(SUPPORT.name)}: ${esc(SUPPORT.phone)} · ${esc(SUPPORT.email)} · ${esc(SUPPORT.web)}</p>
+      <div class="row"><button class="sbtn primary" data-a="close">Got it</button></div></div></div>`;
+  }
+  if (S.overlay === "confirmUnpair") return `<div class="overlay"><div class="sheet">
+      <h2>Unpair this station?</h2>
+      <p style="margin:0;font-size:2cqw">It will need a new activation code from the dashboard to work again.${q ? ` <b>${q} saved tap${q > 1 ? "s" : ""} haven't synced and will be lost.</b>` : ""}</p>
+      <div class="row"><button class="sbtn danger" data-a="unpair">Unpair</button><button class="sbtn" data-a="menu">Cancel</button></div></div></div>`;
+  return `<div class="overlay"><div class="sheet">
+      <h2>Station menu</h2>
+      <dl>
+        <dt>Station</dt><dd>${esc(c ? c.station.name : "Not set up")}</dd>
+        <dt>Server</dt><dd>${S.saved.mode === "demo" ? "Demo server" : esc(S.saved.url || "Not set")}</dd>
+        <dt>Connection</dt><dd>${S.online ? "Online" : "Offline"}</dd>
+        <dt>Last synced</dt><dd>${S.saved.lastSync ? esc(fmtTime(S.saved.lastSync)) : "Never"}</dd>
+        <dt>Waiting to sync</dt><dd>${q} tap${q === 1 ? "" : "s"}</dd>
+        ${S.saved.syncIssues.length ? `<dt>Sync problems</dt><dd>${S.saved.syncIssues.slice(-2).map(esc).join("; ")}</dd>` : ""}
+      </dl>
+      ${c && S.staff?.emp.role !== "admin" ? `<p style="margin:0;font-size:1.6cqw;color:var(--screen-muted)">Unpairing needs an admin fob.</p>` : ""}
+      <div class="row">
+        ${c ? `<button class="sbtn primary" data-a="sync">Sync now</button><button class="sbtn" data-a="refresh">Refresh data</button>${S.staff?.emp.role === "admin" ? `<button class="sbtn danger" data-a="confirmUnpair">Unpair…</button>` : ""}` : ""}
+        <button class="sbtn" data-a="close">Close</button>
+      </div></div></div>`;
+}
+function bindOverlay() {
+  document.querySelectorAll("#layer [data-a]").forEach((b) => b.addEventListener("click", async () => {
+    const a = b.dataset.a;
+    if (a === "close") S.overlay = null;
+    else if (a === "menu") S.overlay = "menu";
+    else if (a === "confirmUnpair") S.overlay = "confirmUnpair";
+    else if (a === "unpair") { unpair("Station unpaired. Enter a new activation code."); return; }
+    else if (a === "sync") { await flush(); await refreshData(); }
+    else if (a === "refresh") { await refreshData(true); }
+    renderLayer();
+  }));
+}
+
+/* ---------- Toasts ---------- */
+let toastTimer;
+function toast(title, text, tone = "bad", ms = 3800) {
+  S.toast = { title, text, tone }; renderLayer();
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => { S.toast = null; renderLayer(); }, ms);
+}
+
+/* ---------- Sounds ---------- */
+let audio;
+function beep(kind) {
+  if (!$("#sound").checked) return;
+  try {
+    audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+    const notes = kind === "ok" ? [[880, 0], [1320, 0.09]] : kind === "ret" ? [[1046, 0], [784, 0.09]] : [[180, 0], [150, 0.12]];
+    notes.forEach(([f, t]) => {
+      const o = audio.createOscillator(), g = audio.createGain();
+      o.type = kind === "bad" ? "square" : "sine"; o.frequency.value = f;
+      g.gain.setValueAtTime(0.0001, audio.currentTime + t);
+      g.gain.exponentialRampToValueAtTime(0.18, audio.currentTime + t + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, audio.currentTime + t + (kind === "bad" ? 0.22 : 0.12));
+      o.connect(g).connect(audio.destination); o.start(audio.currentTime + t); o.stop(audio.currentTime + t + 0.25);
+    });
+  } catch {}
+}
+
+/* ---------- Data sync ---------- */
+async function refreshData(withConfig) {
+  if (!S.saved.deviceKey || S.saved.queue.length) return;
+  try {
+    if (withConfig) {
+      const c = await call("station_config", { p_device_key: S.saved.deviceKey });
+      if (c.ok) { S.saved.config = { station: c.station, organization: c.organization, categories: c.categories }; applyBrand(); renderTop(); }
+      else if (c.error === "station_not_authorized") return lockedOut();
+    }
+    const r = await call("station_sync_cache", { p_device_key: S.saved.deviceKey });
+    if (r.ok) { S.saved.cache = { employees: r.employees, equipment: r.equipment }; S.saved.lastSync = clock.now(); persist(); renderStatus(); if (S.screen === "session") renderMain(); }
+    else if (r.error === "station_not_authorized") lockedOut();
+  } catch {}
+}
+function lockedOut() { unpair("This station was disconnected from the dashboard. Enter a new activation code to use it again."); }
+
+async function flush() {
+  if (S.flushing || !S.saved.queue.length || !S.saved.deviceKey) return;
+  S.flushing = true; let sent = 0;
+  try {
+    while (S.saved.queue.length) {
+      const ev = S.saved.queue[0];
+      let r;
+      try { r = await call("station_tap", ev); } catch { break; }
+      if (!r.ok && r.error === "station_not_authorized") { S.flushing = false; return lockedOut(); }
+      if (!r.ok && r.error === "account_paused") break;      // keep the saved taps until the account is back on
+      if (!r.ok) S.saved.syncIssues.push(`${r.error === "unknown_badge" ? "Badge" : "Tag"} ${fmtUid(normUid(r.error === "unknown_badge" ? ev.p_badge_uid : ev.p_equipment_uid))} not registered`);
+      S.saved.queue.shift(); sent++; persist(); renderTop(); renderStatus();
+    }
+  } finally { S.flushing = false; }
+  if (sent && !S.saved.queue.length) { await refreshData(); toast("Synced", `${sent} saved tap${sent > 1 ? "s" : ""} sent to the server.`, "ok", 2600); }
+}
+
+/* ---------- Taps ---------- */
+const SESSION_MS = 20000;
+function handleTag(raw) {
+  const uid = normUid(raw); if (uid.length < 4) return;
+  flashReader();
+  if (S.overlay) return;
+  if (S.saved.paused && S.screen !== "setup") { beep("bad"); return toast("Station paused", "Nothing is being recorded right now. Ask your manager."); }
+  if (S.screen === "setup") {
+    if (S.wiz?.step === "admin") return claimAdminTag(uid);
+    if (S.wiz?.step === "quickstart") {
+      const staffEmp = (S.saved.cache?.employees || []).find((x) => x.badge_uid === uid && (x.role === "admin" || x.role === "manager"));
+      if (staffEmp) return beginStaff(staffEmp, { fromSetup: true });
+    }
+    toast("Finish setup first", "Follow the steps on the screen to connect this station."); return beep("bad");
+  }
+  if (S.screen === "summary") { S.summary = null; S.screen = "idle"; }
+  if (S.staff) {
+    S.staff.at = Date.now();
+    if (S.staff.capture) return handleCapture(uid);
+    if (uid === S.staff.emp.badge_uid) return;
+    beep("bad"); return toast("Finish in the admin menu first", "Tap Exit when you're done.", "warn");
+  }
+  if (S.screen === "pin") { if (S.pinEntry && uid === S.pinEntry.emp.badge_uid) return; S.pinEntry = null; S.screen = "idle"; }
+  const cache = S.saved.cache || { employees: [], equipment: [] };
+  const emp = cache.employees.find((e) => e.badge_uid === uid);
+  if (emp) {
+    // Badge right after looking up an item: act on that item.
+    const pend = S.lookup && Date.now() - S.lookup.at < LOOKUP_MS && !["maintenance", "retired"].includes(S.lookup.info.equipment.status) ? S.lookup.uid : null;
+    S.lookup = null;
+    startSession(emp);
+    if (pend) tapItem(pend);
+    return;
+  }
+  if (!S.session) return lookupItem(uid);
+  S.session.last = Date.now();
+  tapItem(uid);
+}
+async function lookupItem(uid) {
+  const cache = S.saved.cache;
+  const item = cache.equipment.find((q) => q.nfc_uid === uid);
+  let info = null, cached = false;
+  try {
+    const r = await call("station_item_status", { p_device_key: S.saved.deviceKey, p_equipment_uid: uid });
+    if (r.ok) info = r; else if (r.error === "station_not_authorized") return lockedOut();
+  } catch {}
+  if (!info && item) {  // offline: use the last synced lists
+    const h = item.current_employee_id;
+    info = { equipment: { id: item.id, name: item.name, status: item.status,
+             category: S.saved.config?.categories?.find((c) => c.id === item.category_id)?.name },
+             holder: h ? { id: h, name: empName(h) } : null, checked_out_at: item.checked_out_at, due_at: item.due_at };
+    cached = true;
+  }
+  if (!info) { beep("bad"); return toast("Not recognized", `ID ${fmtUid(uid)} isn't a registered badge or ${term().equipment.toLowerCase()} tag. Ask a supervisor to add it.`); }
+  S.lookup = { uid, info, cached, at: Date.now() }; S.toast = null;
+  S.screen = "lookup"; beep(info.equipment.status === "lost" ? "bad" : "ok"); render();
+}
+function startSession(emp) {
+  if (S.session && S.session.emp.id === emp.id) { S.session.last = Date.now(); if (S.screen !== "session") { S.screen = "session"; render(); } return; }
+  S.session = { emp, results: [], last: Date.now() };
+  S.screen = "session"; S.toast = null; beep("ok"); render();
+}
+const SUMMARY_MS = 9000;
+function endSession() {
+  const s = S.session; S.session = null;
+  // One line per item: what finally happened to it this visit.
+  const final = new Map(), refused = new Map();
+  if (s) [...s.results].reverse().forEach((r) => {
+    if (r.kind === "out" || r.kind === "in") { final.set(r.item, r); refused.delete(r.item); }
+    else if (r.kind === "refused" && !final.has(r.item)) refused.set(r.item, r);
+  });
+  if (s && (final.size || refused.size)) {
+    S.session = null;
+    const have = S.saved.cache ? S.saved.cache.equipment.filter((q) => q.current_employee_id === s.emp.id).length : 0;
+    S.summary = { emp: s.emp, outs: [...final.values()].filter((r) => r.kind === "out"), ins: [...final.values()].filter((r) => r.kind === "in"),
+                  refused: [...refused.values()], have, at: Date.now() };
+    S.screen = "summary";
+  } else S.screen = "idle";
+  render();
+}
+function endSummary() { S.summary = null; if (S.screen === "summary") { S.screen = "idle"; render(); } }
+function renderSummary(el) {
+  const m = S.summary; const first = m.emp.name.split(" ")[0];
+  const li = (r, sub, hl) => `<li><b>${esc(r.item)}</b>${sub ? `<span class="${hl ? "hl" : ""}">${esc(sub)}</span>` : ""}</li>`;
+  const col = (cls, title, list, fn) => list.length ? `<div class="sum-col ${cls}"><h3>${title} (${list.length})</h3><ul class="fit" data-fit=",dense,tight">${list.map(fn).join("")}</ul></div>` : "";
+  const left = Math.max(0, SUMMARY_MS - (Date.now() - m.at));
+  const anyOffline = [...m.outs, ...m.ins].some((r) => r.offline);
+  el.innerHTML = `
+    <div class="summary">
+      <div class="sum-head"><div class="sum-check" aria-hidden="true">✓</div>
+        <div><h2>All set, ${esc(first)}</h2>
+        <p>${anyOffline ? "Saved on this station. It syncs when the connection is back." : "Recorded under your name."}</p></div></div>
+      <div class="sum-cols">
+        ${col("outs", "Checked out", m.outs, (r) => li(r, r.dueText))}
+        ${col("ins", "Returned", m.ins, (r) => li(r, r.forName ? `For ${r.forName}` : r.found ? "Was lost, now found" : "Back in the room", !!r.forName || r.found))}
+        ${col("refused", "Not done", m.refused, (r) => li(r, r.detail, true))}
+      </div>
+      <div class="sum-foot"><span>You have ${m.have || "no"} item${m.have === 1 ? "" : "s"} checked out</span>
+        <div class="timer" aria-hidden="true"><i id="sumBar" style="width:${(left / SUMMARY_MS) * 100}%"></i></div>
+        <button class="done" id="sumOk">OK</button></div>
+    </div>`;
+  $("#sumOk").addEventListener("click", endSummary);
+}
+
+async function tapItem(uid) {
+  const s = S.session; const cache = S.saved.cache;
+  const item = cache.equipment.find((q) => q.nfc_uid === uid);
+  const prevHolder = item?.current_employee_id || null;
+  const ev = { p_device_key: S.saved.deviceKey, p_client_txn_id: uuid(), p_badge_uid: s.emp.badge_uid,
+               p_equipment_uid: uid, p_occurred_at: new Date(clock.now()).toISOString() };
+  const pending = { tone: "wait", title: "Checking", item: item?.name || fmtUid(uid), lines: [] };
+  addResult(pending);
+  let r = null;
+  if (!S.saved.queue.length) { try { r = await call("station_tap", ev); } catch { r = null; } }
+  if (r && !r.ok && r.error === "station_not_authorized") return lockedOut();
+  if (r) return replaceResult(pending, onlineResult(r, item, prevHolder, uid));
+  // Offline: apply the same rules using the last synced lists, save the tap, sync later.
+  if (!item) { beep("bad"); return replaceResult(pending, { tone: "bad", kind: "refused", detail: "not registered", title: "Tag not registered", item: fmtUid(uid), lines: [{ text: "This tag isn't linked to any equipment. Give it to a supervisor." }] }); }
+  const set = settings(); const other = prevHolder && prevHolder !== s.emp.id; const lost = item.status === "lost";
+  const action = lost || prevHolder === s.emp.id || (other && set.allow_return_by_other) ? "checkin" : "checkout";
+  const block = action === "checkout" && ["maintenance", "retired"].includes(item.status) ? "item_unavailable"
+              : action === "checkout" && other && !set.allow_checkout_while_held ? "checked_out_to_other" : null;
+  if (block) return replaceResult(pending, onlineResult({ ok: false, error: block, equipment: { id: item.id, name: item.name, status: item.status },
+                                  holder: other ? { id: prevHolder, name: empName(prevHolder) } : null }, item, prevHolder, uid));
+  Object.assign(ev, { p_action: action, p_queued: true });
+  S.saved.queue.push(ev);
+  Object.assign(item, action === "checkout" ? { current_employee_id: s.emp.id, checked_out_at: ev.p_occurred_at, due_at: null, status: "checked_out" }
+                                            : { current_employee_id: null, checked_out_at: null, due_at: null, status: ["checked_out", "lost"].includes(item.status) ? "available" : item.status });
+  persist(); renderTop(); renderStatus(); beep(action === "checkout" ? "ok" : "ret");
+  const lines = [{ text: "Saved on this station. It syncs when the connection is back." }];
+  if (lost) lines.unshift({ text: "It was listed as lost. Thanks for bringing it back.", note: true });
+  else if (other) lines.unshift({ text: `Returned for ${empName(prevHolder)}. Tap it again to check it out.`, note: true });
+  const forName = action === "checkin" && other && !lost ? empName(prevHolder) : null;
+  replaceResult(pending, { tone: action === "checkout" ? "ok" : lost || other ? "warn" : "ret", title: action === "checkout" ? "Checked out" : lost ? "Found" : "Returned", item: item.name, lines,
+    kind: action === "checkout" ? "out" : "in", offline: true, forName, found: lost,
+    dueText: action === "checkout" ? "Due time shows once synced" : "", detail: forName ? "for " + forName : lost ? "found" : "saved offline" });
+}
+function onlineResult(r, item, prevHolder, uid) {
+  if (!r.ok) {
+    beep("bad");
+    if (r.error === "unknown_equipment") return { tone: "bad", kind: "refused", detail: "not registered", title: "Tag not registered", item: fmtUid(uid), lines: [{ text: "This tag isn't linked to any equipment. Give it to a supervisor." }] };
+    if (r.error === "unknown_badge") { setTimeout(endSession, 2500); return { tone: "bad", title: "Badge no longer active", item: "", lines: [{ text: "Ask a supervisor to check your badge." }] }; }
+    const nm = r.equipment?.name || item?.name || "";
+    if (r.error === "checked_out_to_other") return { tone: "bad", kind: "refused", detail: `${r.holder?.name || "someone else"} has it`, title: "Can't check out", item: nm,
+      lines: [{ text: `Checked out to ${r.holder?.name || "someone else"}.`, note: true }, { text: "It has to be returned before anyone else can take it." }] };
+    if (r.error === "not_your_item") return { tone: "bad", kind: "refused", detail: `${r.holder?.name || "someone else"} has it`, title: "Can't return", item: nm,
+      lines: [{ text: `Checked out to ${r.holder?.name || "someone else"}.`, note: true }, { text: "Only they can return it. Ask a supervisor if they're not here." }] };
+    if (r.error === "item_lost") return { tone: "bad", kind: "refused", detail: "listed as lost", title: "Listed as lost", item: nm, lines: [{ text: "Tap it again to return it as found." }] };
+    if (r.error === "item_unavailable") return { tone: "bad", kind: "refused", detail: r.equipment?.status === "retired" ? "out of service" : "in maintenance", title: "Can't check out", item: nm,
+      lines: [{ text: r.equipment?.status === "retired" ? "It's been taken out of service." : "It's in maintenance.", note: true }, { text: "Ask a supervisor if you need it." }] };
+    return { tone: "bad", kind: "refused", detail: "try again", title: "Didn't go through", item: item?.name || "", lines: [{ text: "Try again. Error: " + r.error }] };
+  }
+  const cached = S.saved.cache.equipment.find((q) => q.id === r.equipment.id);
+  const now = new Date(clock.now()).toISOString();
+  if (cached && !r.flags.includes("late_sync")) Object.assign(cached, r.action === "checkout"
+    ? { current_employee_id: r.employee.id, checked_out_at: now, due_at: r.due_at, status: cached.status === "available" ? "checked_out" : cached.status }
+    : { current_employee_id: null, checked_out_at: null, due_at: null, status: ["checked_out", "lost"].includes(cached.status) ? "available" : cached.status });
+  persist();
+  const f = new Set(r.flags || []); const lines = []; let tone, detail = "", dueText = "";
+  const forName = f.has("returned_by_other") ? (r.previous_holder?.name || empName(prevHolder)) : null;
+  if (r.action === "checkout") {
+    tone = "ok";
+    if (r.due_rule === "shift_end" && r.due_at) { dueText = `Due at end of shift, ${fmtTime(r.due_at)}`; detail = "due " + fmtTime(r.due_at); lines.push({ text: `Due at the end of your shift, ${fmtTime(r.due_at)}` }); }
+    else if (r.due_at) { dueText = `Due back by ${fmtTime(r.due_at)}`; detail = "due " + fmtTime(r.due_at); lines.push({ text: dueText }); }
+    else { dueText = "No time limit"; detail = "no limit"; lines.push({ text: "No time limit" }); }
+    if (f.has("no_active_shift")) lines.push({ text: "You're not on a scheduled shift, so the standard time limit applies." });
+    if (f.has("conflict_already_held")) { tone = "warn"; lines.unshift({ text: `Was still checked out to ${empName(prevHolder)}. It's yours now.`, note: true }); }
+    if ([...f].some((x) => x.startsWith("item_"))) { tone = "warn"; lines.unshift({ text: "This item is marked for maintenance. Let a supervisor know.", note: true }); }
+    beep(tone === "warn" ? "bad" : "ok");
+  } else {
+    tone = "ret"; lines.push({ text: "Thanks, it's back in the room." });
+    if (f.has("found_lost_item")) { tone = "ok"; detail = "found"; lines.splice(0, lines.length, { text: "It was listed as lost. Thanks for bringing it back!", note: true }, { text: "It's back in the room and available." }); }
+    if (forName) { tone = "warn"; detail = "for " + forName; lines.splice(0, lines.length, { text: `Returned for ${forName}.`, note: true }, { text: "Tap it again if you want to check it out." }); }
+    if (f.has("returned_after_extended")) { tone = "warn"; lines.unshift({ text: "It was out longer than allowed. Your supervisor can see this.", note: true }); }
+    beep("ret");
+  }
+  if (r.action === "checkout" && f.has("conflict_already_held")) detail = "was with " + empName(prevHolder);
+  return { tone, kind: r.action === "checkout" ? "out" : "in", detail, dueText, forName, found: f.has("found_lost_item"),
+           title: r.action === "checkout" ? "Checked out" : f.has("found_lost_item") ? "Found" : "Returned", item: r.equipment.name, lines };
+}
+function addResult(res) { S.session.results.unshift(res); renderMain(); }
+function replaceResult(old, res) {
+  if (!S.session) return; const i = S.session.results.indexOf(old);
+  if (i >= 0) S.session.results[i] = res; else addResult(res);
+  S.session.last = Date.now(); renderMain();
+}
+
+/* ================= Staff mode: manager and admin fobs ================= */
+const STAFF_MS = 90000;
+const ROLE = { employee: "Employee", manager: "Manager", admin: "Admin" };
+const KB_ROWS = ["1234567890", "QWERTYUIOP", "ASDFGHJKL-", "ZXCVBNM"];
+
+function beginStaff(emp, opts) {
+  S.session = null; S.lookup = null; S.summary = null; S.toast = null;
+  if (emp.has_pin) { S.pinEntry = { emp, digits: "", error: "", at: Date.now(), opts }; S.screen = "pin"; beep("ok"); return render(); }
+  staffLogin(emp, null, opts);
+}
+function leavePin() { const back = S.pinEntry?.opts?.fromSetup; S.pinEntry = null; S.screen = back ? "setup" : "idle"; render(); }
+function renderPin(el) {
+  const P = S.pinEntry;
+  el.innerHTML = `
+    <div class="pinscreen">
+      <div><p class="tally" style="margin-bottom:1cqw">${esc(ROLE[P.emp.role] || "Staff")} fob</p>
+        <h2>${esc(P.emp.name)}</h2><p>Enter your PIN to open the admin menu.</p>
+        <div class="dots" aria-label="${P.digits.length} digits entered">${Array.from({ length: Math.max(4, P.digits.length) }, (_, i) => `<i class="${i < P.digits.length ? "f" : ""}"></i>`).join("")}</div>
+        <div class="err" role="alert">${esc(P.error)}</div>
+        <button class="sbtn" data-act="pinCancel">Cancel</button></div>
+      <div class="kb num">${["1","2","3","4","5","6","7","8","9","DEL","0","OK"].map((k) =>
+        `<button class="key ${k === "OK" ? "go2" : ""}" data-pin="${k}">${k === "DEL" ? "⌫" : k}</button>`).join("")}</div>
+    </div>`;
+}
+function pinPress(k) {
+  const P = S.pinEntry; if (!P) return; P.at = Date.now();
+  if (k === "DEL") P.digits = P.digits.slice(0, -1);
+  else if (k === "OK") { if (P.digits.length >= 4) return staffLogin(P.emp, P.digits, P.opts); P.error = "PINs are 4 to 8 digits."; }
+  else if (P.digits.length < 8) { P.digits += k; P.error = ""; }
+  renderMain();
+}
+async function staffLogin(emp, pin, opts = {}) {
+  let r; try { r = await call("station_staff_login", { p_device_key: S.saved.deviceKey, p_badge_uid: emp.badge_uid, p_pin: pin }); } catch { r = { ok: false, error: "offline" }; }
+  if (r.ok) {
+    S.pinEntry = null;
+    S.staff = { emp: { ...emp, ...r.staff, badge_uid: emp.badge_uid }, pin, data: { categories: r.categories, employees: r.employees, untagged: r.untagged || [] },
+                view: "menu", form: {}, field: null, capture: null, msg: null, busy: false, at: Date.now(), fromSetup: !!opts.fromSetup };
+    if (opts.view === "addEmp") Object.assign(S.staff, { view: "addEmp", form: { role: "employee" }, field: "first" });
+    if (opts.view === "addEq") Object.assign(S.staff, { view: "addEq", form: {}, field: "category" });
+    if (opts.fromSetup && S.wiz && pin) { S.wiz.adminPin = pin; S.wiz.adminUid = emp.badge_uid; S.wiz.admin = S.wiz.admin || { name: r.staff.name }; }
+    S.screen = "staff"; beep("ok"); return render();
+  }
+  if (r.error === "wrong_pin" && S.pinEntry) { beep("bad"); S.pinEntry.digits = ""; S.pinEntry.error = `Wrong PIN. ${r.tries_left} ${r.tries_left === 1 ? "try" : "tries"} left.`; return renderMain(); }
+  if (r.error === "pin_required") { S.pinEntry = { emp: { ...emp, has_pin: true }, digits: "", error: "", at: Date.now() }; S.screen = "pin"; return render(); }
+  if (r.error === "station_not_authorized") return lockedOut();
+  S.pinEntry = null;
+  if (r.error === "not_staff" && !opts.fromSetup) return startSession(emp);
+  S.screen = opts.fromSetup ? "setup" : "idle"; render(); beep("bad");
+  if (r.error === "pin_locked") toast("Fob locked", "Too many wrong PINs. Try again in 15 minutes, or ask an admin.");
+  else if (r.error === "offline") toast("The admin menu needs a connection", "Check the Wi-Fi and try again.");
+  else toast("Couldn't open the admin menu", r.error);
+}
+function exitStaff() {
+  const back = S.staff?.fromSetup && S.wiz;   // opened from the setup checklist: go back to it
+  S.staff = null; S.pinEntry = null; S.wifi = null; S.kbTarget = null; S.screen = back ? "setup" : "idle";
+  if (back) saveProgress("quickstart");
+  render();
+}
+async function reloadStaffData() {
+  try {
+    const r = await call("station_staff_login", { p_device_key: S.saved.deviceKey, p_badge_uid: S.staff.emp.badge_uid, p_pin: S.staff.pin });
+    if (r.ok && S.staff) S.staff.data = { categories: r.categories, employees: r.employees, untagged: r.untagged || [] };
+  } catch {}
+  refreshData();
+}
+async function staffCall(fn, extra) {
+  const T = S.staff; T.busy = true; renderMain();
+  let r; try { r = await call(fn, { p_device_key: S.saved.deviceKey, p_badge_uid: T.emp.badge_uid, p_pin: T.pin || null, ...extra }); }
+  catch { r = { ok: false, error: "offline" }; }
+  if (S.staff) S.staff.busy = false;
+  if (!r.ok && ["pin_locked", "wrong_pin", "pin_required", "not_staff"].includes(r.error)) { exitStaff(); toast("Admin menu closed", "Your fob or PIN changed. Tap your fob again."); }
+  if (!r.ok && r.error === "station_not_authorized") lockedOut();
+  return r;
+}
+function staffError(r) {
+  return ({
+    badge_in_use: `That badge already belongs to ${r.used_by}. Tap a different one.`,
+    tag_is_equipment: `That's the tag on ${r.used_by}. Tap a blank badge.`,
+    tag_in_use: `That tag is already on ${r.used_by}. Tap a different one.`,
+    tag_is_badge: `That's ${r.used_by}'s badge. Tap an equipment tag.`,
+    number_in_use: `Employee # is already used by ${r.used_by}.`,
+    admin_only: "Only an admin fob can do that.",
+    pin_needed: "Enter a PIN of 4 to 8 digits.",
+    name_required: "Enter a name first.",
+    unknown_equipment: "That tag isn't on any equipment.",
+    unknown_category: "Pick a category.",
+    asset_tag_in_use: "That asset tag is already used.",
+    cant_change_self: "You can't change your own role or turn off your own fob.",
+    offline: "This needs a connection. Check the Wi-Fi and try again.",
+  })[r.error] || "That didn't work: " + r.error;
+}
+const setMsg = (tone, text) => { S.staff.msg = text ? { tone, text } : null; };
+
+/* ----- Forms with the on-screen keyboard ----- */
+function formFields() {
+  const T = S.staff, f = T.form, admin = T.emp.role === "admin";
+  if (T.view === "addEmp") return [
+    { k: "first", label: "First name", type: "text" }, { k: "last", label: "Last name", type: "text" },
+    { k: "number", label: "Employee #", type: "code", optional: true },
+    ...(admin ? [{ k: "role", label: "Role", type: "role" }] : []),
+    ...(f.role && f.role !== "employee" ? [{ k: "pin", label: "Fob PIN", type: "pin" }] : []),
+  ];
+  if (T.view === "addEq") return [
+    { k: "category", label: "Category", type: "category" }, { k: "name", label: "Name", type: "text" },
+    { k: "asset", label: "Asset tag", type: "code", optional: true },
+  ];
+  if (T.view === "setPin") return [{ k: "pin", label: "New PIN", type: "pin" }];
+  return [];
+}
+function fieldValue(fd) {
+  const v = S.staff.form[fd.k];
+  if (fd.type === "role") return ROLE[v || "employee"];
+  if (fd.type === "category") return S.staff.data.categories.find((c) => c.id === v)?.name || "";
+  if (fd.type === "pin") return "•".repeat((v || "").length);
+  return v || "";
+}
+function nextName(cat) {
+  const nums = cat.names.map((n) => (n.match(/(\d+)\s*$/) || [])[1]).filter(Boolean).map(Number);
+  const n = (nums.length ? Math.max(...nums) : 0) + 1;
+  return `${cat.name} ${String(n).padStart(2, "0")}`;
+}
+function kbPress(k) {
+  const T = S.staff; if (!T || !T.field) return; T.at = Date.now();
+  const fields = formFields(); const fd = fields.find((x) => x.k === T.field); if (!fd) return;
+  if ((fd.type === "role" || fd.type === "category") && k !== "NEXT") return;
+  let v = T.form[fd.k] || "";
+  if (k === "NEXT") {
+    const i = fields.indexOf(fd); const nx = fields.slice(i + 1).find((x) => !["role", "category"].includes(x.type));
+    if (nx) T.field = nx.k; else return staffPrimary();
+  } else if (k === "DEL") v = v.slice(0, -1);
+  else if (k === "SPACE") { if (fd.type === "text" && v && !v.endsWith(" ")) v += " "; }
+  else if (fd.type === "pin") { if (/^[0-9]$/.test(k) && v.length < 8) v += k; }
+  else if (v.length < 40) v += fd.type === "text" && v && !v.endsWith(" ") && !v.endsWith("-") ? k.toLowerCase() : k;
+  T.form[fd.k] = v; setMsg(); renderMain();
+}
+function staffPrimary() {
+  const T = S.staff, f = T.form;
+  if (T.view === "addEmp") {
+    if (!(f.first || "").trim()) { T.field = "first"; setMsg("bad", "Enter their first name."); return renderMain(); }
+    if (f.role && f.role !== "employee" && !validPin(f.pin)) { T.field = "pin"; setMsg("bad", "Give their fob a PIN of 4 to 8 digits."); return renderMain(); }
+    T.capture = { kind: "newBadge" }; T.field = null; setMsg(); return renderMain();
+  }
+  if (T.view === "addEq") {
+    if (!f.category) { T.field = "category"; setMsg("bad", "Pick a category."); return renderMain(); }
+    if (!(f.name || "").trim()) { T.field = "name"; setMsg("bad", "Enter a name."); return renderMain(); }
+    T.capture = { kind: "newTag" }; T.field = null; setMsg(); return renderMain();
+  }
+  if (T.view === "setPin") {
+    if (!validPin(f.pin)) { setMsg("bad", "PINs are 4 to 8 digits."); return renderMain(); }
+    return updatePerson({ p_new_pin: f.pin, p_role: f.role || null }, f.role && f.role !== T.person.role
+      ? `${T.person.name} is now ${f.role === "admin" ? "an admin" : "a manager"}. Their fob opens this menu with the new PIN.`
+      : `New PIN set for ${T.person.name}.`);
+  }
+}
+
+/* ----- Screens ----- */
+function renderStaff(el) {
+  const T = S.staff; const admin = T.emp.role === "admin";
+  const head = `<div class="st-head"><span class="st-role">${esc(ROLE[T.emp.role])}</span><h2>${esc(T.emp.name)}</h2>
+    ${T.view !== "menu" ? `<button class="sbtn" data-act="menu">Menu</button>` : ""}<button class="sbtn ${T.fromSetup ? "primary" : ""}" data-act="exit">${T.fromSetup ? "Back to setup" : "Exit"}</button></div>`;
+  const msg = T.msg ? `<div class="st-msg ${T.msg.tone}" role="status">${esc(T.msg.text)}</div>` : "";
+  let body = "";
+  if (T.capture) body = captureHtml();
+  else if (T.view === "menu") body = `<div class="tiles">
+      <button class="tile" data-act="addEmp"><b>Add employee</b><span>Name, then tap their new badge</span></button>
+      <button class="tile" data-act="addEq"><b>Add ${esc(term().equipment.toLowerCase())}</b><span>Name, then tap its new tag</span></button>
+      <button class="tile" data-act="item"><b>${esc(term().equipment)} status</b><span>Lost, maintenance, new tag</span></button>
+      <button class="tile" data-act="people"><b>Employees</b><span>${admin ? "Roles, PINs, badges, deactivate" : "Replace a lost badge"}</span></button>
+      <button class="tile" data-act="station"><b>Station</b><span>${admin ? "Wi-Fi, server, sync, unpair" : "Sync and connection"}</span></button>
+      <button class="tile primary" data-act="checkout"><b>Check out ${esc(term().equipment.toLowerCase())}</b><span>Use your fob like a badge</span></button>
+    </div>`;
+  else if (["addEmp", "addEq", "setPin"].includes(T.view)) body = formHtml();
+  else if (T.view === "item") body = itemHtml();
+  else if (T.view === "people") body = `<div class="people fit" data-fit=",dense,dense tight">${T.data.employees.map((e) =>
+      `<button class="person ${e.active ? "" : "off"}" data-pick="person:${e.id}"><b>${esc(e.name)}</b>
+        <small>${e.role !== "employee" ? `<span class="r">${ROLE[e.role]}</span> · ` : ""}${e.active ? (e.has_badge ? esc(e.employee_number || "Badge set") : "No badge") : "Inactive"}</small></button>`).join("")}</div>`;
+  else if (T.view === "person") body = personHtml();
+  else if (T.view === "station") body = stationSettingsHtml();
+  else if (T.view === "untagged") body = `<p class="prompt" style="font-size:2.6cqw;margin:0">Pick the item, then tap its new tag<small>Added on the dashboard without a tag.</small></p>
+      <div class="people fit" data-fit=",dense,dense tight">${(T.data.untagged || []).map((q) =>
+        `<button class="person" data-pick="tagq:${q.id}"><b>${esc(q.name)}</b><small>${esc(q.category || "")}</small></button>`).join("")}</div>`;
+  else if (T.view === "wifi") body = `<div class="wbody"><div><h2 style="font-size:4cqw">Wi-Fi</h2>
+      <p>Pick the network this station should use.</p>${S.wifi?.sel ? `<button class="sbtn" data-w="back">Choose a different network</button>` : `<button class="sbtn" data-act="station">Back</button>`}
+      <div class="err" role="alert">${esc(S.wifi?.err || "")}</div></div>${wifiPanelHtml()}</div>`;
+  else if (T.view === "server") body = serverHtml();
+  else if (T.view === "done") body = `<div class="donebox"><div class="sum-check" aria-hidden="true">✓</div><h3>${esc(T.done.title)}</h3><p>${esc(T.done.text)}</p>
+      <div class="row">${T.done.again ? `<button class="sbtn primary" data-act="${T.done.again}">${esc(T.done.againLabel)}</button>` : ""}<button class="sbtn" data-act="menu">Back to menu</button></div></div>`;
+  el.innerHTML = `<div class="staff">${head}<div class="st-body">${msg}${body}</div></div>`;
+}
+function formHtml() {
+  const T = S.staff; const fields = formFields(); const fd = fields.find((x) => x.k === T.field) || fields[0];
+  if (!T.field) T.field = fd.k;
+  const list = fields.map((x) => {
+    const v = fieldValue(x);
+    return `<button class="fld ${x.k === T.field ? "on" : ""} ${x.type === "role" || x.type === "category" ? "choice" : ""}" data-field="${x.k}"><small>${esc(x.label)}</small>
+      <span class="v">${v ? esc(v) : x.optional ? "<i>Optional</i>" : ""}</span></button>`;
+  }).join("");
+  const action = T.view === "addEmp" ? "Next: tap their badge" : T.view === "addEq" ? "Next: tap its tag" : "Save PIN";
+  let right;
+  if (fd.type === "role") right = `<div class="picks" style="grid-template-columns:1fr">${["employee", "manager", "admin"].map((r) =>
+      `<button class="pickb ${(T.form.role || "employee") === r ? "on" : ""}" data-pick="role:${r}">${ROLE[r]}<small>${
+        { employee: "Checks equipment in and out", manager: "Fob opens this menu: add people and equipment", admin: "Everything, plus roles and PINs" }[r]}</small></button>`).join("")}</div>`;
+  else if (fd.type === "category") right = `<div class="picks">${T.data.categories.map((c) =>
+      `<button class="pickb ${T.form.category === c.id ? "on" : ""}" data-pick="cat:${c.id}">${esc(c.name)}<small>${c.names.length} now</small></button>`).join("")}</div>`;
+  else if (fd.type === "pin") right = `<div class="kb num">${["1","2","3","4","5","6","7","8","9","DEL","0","NEXT"].map((k) =>
+      `<button class="key ${k === "NEXT" ? "go2" : ""}" data-k="${k}">${k === "DEL" ? "⌫" : k === "NEXT" ? "OK" : k}</button>`).join("")}</div>`;
+  else right = `<div class="kb">${KB_ROWS.map((row) => [...row].map((c) => `<button class="key" data-k="${c}">${c}</button>`).join("")).join("")}
+      <button class="key w3" data-k="DEL">⌫</button><button class="key w5" data-k="SPACE">space</button><button class="key w2 go2" data-k="NEXT">Next</button></div>`;
+  return `<div class="form"><div class="fields">${list}<div class="form-actions">
+      <button class="go" data-act="primary" ${T.busy ? "disabled" : ""}>${esc(action)}</button></div></div>${right}</div>`;
+}
+function captureHtml() {
+  const T = S.staff, c = T.capture, f = T.form;
+  const cfg = {
+    newBadge: ["Tap their new badge", `Registering ${[f.first, f.last].filter(Boolean).join(" ")}${f.role && f.role !== "employee" ? " as " + ROLE[f.role].toLowerCase() : ""}.`, "Use a badge that isn't registered yet."],
+    newTag: ["Tap the new tag", `Registering ${f.name}.`, "Stick the tag on the item first, then tap it here."],
+    item: ["Tap the item", "See its status, mark it lost or in maintenance, or give it a new tag.", ""],
+    replaceBadge: ["Tap the replacement badge", `For ${T.person?.name}. Their old badge stops working.`, ""],
+    replaceTag: ["Tap the replacement tag", `For ${T.item?.equipment.name}. The old tag stops working.`, ""],
+  }[c.kind];
+  return `<div class="capture"><div class="rings" aria-hidden="true"><span></span><span></span><span></span>${BADGE_SVG}</div>
+    <div><h3>${esc(cfg[0])}</h3><p>${esc(cfg[1])}</p>${cfg[2] ? `<p>${esc(cfg[2])}</p>` : ""}
+      ${T.busy ? `<p><b>Saving…</b></p>` : ""}<div class="row" style="display:flex;gap:1cqw;flex-wrap:wrap"><button class="sbtn" data-act="cancelCapture">Cancel</button>
+        ${c.kind === "item" && T.data.untagged?.length ? `<button class="sbtn primary" data-act="untagged">Tag an item that has no tag (${T.data.untagged.length})</button>` : ""}</div></div></div>`;
+}
+async function handleCapture(uid) {
+  const T = S.staff, c = T.capture, f = T.form;
+  if (T.busy) return;
+  if (uid === T.emp.badge_uid) { setMsg("bad", "That's your own fob. Tap the other one."); return renderMain(); }
+  let r;
+  if (c.kind === "newBadge") {
+    r = await staffCall("station_add_employee", { p_first_name: f.first, p_last_name: f.last || "", p_employee_number: f.number || null,
+          p_new_badge_uid: uid, p_role: f.role || "employee", p_new_pin: f.role && f.role !== "employee" ? f.pin : null });
+    if (!S.staff) return;
+    if (r.ok) return staffDone(`Added ${r.employee.name}`, `Badge ${fmtUid(uid)} is registered${f.role && f.role !== "employee" ? ` as a ${f.role} fob` : ""}. They can use it right away.`, "addEmp", "Add another employee");
+  } else if (c.kind === "newTag") {
+    r = await staffCall("station_add_equipment", { p_name: f.name, p_category_id: f.category, p_tag_uid: uid, p_asset_tag: f.asset || null });
+    if (!S.staff) return;
+    if (r.ok) return staffDone(`Added ${r.equipment.name}`, `Tag ${fmtUid(uid)} is registered. It can be checked out right away.`, "addEqAgain", "Add another");
+  } else if (c.kind === "item") {
+    T.busy = true; renderMain();
+    try { r = await call("station_item_status", { p_device_key: S.saved.deviceKey, p_equipment_uid: uid }); } catch { r = { ok: false, error: "offline" }; }
+    T.busy = false;
+    if (r.ok) { T.item = r; T.itemUid = uid; T.capture = null; T.view = "item"; setMsg(); beep("ok"); return renderMain(); }
+  } else if (c.kind === "replaceBadge" || c.kind === "replaceTag") {
+    const emp = c.kind === "replaceBadge";
+    r = await staffCall("station_replace_uid", { p_kind: emp ? "employee" : "equipment", p_target: emp ? T.person.id : T.item.equipment.id, p_new_uid: uid });
+    if (!S.staff) return;
+    if (r.ok) {
+      if (!emp) T.itemUid = uid;
+      return staffDone(emp ? `New badge for ${T.person.name}` : `New tag on ${T.item.equipment.name}`,
+        `${emp ? "Badge" : "Tag"} ${fmtUid(uid)} is registered. The old one no longer works.`, null, null);
+    }
+  }
+  beep("bad"); setMsg("bad", staffError(r)); renderMain();
+}
+function staffDone(title, text, again, againLabel) {
+  const T = S.staff;
+  if (S.wiz && T.view === "addEmp") S.wiz.added.employees++;
+  if (S.wiz && T.view === "addEq") S.wiz.added.equipment++; T.capture = null; T.view = "done"; T.done = { title, text, again, againLabel }; setMsg(); beep("ok"); renderMain(); reloadStaffData();
+}
+function itemHtml() {
+  const T = S.staff, admin = T.emp.role === "admin";
+  if (!T.item) return captureHtml();
+  const i = T.item, st = i.equipment.status;
+  const label = { available: "Available", checked_out: "Checked out", lost: "Lost", maintenance: "In maintenance", retired: "Retired" }[st];
+  const pill = st === "lost" || st === "retired" ? "lost" : st === "maintenance" ? "maint" : i.holder ? "out" : "in";
+  return `<div class="detail"><div>
+      <div class="lk-cat">${esc(i.equipment.category || "")}</div><h3>${esc(i.equipment.name)}</h3>
+      <span class="pill ${pill}">${esc(label.toUpperCase())}</span>
+      ${i.holder ? `<p>${st === "lost" ? "Last with" : "With"} <b>${esc(i.holder.name)}</b> since ${esc(fmtTime(i.checked_out_at))}</p>` : ""}
+      <p class="muted">Tag ${esc(fmtUid(T.itemUid))}</p></div>
+    <div class="btncol">
+      ${st !== "lost" ? `<button class="sbtn danger" data-status="lost" data-act="setStatus">Mark lost</button>` : ""}
+      ${st !== "maintenance" ? `<button class="sbtn" data-status="maintenance" data-act="setStatus">Send to maintenance</button>` : ""}
+      ${["lost", "maintenance", "retired"].includes(st) ? `<button class="sbtn primary" data-status="available" data-act="setStatus">Back in service</button>` : ""}
+      <button class="sbtn" data-act="replaceTag">Give it a new tag</button>
+      ${admin && st !== "retired" ? `<button class="sbtn danger" data-status="retired" data-act="setStatus">Retire (take out of service)</button>` : ""}
+      <button class="sbtn" data-act="item">Look up another item</button>
+    </div></div>`;
+}
+function stationSettingsHtml() {
+  const T = S.staff, ws = T.wifiStatus, q = S.saved.queue.length;
+  if (T.confirmUnpair) return `<div class="donebox"><h3>Unpair this station?</h3>
+      <p>It will need a new activation code to work again.${q ? ` ${q} saved tap${q > 1 ? "s" : ""} haven't synced and will be lost.` : ""}</p>
+      <div class="row"><button class="sbtn danger" data-act="unpairYes">Unpair</button><button class="sbtn" data-act="unpairNo">Cancel</button></div></div>`;
+  const wifiTxt = !ws ? "Checking…" : ws.ssid ? esc(ws.ssid) : ws.wired ? "Network cable" : "<i>Not connected</i>";
+  const srvTxt = S.saved.mode === "demo" ? "Hosted <i>(default)</i>" : esc(S.saved.url);
+  return `<div class="setrows">
+      <div class="setrow"><small>Wi-Fi</small><span class="v">${wifiTxt}</span><button class="sbtn" data-act="changeWifi">Change</button></div>
+      <div class="setrow"><small>Server</small><span class="v">${srvTxt}</span><button class="sbtn" data-act="changeServer">Change</button></div>
+      <div class="setrow"><small>Sync</small><span class="v">${S.online ? "Online" : "Offline"} · ${q ? `${q} waiting` : S.saved.lastSync ? "synced " + esc(fmtTime(S.saved.lastSync)) : "not synced yet"}</span>
+        <button class="sbtn" data-act="syncNow">Sync now</button></div>
+      <div class="setrow"><small>Station</small><span class="v">${esc(S.saved.config?.station.name || "")} <i>· ${VERSION}</i></span>
+        <button class="sbtn danger" data-act="askUnpair">Unpair…</button></div>
+    </div>`;
+}
+function serverHtml() {
+  const sv = S.staff.srv;
+  if (S.staff.confirmServer) return `<div class="donebox"><h3>Change the server?</h3>
+      <p>The station will unpair and ask for an activation code from ${sv.mode === "demo" ? "the hosted server" : esc(sv.url)}. Saved taps that haven't synced will be lost.</p>
+      <div class="row"><button class="sbtn danger" data-act="confirmServer">Change server</button><button class="sbtn" data-act="cancelServer">Cancel</button></div></div>`;
+  const custom = sv.mode === "supabase";
+  return `<div class="form"><div class="fields">
+      <div class="seg3" style="display:grid;grid-template-columns:1fr 1fr;gap:.6cqw">
+        <button class="sbtn ${!custom ? "on" : ""}" data-act="srvMode" data-m="demo">Hosted (default)</button>
+        <button class="sbtn ${custom ? "on" : ""}" data-act="srvMode" data-m="supabase">Our own server</button></div>
+      ${custom ? `<button class="fld ${sv.field === "url" ? "on" : ""}" data-act="srvField" data-f="url"><small>Address</small><span class="v">${esc(sv.url) || "<i>https://…</i>"}</span></button>
+        <button class="fld ${sv.field === "key" ? "on" : ""}" data-act="srvField" data-f="key"><small>Public key</small><span class="v">${esc(sv.key ? sv.key.slice(0, 18) + (sv.key.length > 18 ? "…" : "") : "") || "<i>From your server settings</i>"}</span></button>
+        <p style="margin:0;font-size:1.6cqw;color:var(--screen-muted)">For companies that run their own copy of the server.</p>`
+      : `<p style="margin:0;font-size:1.9cqw;color:var(--screen-muted)">The hosted server is managed for you. Most companies use this.</p>`}
+      <div class="form-actions"><button class="go" data-act="saveServer">Save</button><button class="sbtn" data-act="cancelServer">Cancel</button></div></div>
+    ${custom ? fullKbHtml() : ""}</div>`;
+}
+function personHtml() {
+  const T = S.staff, p = T.person, admin = T.emp.role === "admin", self = p.id === T.emp.id;
+  const canBadge = admin || p.role === "employee";
+  return `<div class="detail"><div>
+      <div class="lk-cat">${esc(ROLE[p.role])}${p.employee_number ? " · " + esc(p.employee_number) : ""}</div><h3>${esc(p.name)}</h3>
+      <span class="pill ${p.active ? "in" : "maint"}">${p.active ? "ACTIVE" : "INACTIVE"}</span>
+      <p class="muted">${p.has_badge ? "Has a badge" : "No badge yet"}${p.role !== "employee" ? (p.has_pin ? " · PIN set" : " · No PIN") : ""}</p>
+      ${!canBadge ? `<p class="muted">Only an admin can change a manager's or admin's fob.</p>` : ""}</div>
+    <div class="btncol">
+      <button class="sbtn" data-act="replaceBadge" ${canBadge && p.active ? "" : "disabled"}>${p.has_badge ? "Replace lost badge" : "Give them a badge"}</button>
+      ${admin ? `<div class="seg3">${["employee", "manager", "admin"].map((r) =>
+          `<button class="sbtn ${p.role === r ? "on" : ""}" data-pick="setrole:${r}" ${self || !p.active ? "disabled" : ""}>${ROLE[r]}</button>`).join("")}</div>
+        ${p.role !== "employee" ? `<button class="sbtn" data-act="setPin">Set a new PIN</button>` : ""}
+        <button class="sbtn ${p.active ? "danger" : "primary"}" data-act="toggleActive" ${self ? "disabled" : ""}>${p.active ? "Deactivate (badge stops working)" : "Reactivate"}</button>` : ""}
+      <button class="sbtn" data-act="people">All employees</button>
+    </div></div>`;
+}
+async function updatePerson(args, okText) {
+  const T = S.staff;
+  const r = await staffCall("station_update_employee", { p_employee: T.person.id, ...args });
+  if (!S.staff) return;
+  if (r.ok) {
+    await reloadStaffData();
+    T.person = T.data.employees.find((e) => e.id === T.person.id) || T.person;
+    T.view = "person"; T.form = {}; T.field = null; setMsg("ok", okText); beep("ok");
+  } else { beep("bad"); setMsg("bad", staffError(r)); }
+  renderMain();
+}
+
+/* One click handler for all staff controls. */
+document.addEventListener("click", async (e) => {
+  const t = e.target.closest("#screen [data-act], #screen [data-k], #screen [data-field], #screen [data-pick], #screen [data-pin]");
+  if (!t) return;
+  if (t.dataset.pin) return pinPress(t.dataset.pin);
+  const T = S.staff;
+  if (t.dataset.act === "pinCancel") return leavePin();
+  if (!T) return;
+  T.at = Date.now();
+  if (t.dataset.k) return kbPress(t.dataset.k);
+  if (t.dataset.field) { T.field = t.dataset.field; return renderMain(); }
+  if (t.dataset.pick) {
+    const [kind, val] = t.dataset.pick.split(":");
+    if (kind === "role") { T.form.role = val; T.field = val === "employee" ? "role" : "pin"; }
+    if (kind === "cat") {
+      const cat = T.data.categories.find((c) => c.id === val);
+      const prev = T.data.categories.find((c) => c.id === T.form.category);
+      if (!T.form.name || (prev && T.form.name === nextName(prev))) T.form.name = nextName(cat);
+      T.form.category = val; T.field = "name";
+    }
+    if (kind === "person") { T.person = T.data.employees.find((x) => x.id === val); T.view = "person"; }
+    if (kind === "tagq") { const q = T.data.untagged.find((x) => x.id === val); T.item = { equipment: { id: q.id, name: q.name } }; T.view = "item"; T.capture = { kind: "replaceTag" }; }
+    if (kind === "setrole") {
+      if (val === T.person.role) return;
+      if (val !== "employee" && !T.person.has_pin) { T.view = "setPin"; T.form = { role: val, pin: "" }; T.field = "pin";
+        setMsg("ok", `Give ${T.person.name}'s fob a PIN to make them ${val === "admin" ? "an admin" : "a manager"}.`); return renderMain(); }
+      return updatePerson({ p_role: val }, `${T.person.name} is now ${val === "employee" ? "a regular employee" : val === "admin" ? "an admin" : "a manager"}.`);
+    }
+    setMsg(); return renderMain();
+  }
+  const a = t.dataset.act;
+  if (a === "exit") return exitStaff();
+  if (a === "menu") { Object.assign(T, { view: "menu", capture: null, field: null, form: {} }); setMsg(); return renderMain(); }
+  if (a === "addEmp") { Object.assign(T, { view: "addEmp", form: { role: "employee" }, field: "first", capture: null }); setMsg(); return renderMain(); }
+  if (a === "addEq" || a === "addEqAgain") {
+    const keepCat = a === "addEqAgain" ? T.form.category : null;
+    Object.assign(T, { view: "addEq", form: {}, field: "category", capture: null }); setMsg();
+    if (keepCat) { const cat = T.data.categories.find((c) => c.id === keepCat); T.form = { category: keepCat, name: nextName(cat) }; T.field = "name"; }
+    return renderMain();
+  }
+  if (a === "item") { Object.assign(T, { view: "item", item: null, capture: { kind: "item" } }); setMsg(); return renderMain(); }
+  if (a === "untagged") { Object.assign(T, { view: "untagged", capture: null }); setMsg(); return renderMain(); }
+  if (a === "people") { Object.assign(T, { view: "people", capture: null }); setMsg(); return renderMain(); }
+  if (a === "station") {
+    if (T.emp.role !== "admin") { S.overlay = "menu"; return renderLayer(); }   // managers: sync + status only
+    T.view = "station"; T.confirmUnpair = false; setMsg(); device.status().then((st) => { T.wifiStatus = st; renderMain(); }).catch(() => {}); return renderMain();
+  }
+  if (a === "changeWifi") { wifiOpen("admin"); T.view = "wifi"; setMsg(); renderMain(); return wifiScan(); }
+  if (a === "changeServer") {
+    T.view = "server"; T.srv = { mode: S.saved.mode, url: S.saved.url || "", key: S.saved.anonKey || "", field: "url" };
+    S.kbMode = "lower"; S.kbTarget = { obj: T.srv, key: "url", max: 200 }; setMsg(); return renderMain();
+  }
+  if (a === "srvField") { T.srv.field = t.dataset.f; S.kbTarget = { obj: T.srv, key: t.dataset.f, max: 400 }; return renderMain(); }
+  if (a === "srvMode") { T.srv.mode = t.dataset.m; return renderMain(); }
+  if (a === "saveServer") {
+    const sv = T.srv;
+    if (sv.mode === "supabase" && !/^https:\/\/[^\s]+\.[^\s]+/.test(sv.url)) { setMsg("bad", "Enter the server address, starting with https://"); return renderMain(); }
+    if (sv.mode === "supabase" && sv.key.length < 20) { setMsg("bad", "Enter the server's public key."); return renderMain(); }
+    T.confirmServer = true; return renderMain();
+  }
+  if (a === "confirmServer") {
+    const sv = T.srv; S.saved.mode = sv.mode; S.saved.url = sv.mode === "supabase" ? sv.url.trim() : ""; S.saved.anonKey = sv.mode === "supabase" ? sv.key.trim() : "";
+    S.kbTarget = null; return unpair("Server changed. Enter an activation code from the new server.");
+  }
+  if (a === "cancelServer") { T.confirmServer = false; T.view = "station"; S.kbTarget = null; return renderMain(); }
+  if (a === "syncNow") { await flush(); await refreshData(true); setMsg("ok", "Synced with the server."); return renderMain(); }
+  if (a === "askUnpair") { T.confirmUnpair = true; return renderMain(); }
+  if (a === "unpairYes") return unpair("Station unpaired. Enter a new activation code.");
+  if (a === "unpairNo") { T.confirmUnpair = false; return renderMain(); }
+  if (a === "checkout") { const emp = T.emp; S.staff = null; return startSession({ id: emp.id, name: emp.name, badge_uid: emp.badge_uid, role: emp.role }); }
+  if (a === "primary") return staffPrimary();
+  if (a === "cancelCapture") {
+    const back = T.capture.kind === "item" || T.capture.kind === "newBadge" || T.capture.kind === "newTag" ? null : T.view;
+    if (T.capture.kind === "newBadge") { T.view = "addEmp"; T.field = "first"; }
+    if (T.capture.kind === "newTag") { T.view = "addEq"; T.field = "name"; }
+    if (T.capture.kind === "item" && !T.item) T.view = "menu";
+    T.capture = null; setMsg(); return renderMain();
+  }
+  if (a === "replaceTag") { T.capture = { kind: "replaceTag" }; setMsg(); return renderMain(); }
+  if (a === "replaceBadge") { T.capture = { kind: "replaceBadge" }; setMsg(); return renderMain(); }
+  if (a === "setPin") { T.view = "setPin"; T.form = { pin: "" }; T.field = "pin"; setMsg(); return renderMain(); }
+  if (a === "toggleActive") return updatePerson({ p_active: !T.person.active }, T.person.active ? `${T.person.name} is deactivated. Their badge no longer works.` : `${T.person.name} is active again.`);
+  if (a === "setStatus") {
+    const status = t.dataset.status;
+    const r = await staffCall("station_set_item_status", { p_equipment_uid: T.itemUid, p_status: status });
+    if (!S.staff) return;
+    if (r.ok) {
+      try { const i = await call("station_item_status", { p_device_key: S.saved.deviceKey, p_equipment_uid: T.itemUid }); if (i.ok) T.item = i; } catch {}
+      setMsg("ok", { lost: `${r.equipment.name} is marked lost. Whoever finds it can tap it with their badge to return it.`,
+        maintenance: `${r.equipment.name} is in maintenance and can't be checked out.`, retired: `${r.equipment.name} is retired.`,
+        available: `${r.equipment.name} is back in service.` }[status]); beep("ok"); refreshData();
+    } else { beep("bad"); setMsg("bad", staffError(r)); }
+    return renderMain();
+  }
+});
+
+/* Logo long-press opens the station menu (staff only on a real install).
+   Listens on the document so the clock redrawing the top bar doesn't cancel it. */
+function bindLongPress() {}
+let pressTimer;
+document.addEventListener("pointerdown", (e) => {
+  if (!e.target.closest("#logo")) return;
+  pressTimer = setTimeout(() => { S.overlay = "menu"; renderLayer(); }, 1200);
+});
+["pointerup", "pointercancel"].forEach((ev) => document.addEventListener(ev, () => clearTimeout(pressTimer)));
+function flashReader() { const d = $("#readerDot"); d.classList.add("on"); setTimeout(() => d.classList.remove("on"), 250); }
+
+/* USB "keyboard wedge" NFC readers type the ID fast and press Enter. */
+let kb = "", kbAt = 0;
+document.addEventListener("keydown", (e) => {
+  const tag = e.target.tagName;
+  if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA" || e.target.isContentEditable) return;
+  if (S.screen === "setup" && S.wiz) {
+    const W = S.wiz;
+    if (W.step === "code" && /^[0-9a-zA-Z]$/.test(e.key) && W.code.length < 8) { e.preventDefault(); W.code += e.key.toUpperCase(); W.err = ""; return renderMain(); }
+    if (W.step === "code" && e.key === "Backspace") { e.preventDefault(); W.code = W.code.slice(0, -1); return renderMain(); }
+    if (W.step === "code" && e.key === "Enter") { e.preventDefault(); return activate(); }
+    if (W.step === "adminDetails") {
+      const k = e.key === "Backspace" ? "DEL" : e.key === "Enter" ? "NEXT" : e.key === " " ? "SPACE" : /^[0-9a-zA-Z-]$/.test(e.key) ? e.key.toUpperCase() : null;
+      if (k) { e.preventDefault(); return wkPress(k); }
+    }
+  }
+  if (S.kbTarget && (S.wifi?.sel || (S.staff && S.staff.view === "server"))) {
+    if (e.key === "Backspace") { e.preventDefault(); return fkPress("DEL"); }
+    if (e.key === "Enter") { e.preventDefault(); return S.wifi?.sel ? wifiConnect() : null; }
+    if (e.key.length === 1) { e.preventDefault(); const T = S.kbTarget; T.obj[T.key] = (T.obj[T.key] || "") + e.key; return rerender(); }
+  }
+  if (S.screen === "pin" && S.pinEntry) {
+    const k = /^[0-9]$/.test(e.key) ? e.key : e.key === "Backspace" ? "DEL" : e.key === "Enter" ? "OK" : null;
+    if (k) { e.preventDefault(); return pinPress(k); }
+  }
+  if (S.staff && S.staff.field && !S.staff.capture) {
+    const k = e.key === "Backspace" ? "DEL" : e.key === "Enter" ? "NEXT" : e.key === " " ? "SPACE" : /^[0-9a-zA-Z-]$/.test(e.key) ? e.key.toUpperCase() : null;
+    if (k) { e.preventDefault(); return kbPress(k); }
+  }
+  if (e.key === "Enter") { if (kb.length >= 4) handleTag(kb); kb = ""; return; }
+  if (/^[0-9a-fA-F:]$/.test(e.key)) { if (Date.now() - kbAt > 1500) kb = ""; kb += e.key; kbAt = Date.now(); }
+});
+
+/* ================= Test bench panel ================= */
+function renderBench() {
+  const db = demo.db;
+  const sel = $("#supItem"); const keep = sel.value;
+  sel.innerHTML = db.equipment.map((q) => `<option value="${q.id}">${esc(q.name)}${q.status === "lost" ? " (lost)" : q.status === "maintenance" ? " (maintenance)" : q.current_employee_id ? " (out)" : ""}</option>`).join("");
+  if (keep) sel.value = keep;
+  $("#ruleReturn").checked = !!db.org.settings.allow_return_by_other;
+  const nm = (id) => demo.emp(id)?.name || "?";
+  const rows = [...db.txns.map((t) => ({ at: t.occurred_at, t })), ...(db.audit || []).map((x) => ({ at: x.at, x }))]
+    .sort((p, q) => q.at - p.at).slice(0, 16).map(({ t, x }) => {
+    const time0 = new Intl.DateTimeFormat("en-US", { timeZone: db.org.timezone, hour: "numeric", minute: "2-digit" }).format(new Date(t ? t.occurred_at : x.at));
+    if (x) return `<div style="grid-template-columns:62px 1fr"><span>${esc(time0)}</span><span style="white-space:normal"><b>${esc(x.actor)}</b> ${esc(x.text)} <span style="color:var(--muted)">(staff fob)</span></span></div>`;
+    const q = db.equipment.find((x) => x.id === t.equipment_id);
+    const other = t.previous_employee_id && t.previous_employee_id !== t.employee_id;
+    const what = t.action === "checkout" ? (other ? `checked out ${q.name} (was still with ${nm(t.previous_employee_id)})` : `checked out ${q.name}`)
+      : t.flags.includes("found_lost_item") ? `returned ${q.name} as found` : other ? `returned ${q.name} for ${nm(t.previous_employee_id)}` : `returned ${q.name}`;
+    const time = new Intl.DateTimeFormat("en-US", { timeZone: db.org.timezone, hour: "numeric", minute: "2-digit" }).format(new Date(t.occurred_at));
+    return `<div style="grid-template-columns:62px 1fr"><span>${esc(time)}</span><span style="white-space:normal"><b>${esc(nm(t.employee_id))}</b> ${esc(what)}</span></div>`;
+  });
+  $("#activity").innerHTML = rows.join("") || `<div style="grid-template-columns:1fr"><span style="color:var(--muted)">Checkouts and returns will show here.</span></div>`;
+  $("#ruleTake").checked = !!db.org.settings.allow_checkout_while_held;
+  $("#acct").checked = db.org.status !== "paused";
+  $("#badgeList").innerHTML = db.employees.filter((e) => e.badge_uid).map((e) => {
+    const shifts = db.assignments.filter(([, eid]) => eid === e.id).map(([sid]) => db.shifts.find((s) => s.id === sid).name).join(", ") || "No shift";
+    const sub = e.role !== "employee" ? `<span class="who">${e.role === "admin" ? "Admin" : "Manager"} fob${e.pin ? " · PIN " + e.pin : ""}</span>` : `${esc(shifts)} · ${fmtUid(e.badge_uid)}`;
+    return `<button class="tag" data-uid="${e.badge_uid}" ${e.active ? "" : 'style="opacity:.5"'}><b>${esc(e.name)}${e.active ? "" : " (inactive)"}</b><small>${sub}</small></button>`;
+  }).join("") + `<button class="tag unknown" data-blank="badge"><b>Blank badge</b><small>Not registered yet</small></button>`
+    + (db.employees.some((e) => e.badge_uid === "04BA0000AD01") ? "" : `<button class="tag unknown" data-uid="04BA0000AD01"><b>Admin tag (in the box)</b><small>Ships with the station</small></button>`);
+  const out = db.equipment.filter((q) => q.current_employee_id).length;
+  $("#outCount").textContent = out ? `${out} out (server)` : "";
+  $("#itemList").innerHTML = [...db.categories].sort((a, b) => a.sort - b.sort).map((c) => {
+    const lim = c.rule === "hours" ? `${c.hours}h limit` : c.rule === "shift_end" ? "due end of shift" : "no limit";
+    return `<div class="cat">${esc(c.name)} · ${lim}</div><div class="tags">` +
+      db.equipment.filter((q) => q.category_id === c.id).map((q) => `<button class="tag${q.nfc_uid ? "" : " unknown"}" ${q.nfc_uid ? `data-uid="${q.nfc_uid}"` : "disabled"}><b>${esc(q.name)}</b>
+        <small>${q.status === "lost" ? `<span class="who lost">LOST</span>` : q.status === "maintenance" ? `<span class="who">MAINTENANCE</span>`
+          : q.current_employee_id ? `<span class="who">${esc(demo.emp(q.current_employee_id).name)}</span>` : q.nfc_uid ? fmtUid(q.nfc_uid) : "No tag yet"}</small></button>`).join("") + `</div>`;
+  }).join("") + `<div class="cat">Other</div><div class="tags"><button class="tag unknown" data-blank="tag"><b>Blank tag</b><small>Not registered yet</small></button></div>`;
+}
+document.addEventListener("click", (e) => {
+  const b = e.target.closest(".panel .tag[data-uid]"); if (b) return handleTag(b.dataset.uid);
+  const blank = e.target.closest(".panel .tag[data-blank]");   // a brand-new badge/tag out of the box: a fresh ID every time
+  if (blank) handleTag((blank.dataset.blank === "badge" ? "04BA" : "04DE") + randHex(4).toUpperCase());
+});
+
+const logRows = [];
+function logCall(fn, result, isErr, ms) {
+  const t = new Intl.DateTimeFormat("en-US", { timeZone: tz(), hour: "numeric", minute: "2-digit", second: "2-digit" }).format(new Date(clock.now()));
+  logRows.unshift(`<div><span>${esc(t.replace(/\s?[AP]M/, ""))}</span><span>${esc(fn)}</span><span class="${isErr ? "e" : "k"}">${esc(result)}</span></div>`);
+  logRows.length = Math.min(logRows.length, 40);
+  $("#log").innerHTML = logRows.join("");
+}
+
+$("#wifi").addEventListener("change", (e) => { demo.wifi = e.target.checked; if (demo.wifi) { flush().then(() => refreshData()); } });
+$("#timeSel").addEventListener("change", (e) => {
+  const v = e.target.value;
+  clock.offset = v ? zoned(localDay(Date.now(), tz()), v, tz()) - Date.now() : 0;
+  renderTop(); if (S.screen === "session") renderMain();
+});
+document.querySelectorAll("[data-status]").forEach((b) => b.addEventListener("click", () => demo.setStatus($("#supItem").value, b.dataset.status)));
+[["#ruleReturn", "allow_return_by_other"], ["#ruleTake", "allow_checkout_while_held"]].forEach(([id, k]) => $(id).addEventListener("change", (e) => {
+  demo.db.org.settings[k] = e.target.checked; demo.save(); refreshData(true);
+}));
+$("#acct").addEventListener("change", (e) => { demo.db.org.status = e.target.checked ? "active" : "paused"; demo.save();
+  if (S.saved.deviceKey) call("station_heartbeat", { p_device_key: S.saved.deviceKey }).catch(() => {}); });
+$("#readerInput").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); handleTag(e.target.value); e.target.value = ""; } });
+$("#btnMenu").addEventListener("click", () => { S.overlay = "menu"; renderLayer(); });
+$("#btnNewCode").addEventListener("click", () => {
+  const st = demo.db.stations[0]; Object.assign(st, { code: "DEMO0001", key_hash: null, activated: false }); demo.save();
+  const m = $("#newCodeMsg"); m.hidden = false;
+  m.innerHTML = `New code <span class="code">DEMO-0001</span> issued. The old station key stops working on its next call.`;
+});
+$("#btnReset").addEventListener("click", () => { $("#resetConfirm").hidden = false; });
+$("#resetNo").addEventListener("click", () => { $("#resetConfirm").hidden = true; });
+$("#resetYes").addEventListener("click", () => {
+  $("#resetConfirm").hidden = true; demo.reset(); demoDevice.reset(); store.del("station.v2");
+  S.saved = { mode: "demo", url: "", anonKey: "", deviceKey: null, config: null, cache: null, queue: [], lastSync: null, syncIssues: [] };
+  S.session = null; S.staff = null; $("#newCodeMsg").hidden = true; applyBrand(); wizStart(); render();
+});
+
+/* ================= Boot ================= */
+demo.load(); demo.listeners.push(renderBench);
+$("#ver").textContent = "SMARTIPI · 7\" · " + VERSION;
+applyBrand();
+if (S.saved.mode === "supabase" && !(S.saved.url || "").trim()) { S.saved.mode = "demo"; persist(); }  // old setting with no address
+if (S.saved.deviceKey && S.saved.setupStep && !S.saved.setupDone) wizResume();   // unplugged mid-setup
+else if (S.saved.deviceKey) S.screen = "idle"; else wizStart();
+render(); renderBench();
+if (S.saved.deviceKey) refreshData(true);
+
+setInterval(() => {               // clock + sign-out timer
+  renderTop();
+  if (S.staff && Date.now() - S.staff.at > STAFF_MS) { exitStaff(); toast("Admin menu closed", "It closes after 90 seconds without a tap.", "warn"); }
+  if (S.pinEntry && Date.now() - S.pinEntry.at > 30000) leavePin();
+  if (S.screen === "setup" && S.wiz?.step === "admin" && S.wiz.adminAt && !S.wiz.hinted && Date.now() - S.wiz.adminAt > 20500) { S.wiz.hinted = true; renderMain(); }
+  if (S.summary) {
+    const left = SUMMARY_MS - (Date.now() - S.summary.at);
+    if (left <= 0) endSummary(); else { const b = $("#sumBar"); if (b) b.style.width = (left / SUMMARY_MS) * 100 + "%"; }
+  }
+  if (S.lookup) {
+    const left = LOOKUP_MS - (Date.now() - S.lookup.at);
+    if (left <= 0) endLookup(); else { const b = $("#lkBar"); if (b) b.style.width = (left / LOOKUP_MS) * 100 + "%"; }
+  }
+  if (S.session) {
+    const left = SESSION_MS - (Date.now() - S.session.last);
+    if (left <= 0) return endSession();
+    const bar = $("#timerBar"), txt = $("#timerTxt");
+    if (bar) bar.style.width = (left / SESSION_MS) * 100 + "%";
+    if (txt) txt.textContent = `Signs out in ${Math.ceil(left / 1000)}s`;
+  }
+}, 500);
+if (device === piDevice) connectReader();
+setInterval(() => { if (S.saved.queue.length) flush(); }, 3000);                     // retry saved taps
+setInterval(() => { if (S.saved.deviceKey && !S.session) refreshData(); }, 45000);   // fresh badge/tag lists
+setInterval(() => { if (S.saved.deviceKey) call("station_heartbeat", { p_device_key: S.saved.deviceKey }).then((r) => { if (!r.ok && r.error === "station_not_authorized") lockedOut(); }).catch(() => {}); }, 10000);
+try { navigator.wakeLock?.request("screen").catch(() => {}); } catch {}
+</script>

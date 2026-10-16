@@ -1,0 +1,12 @@
+# build output (made by deploy/build.py)
+deploy/dist/
+deploy/*.zip
+# test tooling
+node_modules
+.tools/
+# local / OS
+.env
+.env.*
+.DS_Store
+__pycache__/
+*.pyc

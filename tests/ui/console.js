@@ -1,0 +1,133 @@
+const { JSDOM } = require("jsdom");
+const fs = require("fs");
+const src = fs.readFileSync(process.argv[2], "utf8");
+const errors = [];
+const dom = new JSDOM("<!doctype html><html><body>" + src + "</body></html>", { runScripts: "dangerously", pretendToBeVisual: true, url: "https://example.test/",
+  beforeParse(w) { w.matchMedia = () => ({ matches: false, addEventListener() {} }); w.scrollTo = () => {}; w.print = () => { w.__printed = true; };
+    Object.defineProperty(w, "crypto", { value: require("crypto").webcrypto }); } });
+dom.window.addEventListener("error", (e) => errors.push(e.message + " @" + e.lineno));
+const E = (s) => dom.window.eval(s), doc = dom.window.document;
+const check = (c, m, t) => { console.log((c ? "pass  " : "FAIL  ") + m + (c ? "" : "\n      " + (t || page().slice(0, 300)))); if (!c) process.exitCode = 1; };
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const go = async (r) => { dom.window.location.hash = r; await sleep(30); };
+const click = async (sel) => { const el = doc.querySelector(sel); if (!el) throw new Error("missing " + sel + " :: " + page().slice(0, 200)); el.click(); await sleep(15); };
+const page = () => doc.querySelector(".main").textContent.replace(/\s+/g, " ");
+const type = async (sel, v) => { const el = doc.querySelector(sel); el.value = v; el.dispatchEvent(new dom.window.Event("input", { bubbles: true })); await sleep(10); };
+const submit = async (sel) => { doc.querySelector(sel).dispatchEvent(new dom.window.Event("submit", { bubbles: true, cancelable: true })); await sleep(20); };
+(async () => {
+  await sleep(100);
+  check(/Customers/.test(page()) && /Demo Air Services/.test(page()) && /Copper State Cargo/.test(page()), "customer list");
+  check(/Needs attention/.test(page()) && /Bag Room offline/.test(page()) && /Trial 5 days left/.test(page()) && /Commissary: activation code expired/.test(page()), "needs attention: offline station, trial ending, expired code");
+  check(/Stations offline/.test(page()), "KPIs");
+  await click('[data-seg="status:paused"]');
+  check(/Mesa Ramp/.test(page()) && !/Copper State/.test(page().split("All customers")[1]), "filter paused");
+  await click('[data-seg="status:all"]'); await type('[data-f="q"]', "tasha");
+  check(/Desert Ground/.test(page().split("All customers")[1]) && !/Copper/.test(page().split("All customers")[1]), "search by contact");
+  await type('[data-f="q"]', "");
+
+  // new customer
+  await go("new");
+  check(/New customer/.test(page()) && doc.querySelector(".pv"), "new customer form with preview");
+  await type('[data-new="name"]', "Cactus Air Logistics");
+  check(doc.querySelector('[data-new="slug"]').value === "cactus-air-logistics" && /Cactus Air Logistics/.test(doc.querySelector(".pv").textContent), "short ID and preview follow the name");
+  await type('[data-new="primary"]', "#225533");
+  check(/#225533/i.test(doc.querySelector(".pv-top").getAttribute("style")), "preview takes the color");
+  await type('[data-new="t_equipment"]', "Radio");
+  check(/each radio/.test(doc.querySelector(".pv").textContent), "preview uses their word");
+  await submit('[data-form="new"]');
+  check(/owner's email/.test(page()), "needs owner email");
+  await type('[data-new="slug"]', "demo"); await type('[data-new="owner_email"]', "Boss@CactusAir.example");
+  await submit('[data-form="new"]');
+  check(/already used/.test(page()), "short ID taken");
+  await type('[data-new="slug"]', "cactusair");
+  await click('[data-act="addStationRow"]'); await type('[data-station="1"]', "Ramp Office");
+  await submit('[data-form="new"]');
+  check(/Cactus Air Logistics is set up/.test(page()) && doc.querySelectorAll(".shipcard").length === 2, "created: one card per station");
+  const codes = [...doc.querySelectorAll(".shipcard .codebox")].map((x) => x.textContent);
+  check(codes.every((c) => /^[A-Z2-9]{4}-[A-Z2-9]{4}$/.test(c)) && codes[0] !== codes[1], "each station has its own code " + codes.join(" "));
+  check(/boss@cactusair.example/.test(page()) && /app\.sonoranpoint\.com\/invite\/[0-9a-f]{48}/.test(page()), "owner invite link shown");
+  check(/Blank admin tag/.test(page()) && /Quick-start card/.test(page()), "packing checklist");
+  await click('[data-act="print"]'); check(dom.window.__printed, "print setup sheets");
+  const id = E("DB.customers.find(c => c.slug === 'cactusair').id");
+  check(E(`JSON.stringify(custOf('${id}').terms.equipment)`) === '"Radio"' && E(`custOf('${id}').status`) === "trial" && E(`custOf('${id}').modules.includes('shifts')`), "saved with terms, trial, modules");
+  await click('a[href="#new"]');
+  check(/New customer/.test(page()) && doc.querySelector('[data-new="name"]').value === "", "New customer again gives a blank form");
+
+  // customer page
+  await go("customer/" + id);
+  check(/Waiting for setup/.test(page()) && /Owner invite sent/.test(page()), "customer page: stations waiting, invite pending");
+  await type('[data-form="addStation"] [name=name]', "Bag Room"); await submit('[data-form="addStation"]');
+  check(/Activation code for Bag Room/.test(page()) && E(`custOf('${id}').stations.length`) === 3, "add a station -> code shown");
+  const sid = E(`custOf('${id}').stations[0].id`); const old = E(`custOf('${id}').stations[0].code`);
+  await click(`[data-act="askCode"][data-id="${sid}"]`); await click(`[data-act="doCode"][data-id="${sid}"]`);
+  check(E(`custOf('${id}').stations[0].code`) !== old, "new code for a station");
+  await click(`[data-act="askRevoke"][data-id="${sid}"]`); await click(`[data-act="doRevoke"][data-id="${sid}"]`);
+  check(/Disconnected: /.test(page()), "disconnect a station");
+  await type('[data-form="invite"] [name=email]', "nope"); await submit('[data-form="invite"]');
+  check(/full email/.test(page()), "bad invite email");
+  await type('[data-form="invite"] [name=email]', "second@cactusair.example"); await submit('[data-form="invite"]');
+  check(/Invite for second@cactusair.example/.test(page()), "invite another owner");
+  // brand
+  await type('[data-form="brand"] [name=accent]', "#FF0000");
+  check(/#FF0000/i.test(doc.querySelector('[data-form="brand"] .pv-btn').getAttribute("style")), "brand preview updates live");
+  await type('[data-form="brand"] [name=accent]', "red"); await submit('[data-form="brand"]');
+  check(/Colors must look like/.test(page()), "bad color refused");
+  await type('[data-form="brand"] [name=accent]', "#cc3300"); await submit('[data-form="brand"]');
+  check(E(`custOf('${id}').accent`) === "#CC3300", "look saved");
+  // account
+  doc.querySelector('[data-form="account"] [name=status]').value = "active"; doc.querySelector('[data-form="account"] [name=station_limit]').value = "2";
+  await submit('[data-form="account"]');
+  check(E(`custOf('${id}').status`) === "active" && E(`custOf('${id}').station_limit`) === 2 && /2 of 2 allowed/.test(page()) || /of 2 allowed/.test(page()), "account saved (status, limit)");
+  // modules
+  const mod = doc.querySelector('[data-mod="shifts"]'); mod.checked = false; mod.dispatchEvent(new dom.window.Event("change", { bubbles: true })); await sleep(20);
+  check(!E(`custOf('${id}').modules.includes('shifts')`), "module off");
+  // pause / resume
+  await click('[data-act="askPause"]'); await click('[data-act="doPause"]');
+  check(E(`custOf('${id}').status`) === "paused" && /This station is paused/.test(page()), "pause account (explains what happens)");
+  await click('[data-act="resume"]');
+  check(E(`custOf('${id}').status`) === "active", "resume");
+  // fleet + log
+  await go("fleet");
+  check(/Needs a look/.test(page()) && /Bag Room/.test(page()) && /Commissary/.test(page()), "fleet: problems first");
+  await click('[data-seg="fleet:all"]');
+  check(doc.querySelectorAll("tbody tr").length === E("api.fleet().length"), "fleet: all stations");
+  await go("log");
+  check(/created customer/.test(page()) && /Cactus Air Logistics/.test(page()) && /status: paused/.test(page()), "activity log");
+  // team
+  await go("team");
+  check(/Jordan Ellis/.test(page()) && /\(you\)/.test(page()) && /Invited as Operator/.test(page()) && /Invite someone/.test(page()), "team page (demo)");
+  await type('[data-form="opinvite"] [name=email]', "nope"); await submit('[data-form="opinvite"]');
+  check(/full email address/.test(page()), "bad invite email");
+  await type('[data-form="opinvite"] [name=name]', "Riley"); await type('[data-form="opinvite"] [name=email]', "riley@sonoranpoint.com"); await submit('[data-form="opinvite"]');
+  check(/Riley/.test(page()) && /opinvite=[0-9a-f]{48}/.test(page()), "invite shows with its link");
+  const me = doc.querySelector('[data-oprole="op-me"]'); check(!me, "can't change your own role");
+  await click('[data-act="askRmOp"][data-id="op-2"]'); await click('[data-act="doRmOp"][data-id="op-2"]');
+  check(!/Jordan Ellis/.test(page().split("Invite someone")[0]), "remove an operator");
+  await type('[data-form="myname"] [name=name]', "Dez Ryan"); await submit('[data-form="myname"]');
+  check(/Dez Ryan/.test(doc.querySelector(".me").textContent) && /Owner/.test(doc.querySelector(".me").textContent), "rename yourself; rail shows name and role");
+  await go("log");
+  check(/Dez removed operator/.test(page()) && /riley@sonoranpoint.com, as Operator/.test(page()), "team changes logged", page().slice(0, 500));
+  // hardware
+  await go("hardware");
+  check(/In stock/.test(page()) && /SP-0009/.test(page()) && /Sky Harbor Catering/.test(page()), "hardware list (demo)");
+  await click('[data-seg="hw:fix"]'); check(/In repair/.test(page()) && !/SP-0009/.test(page()), "filter repairs");
+  await click('[data-seg="hw:all"]'); await type('[data-f="hwq"]', "794698123499"); check(/SP-0009/.test(page()) && !/SP-0002/.test(page()), "search by tracking");
+  await type('[data-f="hwq"]', "");
+  await go("unit/new"); await type('[data-form="hwnew"] [name=pi_serial]', "10000000feedbeef"); await submit('[data-form="hwnew"]'); await sleep(40);
+  const nid = E("DB.hw[0].id"); check(E("DB.hw[0].serial") === "SP-0015" && dom.window.location.hash === "#unit/" + nid, "add unit gets next ID and opens it", E("DB.hw[0].serial"));
+  await sleep(40); await click('[data-act="hwStatus"][data-status="ready"]'); check(E("DB.hw[0].status") === "ready", "mark in stock");
+  const cat = E("DB.customers.find(c => c.slug === 'copperstate').id");
+  const csel = doc.querySelector('[data-form="hwship"] [name=org_id]'); csel.value = cat; csel.dispatchEvent(new dom.window.Event("change", { bubbles: true })); await sleep(20);
+  check(doc.querySelectorAll('[data-form="hwship"] [name=station_id] option').length === 4 && /Rafael Montoya/.test(doc.querySelector('[data-form="hwship"] [name=ship_to]').value), "picking a customer lists their stations and fills ship-to");
+  doc.querySelector('[data-form="hwship"] [name=station_id]').value = E("custOf('" + cat + "').stations[2].id");
+  await type('[data-form="hwship"] [name=tracking]', "1Z999AA10000000001"); await submit('[data-form="hwship"]'); await sleep(20);
+  check(E("DB.hw[0].status") === "shipped" && E("DB.hw[0].org_id") === cat && E("DB.hw[0].carrier") === "UPS", "ship to a customer's station");
+  check(/ups\.com\/track\?tracknum=1Z999AA10000000001/.test(doc.querySelector(".main").innerHTML) && /marked it shipped/.test(page()), "tracking link and history");
+  await type('[data-form="hwnote"] [name=note]', "Swapped the reader"); await submit('[data-form="hwnote"]'); check(/Swapped the reader/.test(page()), "add a note");
+  await go("customer/" + cat); check(/SP-0015/.test(page()) && /Hardware/.test(page()), "customer page lists their hardware");
+  await go("fleet"); await click('[data-seg="fleet:all"]'); check(doc.querySelectorAll('a[href^="#unit/"]').length >= 9, "stations page links each unit");
+  await go("unit/" + nid); await click('[data-act="askHwDelete"]'); await click('[data-act="hwDelete"]'); await sleep(40);
+  check(!E("DB.hw.some(u => u.serial === 'SP-0015')"), "owner deletes a mistake");
+  check(errors.length === 0, "no script errors " + errors.join(";"));
+  process.exit();
+})();
