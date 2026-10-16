@@ -65,7 +65,7 @@ const drawer = () => doc.querySelector(".drawer")?.textContent.replace(/\s+/g, "
   check(!E("DB.members.some(m => m.id === 'u4')"), "remove someone (after confirm)");
   // Preview as View only
   const va = doc.querySelector("#viewAs"); va.value = "viewer"; va.dispatchEvent(new dom.window.Event("change", { bubbles: true })); await sleep(20);
-  check(!/Team access/.test(doc.querySelector(".nav").textContent) && E("S.route") === "overview", "View only: no Team access page");
+  check(!/Team access/.test(doc.querySelector(".snav").textContent) && E("S.route") === "overview", "View only: no Team access page");
   await go("equipment"); check(!doc.querySelector('[data-act="newEq"]'), "View only: no Add equipment");
   await click('[data-open^="equipment:"]'); check(!/Mark lost|Edit details|Limits for this item/.test(drawer()), "View only: item panel has no actions"); await click('.drawer [data-act="close"]');
   await go("settings"); check(doc.querySelector("fieldset").disabled && /Ask an admin/.test(doc.body.textContent), "View only: settings are read-only");

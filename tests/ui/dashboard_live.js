@@ -32,7 +32,7 @@ const ORG = "00000000-0000-0000-0000-00000000d3e0";
   let P = open();
   check(await P.until(() => P.doc.querySelector('[data-form="signin"]')), "dashboard asks you to sign in");
   await P.signIn("morgan@demoair.example");
-  check(await P.until(() => /Overview/.test(P.text()) && /Demo Air Services/.test(P.text())), "owner signs in -> their company's real data", P.text());
+  check(await P.until(() => /Recent activity/.test(P.text()) && /Demo Air Services/.test(P.text())), "owner signs in -> their company's real data", P.text());
   check(/Morgan Reyes/.test(P.text()) && /Owner/.test(P.text()) && /Sign out/.test(P.text()) && !/Demo data|Preview as/.test(P.text()), "rail shows the real person and role, no demo controls");
   P.go("equipment"); await P.until(() => /Radio/.test(P.text()));
   const nEq = Number(one(`select count(*) from equipment where org_id='${ORG}' and status <> 'retired'`));
@@ -140,7 +140,7 @@ const ORG = "00000000-0000-0000-0000-00000000d3e0";
   check(await V.until(() => /Welcome to Demo Air Services/.test(V.text())), "after signing in: welcome, offered a password", V.text());
   check(V.doc.querySelector('[data-form="profile"] [name=full_name]').value === "Pat Lowe", "their name is already filled in from the invite");
   V.set('[data-form="profile"] [name=full_name]', "Pat Lowe"); V.submit('[data-form="profile"]');
-  check(await V.until(() => /Overview/.test(V.text()) && /View only/.test(V.text())), "they land in the dashboard as View only");
+  check(await V.until(() => /Recent activity/.test(V.text()) && /View only/.test(V.text())), "they land in the dashboard as View only");
   check(/Good (morning|afternoon|evening), Pat/.test(V.text()) && /Pat Lowe/.test(V.text()), "greets them by name, not email");
   check(one(`select role from org_members m join auth.users u on u.id = m.user_id where u.email='ops.office@demoair.example'`) === "viewer", "membership saved");
   V.go("equipment"); await V.until(() => /Radio/.test(V.text()));
@@ -179,7 +179,7 @@ const ORG = "00000000-0000-0000-0000-00000000d3e0";
 
   // supervisor can't do admin things (RLS)
   const K = open(); await K.signIn("kelly@demoair.example");
-  check(await K.until(() => /Overview/.test(K.text())), "second user signs in");
+  check(await K.until(() => /Recent activity/.test(K.text())), "second user signs in");
   P.click('[data-act="signOut"]');
   check(await P.until(() => P.doc.querySelector('[data-form="signin"]')), "sign out");
   check([P, V, W, K].every((x) => x.errors.length === 0), "no script errors " + [P, V, W, K].flatMap((x) => x.errors).join(";"));

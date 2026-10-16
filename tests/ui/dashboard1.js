@@ -23,7 +23,28 @@ const go = async (r) => { dom.window.location.hash = r; await sleep(30); };
   // no item is double-booked: two checkouts in a row without a return
   const dbl = E(`(() => { let bad = 0; for (const q of DB.equipment) { const ev = DB.txns.filter(t => t.eq === q.id); for (let i = 1; i < ev.length; i++) if (ev[i].action === ev[i-1].action) bad++; } return bad; })()`);
   check(dbl === 0, "history is consistent: every item alternates checkout / return");
-  check(/Good (morning|afternoon|evening), Morgan/.test(text()) && /Out right now/.test(text()) && /Needs attention/.test(text()), "Overview renders");
+  check(/Good (morning|afternoon|evening), Morgan/.test(text()) && /Checked out/.test(text()) && /Recent activity/.test(text()) && /Taps today/.test(text()) && /Needs attention/.test(text()), "Overview renders");
+  // new layout: top bar search, menus, stat shortcuts, phone menu
+  const gs = doc.querySelector("#gsearch"); gs.value = "radio 0"; gs.dispatchEvent(new dom.window.Event("input", { bubbles: true })); await sleep(10);
+  check(!doc.querySelector("#gsResults").hidden && doc.querySelectorAll("#gsResults button").length >= 3 && /Radio 01/.test(doc.querySelector("#gsResults").textContent), "top bar search finds equipment");
+  doc.querySelector("#gsResults button").click(); await sleep(20);
+  check(E("S.drawer && S.drawer.kind") === "equipment" && doc.querySelector("#gsResults").hidden && doc.querySelector("#gsearch").value === "", "picking a result opens it and clears the search");
+  E("S.drawer = null; renderLayer()");
+  gs.value = "zzzz"; gs.dispatchEvent(new dom.window.Event("input", { bubbles: true })); await sleep(10);
+  check(/Nothing matches/.test(doc.querySelector("#gsResults").textContent), "search says when nothing matches");
+  gs.value = ""; gs.dispatchEvent(new dom.window.Event("input", { bubbles: true })); await sleep(10);
+  const acct = doc.querySelector("[data-act=acctMenu]"); acct.click(); await sleep(10);
+  check(!acct.nextElementSibling.hidden && acct.getAttribute("aria-expanded") === "true" && /Preview as/.test(acct.nextElementSibling.textContent), "account menu opens");
+  doc.querySelector(".wrap").click(); await sleep(10);
+  check(doc.querySelector("[data-act=acctMenu]").nextElementSibling.hidden, "clicking elsewhere closes it");
+  check(doc.querySelector(".iconbtn .badge")?.textContent === String(st.open - E("api.alerts().filter(a => !a.resolved_at && a.ack_at).length")), "bell shows open alerts not yet seen");
+  doc.querySelector('a.stat[data-filter="out"]').click(); await go("equipment");
+  check(E("S.f.eqStatus") === "out", "Checked out card opens equipment filtered to what's out");
+  await go("overview");
+  doc.querySelector("[data-act=navOpen]").click(); await sleep(10);
+  check(doc.querySelector("#app").classList.contains("navopen") && doc.querySelector(".navscrim"), "phone menu opens");
+  await go("activity"); check(!doc.querySelector("#app").classList.contains("navopen") && E("S.route") === "activity", "picking a section closes it");
+  await go("overview");
   for (const r of ["equipment", "employees", "activity", "alerts", "shifts", "stations", "settings"]) { await go(r); check(doc.querySelector(".head h1") && errors.length === 0, `${r} renders`, errors.join(";")); }
   await go("equipment");
   doc.querySelector('[data-seg="eqStatus:lost"]').click(); await sleep(20);

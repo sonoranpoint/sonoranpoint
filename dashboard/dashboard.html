@@ -2,7 +2,7 @@
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira:wght@500;600;700&family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@600;700;800&family=Saira:wght@500;600;700&family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
 /* Layout: a left rail of sections (top bar on phones) beside one working view; details open in a side panel.
    Same type and brand family as the station so the product reads as one thing. */
@@ -324,6 +324,140 @@ a.kpi:hover { border-color: var(--brand); transform: translateY(-1px); }
 .drawer-h { background: linear-gradient(180deg, var(--surface-2), var(--surface)); }
 .rail .logo { background: var(--cust, var(--sp-sun)); color: #1a1a1a; }
 /* SP-THEME:end */
+
+/* =====================================================================
+   Dashboard shell (v2): navy sidebar with icons, a top bar with search,
+   alerts and your account, white cards on a cool grey page.
+   Plus Jakarta Sans for headings and numbers; Atkinson for everything you read.
+   ===================================================================== */
+:root { --head: "Plus Jakarta Sans", "Segoe UI", system-ui, sans-serif; --bg: #f3f6fa; --line: #e3e9f1;
+  --card-shadow: 0 1px 2px rgba(12, 27, 51, .04), 0 2px 8px -2px rgba(12, 27, 51, .06); --side-w: 248px; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #07111f; --line: #1d3254; --card-shadow: none; } }
+:root[data-theme="dark"] { --bg: #07111f; --line: #1d3254; --card-shadow: none; }
+.app { grid-template-columns: var(--side-w) minmax(0, 1fr); }
+
+.side { position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; gap: 22px; padding: 22px 14px 16px; color: #dfe8f7;
+  background: radial-gradient(120% 50% at 0% 0%, rgba(47, 155, 255, .10), transparent 60%), linear-gradient(180deg, #0c2550 0%, #081c3c 55%, #061630 100%); z-index: 30; }
+.brandmark { display: flex; align-items: center; gap: 11px; padding: 2px 8px 6px; color: #fff; text-decoration: none; }
+.brandmark img { width: 40px; height: 40px; flex: none; }
+.brandmark span { font-family: var(--display); font-weight: 600; font-size: 19px; line-height: .95; letter-spacing: .09em; text-transform: uppercase; }
+.brandmark span i { font-style: normal; color: #4fb3ff; display: block; }
+.snav { display: flex; flex-direction: column; gap: 3px; overflow-y: auto; }
+.snav a { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 10px; color: rgba(223, 232, 247, .86); text-decoration: none; font-weight: 700; font-size: 15px; }
+.snav a svg { width: 19px; height: 19px; flex: none; opacity: .9; }
+.snav a:hover { background: rgba(255, 255, 255, .06); color: #fff; }
+.snav a.on { background: rgba(79, 179, 255, .16); color: #fff; box-shadow: inset 0 0 0 1px rgba(79, 179, 255, .12); }
+.snav a.on svg { color: #4fb3ff; opacity: 1; }
+.snav .n { margin-left: auto; background: var(--sp-sun); color: #2a1300; border-radius: 99px; font-size: 12px; padding: 1px 8px; font-weight: 700; }
+.snav hr { border: 0; border-top: 1px solid rgba(223, 232, 247, .1); margin: 8px 6px; }
+.company { margin-top: auto; position: relative; border-top: 1px solid rgba(223, 232, 247, .12); padding-top: 14px; }
+.company > button, .company > div.cbox { width: 100%; display: flex; align-items: center; gap: 11px; background: none; border: 0; color: inherit; text-align: left; padding: 8px; border-radius: 10px; }
+.company > button:hover { background: rgba(255, 255, 255, .06); }
+.clogo { width: 38px; height: 38px; border-radius: 50%; flex: none; display: grid; place-items: center; overflow: hidden; background: var(--cust, var(--sp-sun)); color: #14181d;
+  font-family: var(--head); font-weight: 800; font-size: 14px; box-shadow: 0 0 0 2px rgba(255, 255, 255, .9); }
+.clogo { position: relative; } .clogo img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; background: #fff; }
+.company b { display: block; font-size: 14.5px; color: #fff; line-height: 1.2; }
+.company small { display: block; font-size: 12.5px; color: rgba(223, 232, 247, .66); }
+.company svg.chev { width: 16px; height: 16px; margin-left: auto; flex: none; opacity: .7; }
+.side .demo-pill { margin: 0 8px 6px; display: inline-block; }
+.pop { position: absolute; z-index: 40; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); padding: 6px; min-width: 220px; }
+.pop[hidden] { display: none; }
+.pop button, .pop a { display: flex; width: 100%; align-items: center; gap: 10px; background: none; border: 0; border-radius: 8px; padding: 9px 10px; text-align: left; font-weight: 700; font-size: 14px; color: inherit; text-decoration: none; }
+.pop button:hover, .pop a:hover { background: var(--surface-2); }
+.pop button svg, .pop a svg { width: 17px; height: 17px; flex: none; color: var(--muted); }
+.pop .who { padding: 9px 10px 10px; border-bottom: 1px solid var(--line); margin-bottom: 4px; }
+.pop .who b { display: block; } .pop .who small { color: var(--muted); }
+.pop label { display: flex; flex-direction: column; gap: 4px; padding: 8px 10px; font-size: 12.5px; color: var(--muted); font-weight: 700; }
+.pop select { border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; background: var(--surface); color: var(--ink); font-weight: 700; font-size: 14px; }
+.company .pop { bottom: calc(100% + 6px); left: 0; right: 0; }
+
+.topbar { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 12px; padding: 14px max(28px, env(safe-area-inset-right, 0px)) 14px 28px;
+  background: color-mix(in srgb, var(--bg) 86%, transparent); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+.topbar .menu-btn { display: none; }
+.gsearch { position: relative; margin-left: auto; width: min(380px, 100%); }
+.gsearch svg { position: absolute; left: 12px; top: 50%; width: 17px; height: 17px; margin-top: -8.5px; color: var(--muted); pointer-events: none; }
+.gsearch input { width: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: 11px; padding: 9px 12px 9px 38px; box-shadow: var(--card-shadow); }
+.gsearch input:focus { outline: 3px solid color-mix(in srgb, var(--brand) 22%, transparent); border-color: var(--brand); }
+.gsearch .pop { left: 0; right: 0; top: calc(100% + 6px); max-height: 60vh; overflow-y: auto; }
+.gsearch .pop small { margin-left: auto; color: var(--muted); font-weight: 400; font-size: 12.5px; }
+.gsearch .pop .none { padding: 12px 10px; color: var(--muted); font-size: 14px; }
+.iconbtn { position: relative; width: 42px; height: 42px; border-radius: 11px; border: 1px solid var(--line); background: var(--surface); display: grid; place-items: center; color: var(--ink); box-shadow: var(--card-shadow); flex: none; }
+.iconbtn svg { width: 19px; height: 19px; }
+.iconbtn .badge { position: absolute; top: -5px; right: -5px; min-width: 19px; height: 19px; padding: 0 5px; border-radius: 99px; background: var(--bad); color: #fff; font-size: 11.5px; font-weight: 700; display: grid; place-items: center; border: 2px solid var(--bg); }
+.account { position: relative; flex: none; }
+.account > button { display: flex; align-items: center; gap: 10px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 5px 12px 5px 5px; box-shadow: var(--card-shadow); font-weight: 700; font-size: 14.5px; }
+.avatar { width: 32px; height: 32px; border-radius: 50%; background: var(--brand); color: #fff; display: grid; place-items: center; font-family: var(--head); font-weight: 800; font-size: 13px; flex: none; }
+.account svg { width: 16px; height: 16px; color: var(--muted); }
+.account .pop { right: 0; top: calc(100% + 6px); }
+
+.main { padding: 0 0 48px; }
+.main .wrap { padding: 6px max(28px, env(safe-area-inset-right, 0px)) 0 28px; max-width: 1320px; margin: 0; gap: 22px; }
+.head h1 { font-family: var(--head); font-weight: 800; font-size: 32px; letter-spacing: -.02em; line-height: 1.1; }
+.head p { font-size: 16px; margin-top: 6px; }
+.panel, .card { box-shadow: var(--card-shadow); border-color: var(--line); }
+.panel-h { border-bottom: 0; padding: 18px 20px 10px; }
+.panel-h h2, .sect h3 { font-family: var(--head); font-weight: 700; font-size: 17px; letter-spacing: -.005em; }
+.panel-h .link, .panel-h a.more { font-size: 14px; text-decoration: none; color: var(--brand-text); font-weight: 700; }
+.panel-h a.more:hover { text-decoration: underline; }
+.drawer-h h2, .card h3 { font-family: var(--head); font-weight: 800; letter-spacing: -.015em; }
+.drawer-h h2 { font-size: 26px; } .card h3 { font-size: 19px; }
+th { background: transparent; }
+
+/* Home */
+.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.stat { display: flex; align-items: flex-start; gap: 16px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 20px; box-shadow: var(--card-shadow); color: inherit; text-decoration: none; transition: border-color .15s; }
+a.stat:hover { border-color: color-mix(in srgb, var(--brand) 45%, var(--line)); }
+.stat .ic { width: 52px; height: 52px; border-radius: 50%; background: var(--brand-soft); color: var(--brand); display: grid; place-items: center; flex: none; }
+.stat .ic svg { width: 24px; height: 24px; }
+.stat.bad .ic { background: var(--bad-bg); color: var(--bad); }
+.stat span { display: block; font-size: 14.5px; color: var(--ink); font-weight: 700; }
+.stat b { display: block; font-family: var(--head); font-weight: 800; font-size: 30px; line-height: 1.15; letter-spacing: -.02em; margin: 2px 0 4px; font-variant-numeric: tabular-nums; }
+.stat small { display: flex; align-items: center; gap: 6px; font-size: 13.5px; color: var(--muted); }
+.stat small.up { color: var(--ok); } .stat small.alert { color: var(--bad); font-weight: 700; } .stat small.go { color: var(--brand-text); font-weight: 700; }
+.stat small svg { width: 15px; height: 15px; }
+.pip { width: 9px; height: 9px; border-radius: 50%; background: var(--ok); flex: none; } .pip.warn { background: var(--sp-sun); } .pip.bad { background: var(--bad); } .pip.quiet { background: var(--muted); }
+.home2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.home2 > div { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.attn { border-color: color-mix(in srgb, var(--bad) 30%, var(--line)); }
+.attn .panel-h h2 { display: flex; align-items: center; gap: 8px; } .attn .panel-h h2 svg { width: 18px; height: 18px; color: var(--bad); }
+.ev { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 11px 20px; border-top: 1px solid var(--line); }
+.ev:first-child { border-top: 0; }
+button.ev { width: 100%; background: none; border-left: 0; border-right: 0; border-bottom: 0; text-align: left; } button.ev:hover { background: var(--surface-2); }
+.ev .tile { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: var(--surface-2); color: var(--muted); }
+.ev .tile svg { width: 19px; height: 19px; }
+.ev .tile.out { background: color-mix(in srgb, var(--sp-sun) 14%, var(--surface)); color: #d9700a; }
+.ev .tile.in { background: var(--ok-bg); color: var(--ok); }
+.ev .tile.late, .ev .tile.bad { background: var(--bad-bg); color: var(--bad); }
+.ev .tile.warn { background: var(--warn-bg); color: var(--warn); }
+.ev b { display: block; font-weight: 700; font-size: 15px; } .ev .sub { display: block; color: var(--muted); font-size: 13.5px; }
+.ev time, .ev .when { color: var(--muted); font-size: 13.5px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.strow { display: grid; grid-template-columns: 12px minmax(0, 1fr) 64px 64px 18px; gap: 14px; align-items: center; padding: 11px 20px; border-top: 1px solid var(--line); width: 100%; background: none; border-left: 0; border-right: 0; border-bottom: 0; text-align: left; }
+.strow:first-child { border-top: 0; } .strow:hover { background: var(--surface-2); }
+.strow b { display: block; font-size: 15px; } .strow .sub { display: block; color: var(--muted); font-size: 13.5px; }
+.strow .n { text-align: center; } .strow .n b { font-family: var(--head); font-weight: 800; font-size: 17px; font-variant-numeric: tabular-nums; } .strow .n small { display: block; color: var(--muted); font-size: 12px; }
+.strow > svg { width: 18px; height: 18px; color: var(--muted); }
+.panel .empty { padding: 22px 20px 26px; text-align: left; }
+
+@media (max-width: 1180px) { .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } .home2 { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 900px) {
+  .app { grid-template-columns: minmax(0, 1fr); }
+  .side { position: fixed; left: 0; top: 0; bottom: 0; width: min(290px, 86vw); transform: translateX(-104%); transition: transform .2s ease; box-shadow: 0 0 40px rgba(0, 0, 0, .35);
+    padding-top: calc(22px + env(safe-area-inset-top, 0px)); padding-left: max(14px, env(safe-area-inset-left, 0px)); }
+  .app.navopen .side { transform: none; }
+  .navscrim { position: fixed; inset: 0; background: rgba(8, 14, 22, .45); z-index: 25; }
+  .topbar { padding: calc(10px + env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) 10px max(16px, env(safe-area-inset-left, 0px)); gap: 8px; }
+  .topbar .menu-btn { display: grid; }
+  .gsearch { margin-left: 0; flex: 1; min-width: 0; }
+  .account > button { padding: 4px; } .account > button .nm, .account > button > svg { display: none; }
+  .main .wrap { padding: 4px max(16px, env(safe-area-inset-right, 0px)) 0 max(16px, env(safe-area-inset-left, 0px)); }
+  .head h1 { font-size: 26px; }
+}
+@media (max-width: 560px) {
+  .stats { gap: 10px; } .stat { flex-direction: column; gap: 10px; padding: 16px; } .stat .ic { width: 42px; height: 42px; } .stat .ic svg { width: 20px; height: 20px; } .stat b { font-size: 26px; }
+  .strow { grid-template-columns: 12px minmax(0, 1fr) 52px 52px 14px; gap: 10px; padding: 11px 16px; } .ev { padding: 11px 16px; gap: 12px; }
+  .iconbtn { width: 40px; height: 40px; }
+}
+@media (prefers-reduced-motion: reduce) { .side { transition: none; } }
 </style>
 
 <div class="app" id="app"></div>
@@ -731,38 +865,86 @@ const S = {
   drawer: null, confirm: null, toast: null,
   f: { eqSearch: "", eqCat: "", eqStatus: "all", empSearch: "", actSearch: "", actType: "all", actRange: "7d", alertTab: "open", newStation: null },
 };
-window.addEventListener("hashchange", () => { const r = location.hash.slice(1); if (ROUTES.includes(r)) { S.route = r; S.drawer = null; render(); window.scrollTo(0, 0); } });
+window.addEventListener("hashchange", () => { const r = location.hash.slice(1); if (ROUTES.includes(r)) { S.route = r; S.drawer = null; S.navOpen = false; S.pop = null; render(); window.scrollTo(0, 0); } });
 let toastT;
 function toast(text) { S.toast = text; renderLayer(); clearTimeout(toastT); toastT = setTimeout(() => { S.toast = null; renderLayer(); }, 2600); }
 
 /* =====================================================================
    Rendering
    ===================================================================== */
+// Icons (Lucide, ISC licence), drawn with the current text color.
+const ICON = {
+  home: '<rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/>',
+  box: '<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.3 7 12 12l8.7-5"/><path d="M12 22V12"/>',
+  list: '<rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4M12 16h4M8 11h.01M8 16h.01"/>',
+  users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>',
+  station: '<rect x="5" y="2" width="14" height="20" rx="2"/><path d="M9 7h6M9 11h6"/><path d="M12 18h.01"/>',
+  calendar: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/>',
+  bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
+  sliders: '<path d="M21 4h-7M10 4H3M21 12h-9M8 12H3M21 20h-5M12 20H3M14 2v4M8 10v4M16 18v4"/>',
+  shield: '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/>',
+  search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+  chevDown: '<path d="m6 9 6 6 6-6"/>', chevUpDown: '<path d="m7 15 5 5 5-5M7 9l5-5 5 5"/>', chevRight: '<path d="m9 18 6-6-6-6"/>',
+  arrowRight: '<path d="M5 12h14M12 5l7 7-7 7"/>', menu: '<path d="M4 6h16M4 12h16M4 18h16"/>',
+  clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+  out: '<path d="M12 15V3M7 8l5-5 5 5"/><path d="M5 21h14"/>', in: '<path d="M12 3v12M7 10l5 5 5-5"/><path d="M5 21h14"/>',
+  alert: '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4M12 17h.01"/>',
+  wifiOff: '<path d="M12 20h.01M8.5 16.43a5 5 0 0 1 7 0M2 8.82a15 15 0 0 1 4.17-2.65M10.66 5c4.01-.36 8.14.9 11.34 3.76M16.85 11.25a10 10 0 0 1 2.22 1.68M5 13a10 10 0 0 1 5.24-2.76"/><path d="m2 2 20 20"/>',
+  help: '<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01"/>',
+  user: '<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>', logout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>',
+};
+const ic = (k, cls = "") => `<svg ${cls ? `class="${cls}" ` : ""}viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[k]}</svg>`;
+const initialsOf = (n) => String(n || "?").replace(/@.*/, "").split(/[\s._-]+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join("") || "?";
+const firstName = (n) => (String(n || "").includes("@") ? n.split("@")[0] : String(n || "")).split(" ")[0];
+
 function render() {
   if (LIVE && !S.ready) return renderAuth();
   const open = api.alerts().filter((a) => !a.resolved_at && !a.ack_at).length;
-  const lost = DB.equipment.filter((q) => q.status === "lost").length;
-  const nav = [["overview", "Overview"], ["equipment", "Equipment"], ["employees", "Employees"], ["activity", "Activity"],
-    ["alerts", "Alerts", open], ["shifts", "Shifts"], ["stations", "Stations"], ["settings", "Settings"], ...(can("admin") ? [["team", "Team access"]] : [])];
+  const nav = [["overview", "Dashboard", "home"], ["equipment", "Equipment", "box"], ["activity", "Activity", "list"], ["employees", "Employees", "users"],
+    ["stations", "Stations", "station"], ["shifts", "Shifts", "calendar"], ["alerts", "Alerts", "bell", open], "-", ["settings", "Settings", "sliders"], ...(can("admin") ? [["team", "Team access", "shield"]] : [])];
   if (S.route === "team" && !can("admin")) S.route = "overview";
+  const many = LIVE && L.companies.length > 1;
+  const sub = LIVE ? ROLE_NAME[DB.me.role] : "Demo company";
+  $("#app").className = "app" + (S.navOpen ? " navopen" : "");
   $("#app").innerHTML = `
-    <aside class="rail">
-      <div class="org"><div class="logo" aria-hidden="true">${esc(DB.org.name.split(/\s+/).slice(0, 2).map((w) => w[0]).join(""))}</div>
-        <div><b>${esc(DB.org.name)}</b><small>Equipment tracking</small></div></div>
-      <nav class="nav" aria-label="Sections">${nav.map(([r, l, n]) => `<a href="#${r}" class="${S.route === r ? "on" : ""}" ${S.route === r ? 'aria-current="page"' : ""}>${l}${n ? `<span class="n" aria-label="${n} need attention">${n}</span>` : ""}</a>`).join("")}</nav>
-      <div class="me">${LIVE ? "" : `<span class="demo-pill">Demo data</span>`}<b>${esc(DB.me.name)}</b><span>${ROLE_NAME[DB.me.role]}</span>
-        ${LIVE ? `${L.companies.length > 1 ? `<label class="viewas">Company<select id="switchOrg" aria-label="Switch company">${L.companies.map((c) => `<option value="${c.org_id}" ${c.org_id === L.org ? "selected" : ""}>${esc(c.name)}</option>`).join("")}</select></label>` : ""}
-          <span style="display:flex;gap:6px;margin-top:6px"><button class="btn sm" data-act="editName" style="background:transparent;color:inherit;border-color:rgba(255,255,255,.3)">Edit name</button><button class="btn sm" data-act="signOut" style="background:transparent;color:inherit;border-color:rgba(255,255,255,.3)">Sign out</button></span>`
-        : `<label class="viewas">Preview as<select id="viewAs" aria-label="Preview the dashboard as">${Object.keys(RANK).reverse().map((r) => `<option value="${r}" ${DB.me.role === r ? "selected" : ""}>${ROLE_NAME[r]}</option>`).join("")}</select></label>`}</div>
-    ${powered("")}
+    <aside class="side" aria-label="Main menu">
+      <a class="brandmark" href="#overview" aria-label="Sonoran Point, dashboard home"><img src="brand/mark-180.png" alt=""><span>Sonoran<i>Point</i></span></a>
+      <nav class="snav" aria-label="Sections">${nav.map((n) => n === "-" ? "<hr>" : `<a href="#${n[0]}" class="${S.route === n[0] ? "on" : ""}" ${S.route === n[0] ? 'aria-current="page"' : ""}>${ic(n[2])}${n[1]}${n[3] ? `<span class="n" aria-label="${n[3]} need attention">${n[3]}</span>` : ""}</a>`).join("")}</nav>
+      <div class="company">${LIVE ? "" : `<span class="demo-pill">Demo data</span>`}
+        ${many ? `<button type="button" data-act="orgMenu" aria-haspopup="true" aria-expanded="${S.pop === "org"}">${companyBadge()}<span><b>${esc(DB.org.name)}</b><small>${esc(sub)}</small></span>${ic("chevUpDown", "chev")}</button>
+          <div class="pop" role="menu" ${S.pop === "org" ? "" : "hidden"}><label>Company<select id="switchOrg" aria-label="Switch company">${L.companies.map((c) => `<option value="${c.org_id}" ${c.org_id === L.org ? "selected" : ""}>${esc(c.name)}</option>`).join("")}</select></label></div>`
+          : `<div class="cbox">${companyBadge()}<span><b>${esc(DB.org.name)}</b><small>${esc(sub)}</small></span></div>`}</div>
     </aside>
-    <main class="main"><div class="wrap">${VIEWS[S.route]()}</div>${LIVE ? `<div class="me-foot"><span>${esc(DB.me.name)} · ${ROLE_NAME[DB.me.role]}</span><button class="btn sm" data-act="editName">Edit name</button><button class="btn sm" data-act="signOut">Sign out</button></div>` : ""}${powered("powered-foot")}</main>`;
+    ${S.navOpen ? `<div class="navscrim" data-act="navClose"></div>` : ""}
+    <main class="main">
+      <header class="topbar">
+        <button class="iconbtn menu-btn" data-act="navOpen" aria-label="Open menu">${ic("menu")}</button>
+        <div class="gsearch" role="search">${ic("search")}<input type="search" id="gsearch" placeholder="Search equipment or people…" aria-label="Search equipment or people" autocomplete="off" value="${esc(S.gq || "")}">
+          <div class="pop" id="gsResults" role="listbox" ${S.gq ? "" : "hidden"}>${S.gq ? searchResults(S.gq) : ""}</div></div>
+        <a class="iconbtn" href="#alerts" aria-label="${open ? `${open} open alert${open === 1 ? "" : "s"}` : "Alerts"}">${ic("bell")}${open ? `<span class="badge">${open > 99 ? "99+" : open}</span>` : ""}</a>
+        <div class="account"><button type="button" data-act="acctMenu" aria-haspopup="true" aria-expanded="${S.pop === "acct"}"><span class="avatar" aria-hidden="true">${esc(initialsOf(DB.me.name))}</span><span class="nm">${esc(DB.me.name.includes("@") ? DB.me.name.split("@")[0] : DB.me.name)}</span>${ic("chevDown")}</button>
+          <div class="pop" role="menu" ${S.pop === "acct" ? "" : "hidden"}>
+            <div class="who"><b>${esc(DB.me.name)}</b><small>${esc(ROLE_NAME[DB.me.role])} · ${esc(DB.org.name)}</small></div>
+            ${LIVE ? `<button data-act="editName">${ic("user")}Edit name</button><button data-act="signOut">${ic("logout")}Sign out</button>`
+              : `<label>Preview as<select id="viewAs" aria-label="Preview the dashboard as">${Object.keys(RANK).reverse().map((r) => `<option value="${r}" ${DB.me.role === r ? "selected" : ""}>${ROLE_NAME[r]}</option>`).join("")}</select></label>`}
+            <a href="mailto:${esc(SP.support)}">${ic("help")}Help and support</a>
+          </div></div>
+      </header>
+      <div class="wrap">${VIEWS[S.route]()}</div></main>`;
   renderLayer();
 }
-// "Powered by" mark: your product's credit on every customer's dashboard.
-function powered(cls) {
-  return `<a class="powered ${cls}" href="https://sonoranpoint.com" target="_blank" rel="noopener" aria-label="Powered by Sonoran Point">
-    ${LIVE ? `<img src="brand/mark-64.png" alt="">` : ""}<span>Powered by<b>Sonoran Point</b></span></a>`;
+// The company's own mark at the bottom of the menu: their logo, or initials on their accent color.
+function companyBadge() {
+  return `<span class="clogo" aria-hidden="true">${DB.org.logo_url ? `<img src="${esc(DB.org.logo_url)}" alt="" onerror="this.remove()">` : ""}${esc(initialsOf(DB.org.name))}</span>`;
+}
+// Search across equipment and people from the top bar.
+function searchResults(q) {
+  q = q.trim().toLowerCase(); if (!q) return "";
+  const eq = api.equipment().filter((x) => `${x.name} ${x.asset} ${x.tag} ${x.holderName || ""}`.toLowerCase().includes(q)).slice(0, 6);
+  const em = api.employees().filter((e) => `${e.name} ${e.number || ""}`.toLowerCase().includes(q)).slice(0, 5);
+  if (!eq.length && !em.length) return `<div class="none">Nothing matches “${esc(q)}”.</div>`;
+  return eq.map((x) => `<button role="option" data-open="equipment:${x.id}" data-act="gsPick">${ic("box")}${esc(x.name)}<small>${x.holderName ? "With " + esc(x.holderName) : esc(x.category)}</small></button>`).join("")
+    + em.map((e) => `<button role="option" data-open="employee:${e.id}" data-act="gsPick">${ic("user")}${esc(e.name)}<small>${e.out ? `${e.out} out` : esc(e.number || "")}</small></button>`).join("");
 }
 function renderLayer() {
   let h = "";
@@ -793,31 +975,50 @@ function vOverview() {
   ].sort((a, b) => (!!a.acked - !!b.acked) || (b.at - a.at));
   const reports = api.shiftReports().filter((r) => !r.inProgress);
   const last = reports[0];
-  const feed = api.activity().slice(0, 8);
+  const act = api.activity();
   const greet = (() => { const h = tzParts(Date.now(), tz()).h; return h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening"; })();
-  return head(`${greet}, ${esc((DB.me.name.includes("@") ? DB.me.name.split("@")[0] : DB.me.name).split(" ")[0])}`, `${fmtDay(localDay(Date.now(), tz()))} · ${esc(DB.org.name)}`) + `
-    <div class="kpis">
-      <a class="kpi ${out.length ? "" : "ok"}" href="#equipment" data-filter="out" style="color:inherit;text-decoration:none"><b>${out.length}</b><span>Out right now</span><small>of ${eq.filter((q) => !["retired"].includes(q.status)).length} items</small></a>
-      <a class="kpi ${overdue.length ? "bad" : "ok"}" href="#equipment" data-filter="overdue" style="color:inherit;text-decoration:none"><b>${overdue.length}</b><span>Overdue</span><small>Past their due time</small></a>
-      <a class="kpi ${ext.length ? "warn" : "ok"}" href="#equipment" data-filter="extended" style="color:inherit;text-decoration:none"><b>${ext.length}</b><span>Out too long</span><small>Over ${DB.org.extended_hours} h (or item limit)</small></a>
-      <a class="kpi ${lost.length ? "bad" : "ok"}" href="#equipment" data-filter="lost" style="color:inherit;text-decoration:none"><b>${lost.length}</b><span>Lost</span><small>Marked by a supervisor</small></a>
-      <a class="kpi ${online < active ? "warn" : "ok"}" href="#stations" style="color:inherit;text-decoration:none"><b>${online}/${active}</b><span>Stations online</span><small>Checked every minute</small></a>
+  const emps = api.employees().filter((e) => e.active);
+  const live = st.filter((s) => !s.revoked);
+  // Per station: taps today, and items still out that were checked out there.
+  const today0 = zoned(localDay(Date.now(), tz()), "00:00", tz());
+  const lastOut = {}; for (const x of act) if (x.action === "checkout" && !(x.eq in lastOut)) lastOut[x.eq] = x.place;
+  const stStats = (s) => ({ taps: act.filter((x) => x.place === s.name && x.at >= today0).length, out: out.filter((q) => lastOut[q.id] === s.name).length });
+  const offline = live.filter((s) => !s.online && !s.pending).length;
+  return head(`${greet}, ${esc(firstName(DB.me.name))}`, `Here's what's happening at your stations today.`) + `
+    <div class="stats">
+      <a class="stat" href="#equipment" data-filter="all"><span class="ic">${ic("box")}</span><div><span>Equipment</span><b>${eq.filter((q) => q.status !== "retired").length}</b>
+        <small>${eq.filter((q) => q.status === "available" && !q.holder).length} in the room now</small></div></a>
+      <a class="stat" href="#employees"><span class="ic">${ic("users")}</span><div><span>Employees</span><b>${emps.length}</b>
+        <small>${emps.filter((e) => e.out).length} with items out</small></div></a>
+      <a class="stat" href="#stations"><span class="ic">${ic("station")}</span><div><span>Stations</span><b>${online}${active ? `<span class="muted" style="font-size:18px;font-weight:700;display:inline"> / ${active}</span>` : ""}</b>
+        <small>${!active ? "None set up yet" : offline ? `<span class="pip warn"></span>${offline} offline` : `<span class="pip"></span>All online`}</small></div></a>
+      <a class="stat ${overdue.length ? "bad" : ""}" href="#equipment" data-filter="out"><span class="ic">${ic("clock")}</span><div><span>Checked out</span><b>${out.length}</b>
+        ${overdue.length ? `<small class="alert">${overdue.length} overdue${ext.length ? `, ${ext.length} out too long` : ""}</small>` : ext.length ? `<small class="alert">${ext.length} out too long</small>` : `<small class="go">View checkouts ${ic("arrowRight")}</small>`}</div></a>
     </div>
-    <div class="grid2">
-      <section class="panel"><div class="panel-h"><h2>Needs attention</h2><a class="link" href="#alerts">All alerts</a></div>
-        <div class="list">${attention.slice(0, 8).map((x) => `<button class="row" data-open="${x.open[0]}:${x.open[1]}">
-          <span class="dot ${x.acked ? "info" : x.sev}"></span><span><b>${esc(x.title)}</b><span class="sub">${esc(x.sub)}</span></span><span class="muted" style="font-size:13px">${x.acked ? "Seen" : ""}</span></button>`).join("")
-          || `<div class="empty">Nothing needs attention. Everything is in or on time.</div>`}</div></section>
-      <div style="display:flex;flex-direction:column;gap:20px;min-width:0">
-        ${last ? `<section class="panel"><div class="panel-h"><h2>Last shift report</h2><a class="link" href="#shifts">All reports</a></div>
-          <button class="row" data-open="report:${last.key}" style="grid-template-columns:minmax(0,1fr) auto">
+    ${attention.length ? `<section class="panel attn"><div class="panel-h"><h2>${ic("alert")}Needs attention</h2><a class="more" href="#alerts">All alerts</a></div>
+      <div class="list">${attention.slice(0, 6).map((x) => `<button class="ev" data-open="${x.open[0]}:${x.open[1]}">
+        <span class="tile ${x.acked ? "" : x.sev}">${ic(x.open[0] === "station" ? "wifiOff" : x.sev === "bad" ? "alert" : "clock")}</span><span><b>${esc(x.title)}</b><span class="sub">${esc(x.sub)}</span></span><span class="when">${x.acked ? "Seen" : ""}</span></button>`).join("")}</div></section>` : ""}
+    <div class="home2">
+      <div><section class="panel"><div class="panel-h"><h2>Recent activity</h2><a class="more" href="#activity">View all</a></div>
+        <div class="list">${act.slice(0, 7).map((x) => `<button class="ev" data-open="equipment:${x.eq}">
+          <span class="tile ${x.action === "checkout" ? "out" : x.flags.includes("returned_after_extended") ? "late" : "in"}">${ic(x.action === "checkout" ? "out" : "in")}</span>
+          <span><b>${esc(x.equipment)} ${esc(x.action === "checkout" ? "checked out" : x.forOther ? "returned for " + (x.previous || "someone") : "returned")}${x.flags.includes("returned_after_extended") ? ` <span class="chip warn">late</span>` : ""}</b>
+            <span class="sub">${esc(x.by)}${x.place ? " · " + esc(x.place) : ""}</span></span><time datetime="${new Date(x.at).toISOString()}">${esc(agoShort(x.at))}</time></button>`).join("")
+          || `<div class="empty">No taps yet. Checkouts and returns show up here as they happen at a station.</div>`}</div></section></div>
+      <div><section class="panel"><div class="panel-h"><h2>Stations</h2>${can("admin") ? `<a class="more" href="#stations">Manage stations</a>` : ""}</div>
+        <div class="list">${live.map((s) => { const k = stStats(s); return `<button class="strow" data-open="station:${s.id}">
+          <span class="pip ${s.pending ? "quiet" : s.online ? "" : "warn"}"></span>
+          <span><b>${esc(s.name)}</b><span class="sub">${s.pending ? "Waiting for setup" : s.online ? "Online" : "Offline · seen " + esc(ago(s.last_seen))}</span></span>
+          <span class="n"><b>${k.taps}</b><small>Taps today</small></span><span class="n"><b>${k.out}</b><small>Out</small></span>${ic("chevRight")}</button>`; }).join("")
+          || `<div class="empty">No stations yet.${can("admin") ? ` <a class="link" href="#stations">Add your first station</a>` : ""}</div>`}</div></section>
+        ${last ? `<section class="panel"><div class="panel-h"><h2>Last shift report</h2><a class="more" href="#shifts">All reports</a></div>
+          <button class="ev" data-open="report:${last.key}"><span class="tile">${ic("calendar")}</span>
             <span><b>${esc(last.shift.name)} shift · ${esc(fmtDay(last.day))}</b><span class="sub">${fmtTime(last.start)} to ${fmtTime(last.end)}</span></span>
             ${last.outstanding ? `<span class="chip ${last.stillOut ? "bad" : "warn"}">${last.outstanding} not back on time</span>` : `<span class="chip ok">All returned</span>`}</button></section>` : ""}
-        <section class="panel"><div class="panel-h"><h2>Latest activity</h2><a class="link" href="#activity">Full log</a></div>
-          <div class="list feed">${feed.map(feedRow).join("") || `<div class="empty">No taps yet. Checkouts and returns show up here as they happen at a station.</div>`}</div></section>
       </div>
     </div>`;
 }
+function agoShort(ms) { const m = (Date.now() - ms) / MIN; if (m < 1) return "now"; if (m < 60) return Math.round(m) + "m ago"; if (m < 48 * 60) return Math.round(m / 60) + "h ago"; return Math.round(m / 1440) + "d ago"; }
 function feedRow(a) {
   return `<div class="row"><time>${esc(fmtWhen(a.at).replace(/^Yesterday /, "Yest. "))}</time><span><b>${esc(a.by)}</b> ${esc(a.description.charAt(0).toLowerCase() + a.description.slice(1))} <b>${esc(a.equipment)}</b>
     ${a.flags.includes("returned_after_extended") ? `<span class="chip warn">late</span>` : ""}</span></div>`;
@@ -1191,14 +1392,23 @@ const DRAWERS = { shiftForm: dShiftForm, eqForm: dEqForm, empForm: dEmpForm, equ
    Events
    ===================================================================== */
 document.addEventListener("click", async (e) => {
-  const kpi = e.target.closest("a.kpi[data-filter]");
-  if (kpi) { const f = kpi.dataset.filter; S.f.eqStatus = f === "lost" ? "lost" : f; S.f.eqCat = ""; S.f.eqSearch = ""; }
+  const kpi = e.target.closest("a[data-filter]");
+  if (kpi) { const f = kpi.dataset.filter; S.f.eqStatus = f; S.f.eqCat = ""; S.f.eqSearch = ""; }
+  // Close an open menu when clicking anywhere outside it.
+  if (S.pop && !e.target.closest(".pop") && !e.target.closest("[data-act=acctMenu],[data-act=orgMenu]")) { S.pop = null; document.querySelectorAll(".topbar .pop:not(#gsResults), .company .pop").forEach((el) => (el.hidden = true));
+    document.querySelectorAll("[data-act=acctMenu],[data-act=orgMenu]").forEach((b) => b.setAttribute("aria-expanded", "false")); }
+  if (S.gq && !e.target.closest(".gsearch")) { const r = $("#gsResults"); if (r) r.hidden = true; }
+  if (e.target.closest("[data-act=gsPick]")) { S.gq = ""; const i = $("#gsearch"); if (i) i.value = ""; $("#gsResults").hidden = true; }
   const op = e.target.closest("[data-open]");
   if (op) { const [kind, ...rest] = op.dataset.open.split(":"); return openDrawer(kind, rest.join(":")); }
   const seg = e.target.closest("[data-seg]");
   if (seg) { const [k, v] = seg.dataset.seg.split(":"); S.f[k] = v; return render(); }
   const t = e.target.closest("[data-act]"); if (!t) return;
   const a = t.dataset.act, D = S.drawer;
+  if (a === "acctMenu" || a === "orgMenu") { const k = a === "acctMenu" ? "acct" : "org"; S.pop = S.pop === k ? null : k; const pop = t.nextElementSibling; pop.hidden = S.pop !== k;
+    t.setAttribute("aria-expanded", String(S.pop === k)); if (S.pop) pop.querySelector("button, a, select")?.focus(); return; }
+  if (a === "navOpen") { S.navOpen = true; render(); $(".snav a.on")?.focus(); return; }
+  if (a === "navClose") { S.navOpen = false; return render(); }
   if (a === "signOut") { localStorage.removeItem("sp.org"); await sb.auth.signOut(); return; }
   if (a === "magic" || a === "forgot") return authAction(a);
   if (a === "pickOrg") return openCompany(t.dataset.id);
@@ -1232,10 +1442,13 @@ document.addEventListener("click", async (e) => {
   if (a === "copyCode") { navigator.clipboard?.writeText(S.f.newStation.code).then(() => toast("Code copied"), () => toast("Couldn't copy. Select the code instead.")); return; }
 });
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && S.drawer) { S.drawer = null; S.confirm = null; renderLayer(); }
+  if (e.key === "Escape" && S.drawer) { S.drawer = null; S.confirm = null; renderLayer(); return; }
+  if (e.key === "Escape" && (S.pop || S.navOpen || S.gq)) { S.pop = null; S.navOpen = false; if (e.target.id === "gsearch") { S.gq = ""; e.target.value = ""; } render(); return; }
+  if (e.key === "Enter" && e.target.id === "gsearch") { $("#gsResults button")?.click(); return; }
   if (e.key === "Enter" && e.target.matches("tr[data-open]")) e.target.click();
 });
 document.addEventListener("input", (e) => {
+  if (e.target.id === "gsearch") { S.gq = e.target.value; const r = $("#gsResults"); r.innerHTML = searchResults(S.gq); r.hidden = !S.gq.trim(); return; }
   const k = e.target.dataset.f; if (!k) return;
   S.f[k] = e.target.value; const pos = e.target.selectionStart; render();
   const el = $(`[data-f="${k}"]`); if (el) { el.focus(); try { el.setSelectionRange(pos, pos); } catch {} }

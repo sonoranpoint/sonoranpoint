@@ -20,8 +20,9 @@ fi
 
 if [[ $what == all || $what == ui ]]; then
   (cd tests/ui && [ -d node_modules ] || npm install --silent --no-audit --no-fund)
-  run() { local out; out=$(cd tests/ui && node "$1" "$ROOT/$2" 2>&1) || { echo "FAIL $1 (crashed)"; echo "$out" | tail -5; exit 1; }; local n; n=$(grep -c "^pass" <<<"$out" || true)
-    if grep -q "^FAIL" <<<"$out"; then echo "FAIL $1"; grep -A2 "^FAIL" <<<"$out"; exit 1; else echo "ok   $1 ($n checks)"; fi; }
+  run() { local out rc=0; out=$(cd tests/ui && node "$1" "$ROOT/$2" 2>&1) || rc=$?; local n; n=$(grep -c "^pass" <<<"$out" || true)
+    if grep -q "^FAIL" <<<"$out"; then echo "FAIL $1"; grep -A2 "^FAIL" <<<"$out"; exit 1
+    elif [[ $rc -ne 0 ]]; then echo "FAIL $1 (crashed)"; tail -8 <<<"$out"; exit 1; else echo "ok   $1 ($n checks)"; fi; }
   echo "== screens (demo data)"
   run console.js platform/console.html
   for f in dashboard1.js dashboard2.js dashboard3.js; do run $f dashboard/dashboard.html; done
