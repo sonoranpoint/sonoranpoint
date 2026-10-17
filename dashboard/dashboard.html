@@ -369,6 +369,10 @@ a.kpi:hover { border-color: var(--brand); transform: translateY(-1px); }
 .pop .who b { display: block; } .pop .who small { color: var(--muted); }
 .pop label { display: flex; flex-direction: column; gap: 4px; padding: 8px 10px; font-size: 12.5px; color: var(--muted); font-weight: 700; }
 .pop select { border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; background: var(--surface); color: var(--ink); font-weight: 700; font-size: 14px; }
+.themes { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); margin: 4px 0; padding: 4px 0; }
+.themes small { display: block; padding: 6px 10px 2px; color: var(--muted); font-size: 12.5px; font-weight: 700; }
+.pop .themes button { font-weight: 400; } .pop .themes button[aria-pressed="true"] { font-weight: 700; }
+.pop svg.tick { margin-left: auto; color: var(--brand); }
 .company .pop { bottom: calc(100% + 6px); left: 0; right: 0; }
 
 .topbar { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 12px; padding: 14px max(28px, env(safe-area-inset-right, 0px)) 14px 28px;
@@ -391,7 +395,7 @@ a.kpi:hover { border-color: var(--brand); transform: translateY(-1px); }
 .account .pop { right: 0; top: calc(100% + 6px); }
 
 .main { padding: 0 0 48px; }
-.main .wrap { padding: 6px max(28px, env(safe-area-inset-right, 0px)) 0 28px; max-width: 1320px; margin: 0; gap: 22px; }
+.main .wrap { padding: 6px max(28px, env(safe-area-inset-right, 0px)) 0 28px; max-width: 1760px; margin: 0; gap: 22px; }
 .head h1 { font-family: var(--head); font-weight: 800; font-size: 32px; letter-spacing: -.02em; line-height: 1.1; }
 .head p { font-size: 16px; margin-top: 6px; }
 .panel, .card { box-shadow: var(--card-shadow); border-color: var(--line); }
@@ -476,6 +480,14 @@ button.ev { width: 100%; background: none; border-left: 0; border-right: 0; bord
    don't change.
    ===================================================================== */
 const $ = (s, r = document) => r.querySelector(s);
+// Light by default. Each person can pick dark, or follow their device, from the account menu (saved in this browser only).
+const THEMES = [["light", "Light"], ["dark", "Dark"], ["auto", "Match my device"]];
+function getTheme() { try { return localStorage.getItem("sp.theme") || "light"; } catch { return "light"; } }
+function applyTheme(t) {
+  if (t === "auto") document.documentElement.removeAttribute("data-theme"); else document.documentElement.dataset.theme = t;
+  try { localStorage.setItem("sp.theme", t); } catch {}
+}
+applyTheme(getTheme());
 const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const fmtUid = (u) => (u || "").match(/.{1,2}/g)?.join(":") || "";
 const HOUR = 3600000, MIN = 60000;
@@ -891,6 +903,8 @@ const ICON = {
   alert: '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4M12 17h.01"/>',
   wifiOff: '<path d="M12 20h.01M8.5 16.43a5 5 0 0 1 7 0M2 8.82a15 15 0 0 1 4.17-2.65M10.66 5c4.01-.36 8.14.9 11.34 3.76M16.85 11.25a10 10 0 0 1 2.22 1.68M5 13a10 10 0 0 1 5.24-2.76"/><path d="m2 2 20 20"/>',
   help: '<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>',
+  moon: '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>', monitor: '<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>', check: '<path d="M20 6 9 17l-5-5"/>',
   user: '<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>', logout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>',
 };
 const ic = (k, cls = "") => `<svg ${cls ? `class="${cls}" ` : ""}viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[k]}</svg>`;
@@ -927,6 +941,7 @@ function render() {
             <div class="who"><b>${esc(DB.me.name)}</b><small>${esc(ROLE_NAME[DB.me.role])} · ${esc(DB.org.name)}</small></div>
             ${LIVE ? `<button data-act="editName">${ic("user")}Edit name</button><button data-act="signOut">${ic("logout")}Sign out</button>`
               : `<label>Preview as<select id="viewAs" aria-label="Preview the dashboard as">${Object.keys(RANK).reverse().map((r) => `<option value="${r}" ${DB.me.role === r ? "selected" : ""}>${ROLE_NAME[r]}</option>`).join("")}</select></label>`}
+            <div class="themes" role="group" aria-label="Appearance"><small>Appearance</small>${THEMES.map(([k, l]) => `<button data-act="theme" data-v="${k}" aria-pressed="${getTheme() === k}">${ic(k === "light" ? "sun" : k === "dark" ? "moon" : "monitor")}${l}${getTheme() === k ? ic("check", "tick") : ""}</button>`).join("")}</div>
             <a href="mailto:${esc(SP.support)}">${ic("help")}Help and support</a>
           </div></div>
       </header>
@@ -1407,6 +1422,7 @@ document.addEventListener("click", async (e) => {
   const a = t.dataset.act, D = S.drawer;
   if (a === "acctMenu" || a === "orgMenu") { const k = a === "acctMenu" ? "acct" : "org"; S.pop = S.pop === k ? null : k; const pop = t.nextElementSibling; pop.hidden = S.pop !== k;
     t.setAttribute("aria-expanded", String(S.pop === k)); if (S.pop) pop.querySelector("button, a, select")?.focus(); return; }
+  if (a === "theme") { applyTheme(t.dataset.v); return render(); }
   if (a === "navOpen") { S.navOpen = true; render(); $(".snav a.on")?.focus(); return; }
   if (a === "navClose") { S.navOpen = false; return render(); }
   if (a === "signOut") { localStorage.removeItem("sp.org"); await sb.auth.signOut(); return; }
