@@ -16,7 +16,7 @@ const ANON = sign({ role: "anon", iss: "local", exp: 4102444800 });
 const psql = (sql) => execSync(`su postgres -c "psql -v ON_ERROR_STOP=1 -q -t -A -d etlive"`, { input: sql }).toString().trim();
 
 function resetDb() {
-  execSync(`su postgres -c "dropdb --if-exists etlive; createdb etlive"`);
+  execSync(`su postgres -c "dropdb --if-exists --force etlive; createdb etlive"`);
   execSync(`cat ${ROOT}/tests/local_supabase_stub.sql ${ROOT}/migrations/*.sql ${ROOT}/seed.sql | su postgres -c "psql -v ON_ERROR_STOP=1 -q -d etlive"`, { stdio: ["ignore", "ignore", "inherit"] });
   psql(`do $$ begin if not exists (select 1 from pg_roles where rolname='authenticator') then
           create role authenticator login password 'authpass' noinherit; end if; end $$;

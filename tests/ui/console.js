@@ -18,11 +18,22 @@ const submit = async (sel) => { doc.querySelector(sel).dispatchEvent(new dom.win
   await sleep(100);
   check(/Customers/.test(page()) && /Demo Air Services/.test(page()) && /Copper State Cargo/.test(page()), "customer list");
   check(/Needs attention/.test(page()) && /Bag Room offline/.test(page()) && /Trial 5 days left/.test(page()) && /Commissary: activation code expired/.test(page()), "needs attention: offline station, trial ending, expired code");
-  check(/Stations offline/.test(page()), "KPIs");
+  check(/Stations online/.test(page()) && /Trials ending soon/.test(page()) && /Owner invites/.test(page()) && /System health/.test(page()) && /New customers/.test(page()), "overview cards, health and charts");
+  await click("tr[data-preview]"); check(/Quick actions/.test(doc.querySelector("#layer").textContent) && /Open customer/.test(doc.querySelector("#layer").textContent), "clicking a customer opens its preview");
+  await click('[data-act="pvAskPause"]'); await click('[data-act="pvPause"]'); const pcust = E("S.preview");
+  check(E(`custOf('${pcust}').status`) === "paused" && /Resume account/.test(doc.querySelector("#layer").textContent), "pause from the preview");
+  await click('[data-act="pvResume"]'); check(E(`custOf('${pcust}').status`) === "active", "and resume");
+  await click('[data-act="closePreview"]'); check(!doc.querySelector(".preview"), "close the preview");
+  const gs = doc.querySelector("#gsearch"); gs.value = "bag"; gs.dispatchEvent(new dom.window.Event("input", { bubbles: true })); await sleep(10);
+  check(/Stations/.test(doc.querySelector("#gsResults").textContent) && /Bag Room/.test(doc.querySelector("#gsResults").textContent), "top bar search finds stations");
+  gs.value = "SP-0009"; gs.dispatchEvent(new dom.window.Event("input", { bubbles: true })); await sleep(10);
+  check(/Hardware/.test(doc.querySelector("#gsResults").textContent), "and hardware");
+  gs.value = ""; gs.dispatchEvent(new dom.window.Event("input", { bubbles: true })); await sleep(10);
+  check(doc.documentElement.dataset.theme === "light", "light by default");
   await click('[data-seg="status:paused"]');
-  check(/Mesa Ramp/.test(page()) && !/Copper State/.test(page().split("All customers")[1]), "filter paused");
+  check(/Mesa Ramp/.test(page()) && !/Copper State/.test(page().split("Every company")[1]), "filter paused");
   await click('[data-seg="status:all"]'); await type('[data-f="q"]', "tasha");
-  check(/Desert Ground/.test(page().split("All customers")[1]) && !/Copper/.test(page().split("All customers")[1]), "search by contact");
+  check(/Desert Ground/.test(page().split("Every company")[1]) && !/Copper/.test(page().split("Every company")[1]), "search by contact");
   await type('[data-f="q"]', "");
 
   // new customer

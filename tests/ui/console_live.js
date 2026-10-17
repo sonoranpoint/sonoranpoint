@@ -59,10 +59,11 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   // look
   P.type('[data-form="brand"] [name=accent]', "#cc3300"); P.submit('[data-form="brand"]');
   check(await P.until(() => b.psql(`select accent_color from organizations where id = '${org}'`) === "#CC3300"), "look saves");
-  // account (notes are private)
+  // account (notes are private); wait for the look save to finish first
+  await P.until(() => !P.E("S.busy"));
   P.doc.querySelector('[data-form="account"] [name=notes]').value = "Pilot at PHX"; P.doc.querySelector('[data-form="account"] [name=station_limit]').value = "3";
   P.submit('[data-form="account"]');
-  check(await P.until(() => b.psql(`select notes from private.customer_notes where org_id = '${org}'`) === "Pilot at PHX" && b.psql(`select station_limit from organizations where id = '${org}'`) === "3"), "account + private notes save");
+  check(await P.until(() => b.psql(`select notes from private.customer_notes where org_id = '${org}'`) === "Pilot at PHX" && b.psql(`select station_limit from organizations where id = '${org}'`) === "3"), "account + private notes save", P.E("JSON.stringify(S.formErr)") + " " + b.psql(`select coalesce(notes,'-') from private.customer_notes where org_id = '${org}'`) + " " + b.psql(`select station_limit from organizations where id = '${org}'`));
   // add station, new code, disconnect
   P.type('[data-form="addStation"] [name=name]', "Bag Room"); P.submit('[data-form="addStation"]');
   check(await P.until(() => /Activation code for Bag Room/.test(P.text())), "add a station -> code");
@@ -96,7 +97,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   check(await Q.until(() => /Demo Air Services/.test(Q.text()) && /Welcome, Casey/.test(Q.text())), "invited person signs in and is in", Q.text());
   check(/Casey/.test(Q.doc.querySelector(".me").textContent) && /Operator/.test(Q.doc.querySelector(".me").textContent) && !/opinvite/.test(Q.dom.window.location.href), "rail shows their name and role; link cleaned up");
   Q.dom.window.location.hash = "team";
-  check(await Q.until(() => /Your name/.test(Q.text()) && !/Invite someone/.test(Q.text()) && !Q.doc.querySelector("[data-oprole]")), "operators can't invite or change roles");
+  check(await Q.until(() => Q.doc.querySelector('[data-form="myname"]') && !/Invite someone/.test(Q.text()) && !Q.doc.querySelector("[data-oprole]")), "operators can't invite or change roles");
   Q.type('[data-form="myname"] [name=name]', "Casey Nguyen"); Q.submit('[data-form="myname"]');
   check(await Q.until(() => b.psql("select name from private.platform_operators po join auth.users u on u.id = po.user_id where u.email = 'casey@sonoranpoint.example'") === "Casey Nguyen"
     && /Casey Nguyen/.test(Q.doc.querySelector(".me").textContent)), "operator sets their own name");

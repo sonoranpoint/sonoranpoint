@@ -2,7 +2,7 @@
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira:wght@500;600;700&family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@600;700;800&family=Saira:wght@500;600;700&family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
 /* Your side of the product. Same type family as the customer dashboard and station,
    but a graphite rail instead of a customer's brand color, so it never looks like a customer's screen. */
@@ -300,6 +300,186 @@ a.kpi:hover { border-color: var(--brand); transform: translateY(-1px); }
 /* SP-THEME:end */
   .oprow > span:nth-child(2) { min-width: 0; overflow-wrap: anywhere; }
   @media (max-width: 640px) { .oprow { grid-template-columns: auto 1fr; } .oprow > span:last-child { grid-column: 2; justify-content: flex-start !important; } }
+
+/* =====================================================================
+   Console shell (v2) — same family as the customer dashboard: navy sidebar
+   with icons, top bar with search, alerts and your account, white cards.
+   ===================================================================== */
+:root { --head: "Plus Jakarta Sans", "Segoe UI", system-ui, sans-serif; --bg: #f3f6fa; --line: #e3e9f1;
+  --card-shadow: 0 1px 2px rgba(12, 27, 51, .04), 0 2px 8px -2px rgba(12, 27, 51, .06);
+  --t-blue: #1663d6; --t-green: #12a150; --t-orange: #f08a12; --t-red: #e5484d; --t-purple: #7c4ddb; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #07111f; --line: #1d3254; --card-shadow: none; } }
+:root[data-theme="dark"] { --bg: #07111f; --line: #1d3254; --card-shadow: none; }
+.app { grid-template-columns: 252px minmax(0, 1fr); }
+.side { position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; gap: 20px; padding: 22px 14px 16px; color: #dfe8f7; z-index: 30;
+  background: radial-gradient(120% 50% at 0% 0%, rgba(47, 155, 255, .10), transparent 60%), linear-gradient(180deg, #0c2550 0%, #081c3c 55%, #061630 100%); }
+.brandmark { display: flex; align-items: center; gap: 11px; padding: 2px 8px 0; color: #fff; text-decoration: none; }
+.brandmark img { width: 42px; height: 42px; flex: none; }
+.brandmark span { font-family: var(--display); font-weight: 600; font-size: 19px; line-height: .95; letter-spacing: .09em; text-transform: uppercase; }
+.brandmark span i { font-style: normal; color: #4fb3ff; display: block; }
+.brandsub { padding: 0 10px; margin-top: -10px; font-size: 13.5px; color: rgba(223, 232, 247, .78); font-weight: 700; }
+.snav { display: flex; flex-direction: column; gap: 4px; overflow-y: auto; }
+.snav a { display: flex; align-items: center; gap: 13px; padding: 11px 14px; border-radius: 11px; color: rgba(223, 232, 247, .86); text-decoration: none; font-weight: 700; font-size: 15px; }
+.snav a svg { width: 20px; height: 20px; flex: none; }
+.snav a:hover { background: rgba(255, 255, 255, .06); color: #fff; }
+.snav a.on { background: var(--t-blue); color: #fff; box-shadow: 0 8px 18px -10px rgba(22, 99, 214, .9); }
+.snav .n { margin-left: auto; background: var(--sp-sun, #f7931e); color: #2a1300; border-radius: 99px; font-size: 12px; padding: 1px 8px; font-weight: 700; }
+.snav a.on .n { background: #fff; color: var(--t-blue); }
+.sidecard { margin-top: auto; position: relative; border-radius: 16px; overflow: hidden; min-height: 190px; display: flex; align-items: flex-end; padding: 18px;
+  background: linear-gradient(180deg, #123a7a 0%, #0b2654 100%); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .06); }
+.sidecard svg { position: absolute; left: 0; right: 0; top: 0; width: 100%; height: 110px; }
+.sidecard p { position: relative; margin: 0; font-size: 14px; line-height: 1.45; color: #eaf2ff; font-weight: 700; }
+.side .pill { margin: 0 10px; }
+.pop { position: absolute; z-index: 40; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); padding: 6px; min-width: 230px; }
+.pop[hidden] { display: none; }
+.pop button, .pop a { display: flex; width: 100%; align-items: center; gap: 10px; background: none; border: 0; border-radius: 8px; padding: 9px 10px; text-align: left; font-weight: 700; font-size: 14px; color: inherit; text-decoration: none; }
+.pop button:hover, .pop a:hover { background: var(--surface-2); }
+.pop button svg, .pop a svg { width: 17px; height: 17px; flex: none; color: var(--muted); }
+.pop .who { padding: 9px 10px 10px; border-bottom: 1px solid var(--line); margin-bottom: 4px; }
+.pop .who b { display: block; } .pop .who small { color: var(--muted); }
+.pop small.k { margin-left: auto; color: var(--muted); font-weight: 400; font-size: 12.5px; }
+.pop .none { padding: 12px 10px; color: var(--muted); font-size: 14px; }
+.pop .grp { padding: 8px 10px 2px; color: var(--muted); font-size: 12px; font-weight: 700; }
+.themes { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); margin: 4px 0; padding: 4px 0; }
+.pop .themes button { font-weight: 400; } .pop .themes button[aria-pressed="true"] { font-weight: 700; }
+.pop svg.tick { margin-left: auto; color: var(--t-blue); }
+.topbar { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 14px; padding: 14px 28px; background: color-mix(in srgb, var(--bg) 86%, transparent); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+.topbar .menu-btn { display: none; }
+.gsearch { position: relative; width: min(560px, 100%); }
+.gsearch > svg { position: absolute; left: 14px; top: 50%; width: 18px; height: 18px; margin-top: -9px; color: var(--muted); pointer-events: none; }
+.gsearch input { width: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 11px 14px 11px 42px; box-shadow: var(--card-shadow); }
+.gsearch input:focus { outline: 3px solid color-mix(in srgb, var(--t-blue) 22%, transparent); border-color: var(--t-blue); }
+.gsearch .pop { left: 0; right: 0; top: calc(100% + 6px); max-height: 60vh; overflow-y: auto; }
+.topbar .spacer { flex: 1; }
+.iconbtn { position: relative; width: 42px; height: 42px; border-radius: 11px; border: 1px solid var(--line); background: var(--surface); display: grid; place-items: center; color: var(--ink); box-shadow: var(--card-shadow); flex: none; }
+.iconbtn svg { width: 19px; height: 19px; }
+.iconbtn .badge { position: absolute; top: -5px; right: -5px; min-width: 19px; height: 19px; padding: 0 5px; border-radius: 99px; background: var(--sp-sun, #f7931e); color: #2a1300; font-size: 11.5px; font-weight: 700; display: grid; place-items: center; border: 2px solid var(--bg); }
+.account { position: relative; flex: none; margin: 0; padding: 0; border: 0; font-size: inherit; display: block; }
+.account > button { display: flex; align-items: center; gap: 11px; background: none; border: 0; padding: 4px 6px; border-radius: 12px; text-align: left; }
+.account > button:hover { background: color-mix(in srgb, var(--surface) 70%, transparent); }
+.account > button b { display: block; font-size: 15px; } .account > button small { display: block; color: var(--muted); font-size: 13px; }
+.avatar { width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg, #2f86ff, #1452b8); color: #fff; display: grid; place-items: center; font-family: var(--head); font-weight: 800; font-size: 14px; flex: none; }
+.account > button > svg { width: 17px; height: 17px; color: var(--muted); }
+.account .pop { right: 0; top: calc(100% + 6px); }
+
+.main { padding: 0 0 48px; }
+.main .wrap { padding: 6px 28px 0; max-width: 1760px; margin: 0; gap: 20px; }
+.head h1 { font-family: var(--head); font-weight: 800; font-size: 30px; letter-spacing: -.02em; line-height: 1.1; }
+.head p { font-size: 15.5px; margin-top: 6px; }
+.panel, .shipcard { box-shadow: var(--card-shadow); border-color: var(--line); border-radius: 16px; }
+.panel-h { border-bottom: 0; padding: 18px 20px 10px; }
+.panel-h h2, .shipcard h3 { font-family: var(--head); font-weight: 700; font-size: 17px; letter-spacing: -.005em; text-transform: none; color: var(--ink); }
+.panel-h h2 small { display: block; font-family: var(--body); font-weight: 400; font-size: 14px; color: var(--muted); margin-top: 3px; }
+.panel-h a.more { font-size: 14px; text-decoration: none; color: var(--t-blue); font-weight: 700; display: inline-flex; align-items: center; gap: 4px; }
+.panel-h a.more svg { width: 15px; height: 15px; }
+.btn.primary { background: var(--t-blue); border-color: var(--t-blue); color: #fff; box-shadow: 0 6px 14px -8px rgba(22, 99, 214, .8); }
+.btn.primary:hover { background: #0f52b8; border-color: #0f52b8; }
+.btn svg { width: 17px; height: 17px; }
+th { background: transparent; }
+.back { color: var(--t-blue); }
+
+/* Overview */
+.stats { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 16px; }
+.stat { display: flex; align-items: flex-start; gap: 14px; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 18px; box-shadow: var(--card-shadow); color: inherit; text-decoration: none; min-width: 0; }
+a.stat:hover { border-color: color-mix(in srgb, var(--t-blue) 40%, var(--line)); }
+.stat .ic { width: 50px; height: 50px; border-radius: 14px; display: grid; place-items: center; flex: none; color: #fff; background: var(--t-blue); box-shadow: 0 8px 16px -10px currentColor; }
+.stat .ic svg { width: 25px; height: 25px; }
+.stat .ic.green { background: var(--t-green); } .stat .ic.orange { background: var(--t-orange); } .stat .ic.red { background: var(--t-red); } .stat .ic.purple { background: var(--t-purple); }
+.stat span { display: block; font-size: 14.5px; font-weight: 700; }
+.stat b { display: block; font-family: var(--head); font-weight: 800; font-size: 28px; line-height: 1.2; letter-spacing: -.02em; margin: 2px 0 3px; font-variant-numeric: tabular-nums; }
+.stat b em { font-style: normal; color: var(--muted); font-size: 20px; }
+.stat small { display: block; font-size: 13px; color: var(--muted); }
+.stat small span { display: inline; font-size: inherit; } .stat small .up { color: var(--ok); font-weight: 700; }
+.ov { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 16px; align-items: start; }
+.ov2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.ov > .stack, .ov2 > * { min-width: 0; }
+.ctools { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.ctools .search { position: relative; } .ctools .search svg { position: absolute; left: 11px; top: 50%; width: 16px; height: 16px; margin-top: -8px; color: var(--muted); pointer-events: none; }
+.ctools .search input { padding-left: 34px; width: 230px; border-radius: 10px; }
+.ctable td { padding: 12px 16px; } .ctable th { padding: 10px 16px; font-size: 12.5px; letter-spacing: 0; text-transform: none; }
+.ctable tbody tr { cursor: pointer; } .ctable tbody tr:hover td { background: var(--surface-2); }
+.cav { width: 38px; height: 38px; border-radius: 50%; flex: none; display: grid; place-items: center; overflow: hidden; position: relative; font-family: var(--head); font-weight: 800; font-size: 13.5px; }
+.cav img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #fff; }
+.cav.lg { width: 56px; height: 56px; font-size: 19px; border-radius: 14px; }
+.cname b { display: block; font-size: 14.5px; } .cname small { display: block; color: var(--muted); font-size: 13px; }
+.chip.dotted::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.chip.plan { background: var(--info-bg); color: var(--info); border-radius: 7px; }
+.chip.plan.enterprise { background: color-mix(in srgb, var(--t-purple) 14%, var(--surface)); color: color-mix(in srgb, var(--t-purple) 80%, var(--ink)); }
+.chip.plan.pilot { background: color-mix(in srgb, var(--t-orange) 16%, var(--surface)); color: var(--warn); }
+.days { display: block; font-size: 13px; font-weight: 700; color: var(--t-orange); } .days.bad { color: var(--bad); }
+.kebab { width: 32px; height: 32px; border-radius: 8px; border: 0; background: none; display: grid; place-items: center; color: var(--muted); }
+.kebab:hover { background: var(--surface-2); color: var(--ink); } .kebab svg { width: 18px; height: 18px; }
+.pager { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 20px 16px; flex-wrap: wrap; color: var(--muted); font-size: 14px; }
+.pager nav { display: flex; gap: 4px; }
+.pager button { min-width: 34px; height: 34px; border-radius: 9px; border: 1px solid transparent; background: none; font-weight: 700; color: var(--ink); }
+.pager button.on { background: var(--t-blue); color: #fff; } .pager button:not(.on):hover { border-color: var(--line); } .pager button[disabled] { opacity: .35; cursor: default; }
+.health { padding: 4px 20px 20px; }
+.health .ok-line { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 14px; color: var(--ok); margin-bottom: 14px; } .health .ok-line.warn { color: var(--warn); }
+.rings { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; text-align: center; }
+.ring { position: relative; width: 84px; height: 84px; margin: 0 auto 6px; }
+.ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+.ring b { position: absolute; inset: 0; display: grid; place-items: center; font-family: var(--head); font-weight: 800; font-size: 17px; }
+.rings span { display: block; font-size: 12.5px; font-weight: 700; } .rings small { display: block; color: var(--muted); font-size: 12.5px; }
+.pip { width: 9px; height: 9px; border-radius: 50%; background: var(--ok); flex: none; display: inline-block; }
+.ev { display: grid; grid-template-columns: 36px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 11px 20px; border-top: 1px solid var(--line); width: 100%; background: none; border-left: 0; border-right: 0; border-bottom: 0; text-align: left; }
+.list > .ev:first-child { border-top: 0; } button.ev:hover { background: var(--surface-2); }
+.ev .tile { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; background: var(--surface-2); color: var(--muted); }
+.ev .tile svg { width: 18px; height: 18px; }
+.ev .tile.bad { background: var(--bad-bg); color: var(--bad); } .ev .tile.warn { background: color-mix(in srgb, var(--t-orange) 15%, var(--surface)); color: #d9700a; }
+.ev .tile.info { background: var(--info-bg); color: var(--info); } .ev .tile.purple { background: color-mix(in srgb, var(--t-purple) 14%, var(--surface)); color: var(--t-purple); }
+.ev .tile.ok { background: var(--ok-bg); color: var(--ok); }
+.ev b { display: block; font-size: 14.5px; } .ev .sub { display: block; color: var(--muted); font-size: 13px; }
+.ev time { color: var(--muted); font-size: 12.5px; white-space: nowrap; }
+.chartbox { padding: 6px 20px 20px; }
+.netbar { display: flex; height: 18px; border-radius: 9px; overflow: hidden; gap: 2px; background: var(--surface); margin: 6px 0 16px; }
+.netbar i { display: block; height: 100%; min-width: 4px; }
+.legend { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px 10px; align-items: center; font-size: 14px; }
+.legend .sw { width: 10px; height: 10px; border-radius: 50%; } .legend b { text-align: right; font-variant-numeric: tabular-nums; }
+.legend .tot { border-top: 1px solid var(--line); padding-top: 8px; font-weight: 700; }
+.bars { position: relative; height: 200px; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 8px; }
+.bars .yax { position: relative; } .bars .yax span { position: absolute; right: 0; transform: translateY(50%); font-size: 12px; color: var(--muted); }
+.bars .plot { position: relative; border-bottom: 1px solid var(--line); display: grid; align-items: end; gap: 14px; }
+.bars .grid { position: absolute; left: 0; right: 0; border-top: 1px dashed var(--line); }
+.bars .col { position: relative; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; }
+.bars .bar { width: min(36px, 70%); background: var(--t-blue); border-radius: 4px 4px 0 0; position: relative; min-height: 2px; }
+.bars .bar:hover { filter: brightness(1.12); }
+.bars .val { font-size: 12.5px; font-weight: 700; margin-bottom: 4px; font-variant-numeric: tabular-nums; }
+.xl { display: grid; gap: 14px; margin-left: 42px; margin-top: 6px; font-size: 12.5px; color: var(--muted); text-align: center; }
+.tip { position: fixed; z-index: 60; pointer-events: none; background: var(--sp-night, #071a36); color: #fff; font-size: 13px; padding: 6px 9px; border-radius: 8px; box-shadow: var(--shadow); }
+
+/* Customer preview panel */
+.scrim { position: fixed; inset: 0; background: rgba(8, 14, 22, .35); z-index: 45; }
+.preview { position: fixed; top: 0; right: 0; bottom: 0; width: min(440px, 100%); background: var(--bg); z-index: 46; box-shadow: -20px 0 50px -20px rgba(7, 26, 54, .45);
+  overflow-y: auto; padding: 18px 18px 28px; display: flex; flex-direction: column; gap: 14px; }
+@media (prefers-reduced-motion: no-preference) { .preview { animation: slidein .18s ease-out; } @keyframes slidein { from { transform: translateX(30px); opacity: .5; } } }
+.preview .ph { display: flex; gap: 14px; align-items: center; padding: 6px 4px 4px; }
+.preview .ph h2 { margin: 0; font-family: var(--head); font-weight: 800; font-size: 21px; letter-spacing: -.015em; line-height: 1.2; }
+.preview .ph .x { margin-left: auto; align-self: flex-start; }
+.preview .panel-h { padding: 14px 16px 6px; } .preview .panel-b { padding: 6px 16px 16px; }
+.qstats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); text-align: center; padding: 14px 6px; }
+.qstats b { display: block; font-family: var(--head); font-weight: 800; font-size: 19px; } .qstats small { color: var(--muted); font-size: 12px; }
+.qa { display: flex; flex-direction: column; gap: 8px; padding: 6px 16px 16px; }
+.qa .btn { justify-content: center; padding: 10px; }
+.qa .btn.danger { border-color: color-mix(in srgb, var(--bad) 35%, var(--line)); background: color-mix(in srgb, var(--bad) 5%, var(--surface)); }
+
+@media (max-width: 1500px) { .stats { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 1280px) { .ov { grid-template-columns: minmax(0, 1fr); } .ov > .stack:last-child { display: grid; grid-template-columns: 1fr 1fr; } }
+@media (max-width: 1000px) { .ov2 { grid-template-columns: minmax(0, 1fr); } .ov > .stack:last-child { display: flex; } }
+@media (max-width: 900px) {
+  .app { grid-template-columns: minmax(0, 1fr); }
+  .side { position: fixed; left: 0; top: 0; bottom: 0; width: min(290px, 86vw); transform: translateX(-104%); transition: transform .2s ease; box-shadow: 0 0 40px rgba(0, 0, 0, .35); }
+  .app.navopen .side { transform: none; }
+  .navscrim { position: fixed; inset: 0; background: rgba(8, 14, 22, .45); z-index: 25; }
+  .topbar { padding: 10px 16px; gap: 8px; } .topbar .menu-btn { display: grid; } .topbar .spacer { display: none; }
+  .gsearch { flex: 1; min-width: 0; }
+  .account > button > span:not(.avatar), .account > button > svg { display: none; }
+  .main .wrap { padding: 4px 16px 0; } .head h1 { font-size: 26px; }
+  .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; } .stat { flex-direction: column; padding: 14px; gap: 10px; } .stat .ic { width: 42px; height: 42px; } .stat b { font-size: 24px; }
+  .ctools .search input { width: 100%; } .ctools .search { flex: 1; }
+}
+@media (max-width: 560px) { .rings .ring { width: 70px; height: 70px; } }
+@media (prefers-reduced-motion: reduce) { .side { transition: none; } }
+@media print { .side, .topbar { display: none; } }
 </style>
 
 <div class="app" id="app"></div>
@@ -336,6 +516,35 @@ const TERMS = [["equipment", "Equipment (one)", "Radio"], ["equipment_plural", "
 const DEFAULT_TERMS = { equipment: "Equipment", equipment_plural: "Equipment", employee: "Employee", employee_plural: "Employees", checkout: "Check Out", checkin: "Return" };
 
 const $ = (s, r = document) => r.querySelector(s);
+// Light by default; each person can pick dark or follow their device from the account menu (saved in this browser).
+const THEMES = [["light", "Light"], ["dark", "Dark"], ["auto", "Match my device"]];
+function getTheme() { try { return localStorage.getItem("sp.theme") || "light"; } catch { return "light"; } }
+function applyTheme(t) { if (t === "auto") document.documentElement.removeAttribute("data-theme"); else document.documentElement.dataset.theme = t; try { localStorage.setItem("sp.theme", t); } catch {} }
+applyTheme(getTheme());
+// Icons (Lucide, ISC licence), drawn with the current text color.
+const ICON = {
+  home: '<rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/>',
+  users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>',
+  userPlus: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/>',
+  station: '<rect x="5" y="2" width="14" height="20" rx="2"/><path d="M9 7h6M9 11h6"/><path d="M12 18h.01"/>',
+  box: '<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.3 7 12 12l8.7-5"/><path d="M12 22V12"/>',
+  list: '<rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4M12 16h4M8 11h.01M8 16h.01"/>',
+  shield: '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>', search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+  bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
+  chevDown: '<path d="m6 9 6 6 6-6"/>', chevLeft: '<path d="m15 18-6-6 6-6"/>', chevRight: '<path d="m9 18 6-6-6-6"/>', arrowRight: '<path d="M5 12h14M12 5l7 7-7 7"/>',
+  menu: '<path d="M4 6h16M4 12h16M4 18h16"/>', more: '<circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/>',
+  clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>', x: '<path d="M18 6 6 18M6 6l12 12"/>',
+  alert: '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4M12 17h.01"/>',
+  wifiOff: '<path d="M12 20h.01M8.5 16.43a5 5 0 0 1 7 0M2 8.82a15 15 0 0 1 4.17-2.65M10.66 5c4.01-.36 8.14.9 11.34 3.76M16.85 11.25a10 10 0 0 1 2.22 1.68M5 13a10 10 0 0 1 5.24-2.76"/><path d="m2 2 20 20"/>',
+  key: '<circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6M15.5 7.5l3 3L22 7l-3-3"/>', mail: '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 5L2 7"/>',
+  pause: '<rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/>', play: '<path d="m6 3 14 9-14 9V3z"/>',
+  ext: '<path d="M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>', growth: '<path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 6-6"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>',
+  moon: '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>', monitor: '<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>', check: '<path d="M20 6 9 17l-5-5"/>',
+  user: '<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>', logout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>',
+};
+const ic = (k, cls = "") => `<svg ${cls ? `class="${cls}" ` : ""}viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[k]}</svg>`;
 const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const MIN = 60000, HOUR = 3600000, DAY = 86400000;
 const initials = (n) => String(n || "?").split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join("");
@@ -931,7 +1140,7 @@ function readHash() {
   if (S.route === "customer" && !custOf(S.id)) S.route = "customers";
   if (S.route === "unit" && S.id !== "new" && !api.hardwareUnit(S.id)) S.route = "hardware";
   S.hwAssign = null;
-  S.confirm = null; S.formErr = null; S.lastCode = null; S.lastInvite = null; S.lastOpInvite = null;
+  S.confirm = null; S.formErr = null; S.lastCode = null; S.lastInvite = null; S.lastOpInvite = null; S.preview = null; S.navOpen = false; S.pop = null;
   if (S.route !== "new") { S.made = null; }
 }
 window.addEventListener("hashchange", async () => { readHash(); render(); window.scrollTo(0, 0);
@@ -939,7 +1148,7 @@ window.addEventListener("hashchange", async () => { readHash(); render(); window
   if (LIVE && S.ready && S.route === "unit" && S.id !== "new") { await live.hwDetail(S.id).catch(() => {}); if (S.route === "unit") render(); } });
 let toastT;
 function toast(t) { S.toast = t; renderLayer(); clearTimeout(toastT); toastT = setTimeout(() => { S.toast = null; renderLayer(); }, 2600); }
-function renderLayer() { $("#layer").innerHTML = S.toast ? `<div class="toast" role="status">${esc(S.toast)}</div>` : ""; }
+function renderLayer() { $("#layer").innerHTML = (S.preview ? vPreview() : "") + (S.toast ? `<div class="toast" role="status">${esc(S.toast)}</div>` : ""); }
 
 /* =====================================================================
    Views
@@ -947,50 +1156,129 @@ function renderLayer() { $("#layer").innerHTML = S.toast ? `<div class="toast" r
 function attention() {
   const out = [], now = Date.now();
   for (const c of api.customers()) {
-    if (c.status === "trial" && c.trial_ends && c.trial_ends - now < 7 * DAY) out.push({ tone: c.trial_ends < now ? "bad" : "warn", c, text: `Trial ${untilText(c.trial_ends)}`, sub: "Talk to them about going live, or extend the trial." });
+    if (c.status === "trial" && c.trial_ends && c.trial_ends - now < 7 * DAY) out.push({ kind: "trial", tone: c.trial_ends < now ? "bad" : "warn", c, text: `Trial ${untilText(c.trial_ends)}`, sub: "Talk to them about going live, or extend the trial." });
     for (const s of c.stations.filter((x) => !x.revoked)) {
       const st = stationState(s, c);
-      if (st.key === "offline" && now - s.last_seen > 15 * MIN) out.push({ tone: st.tone, c, text: `${s.name} offline for ${ago(s.last_seen, true)}`, sub: "Taps are being saved on the station. Check its power and Wi-Fi." });
-      if (st.key === "expired") out.push({ tone: "bad", c, text: `${s.name}: activation code expired`, sub: "Make a new code from the customer page and send it to them." });
-      if (st.key === "waiting" && now - s.created > 3 * DAY) out.push({ tone: "warn", c, text: `${s.name} not set up after ${ago(s.created, true)}`, sub: `Code expires ${fmtDate(s.code_expires)}. Check it arrived.` });
+      if (st.key === "offline" && now - s.last_seen > 15 * MIN) out.push({ kind: "offline", tone: st.tone, c, text: `${s.name} offline for ${ago(s.last_seen, true)}`, sub: "Taps are being saved on the station. Check its power and Wi-Fi." });
+      if (st.key === "expired") out.push({ kind: "expired", tone: "bad", c, text: `${s.name}: activation code expired`, sub: "Make a new code from the customer page and send it to them." });
+      if (st.key === "waiting" && now - s.created > 3 * DAY) out.push({ kind: "waiting", tone: "warn", c, text: `${s.name} not set up after ${ago(s.created, true)}`, sub: `Code expires ${fmtDate(s.code_expires)}. Check it arrived.` });
     }
-    if (!(c.has_owner ?? c.members.some((m) => m.role === "owner")) && c.status !== "paused") out.push({ tone: "info", c, text: "Owner hasn't signed in yet", sub: c.invites.length ? `Invite sent to ${c.invites[0].email}` : c.detail || !LIVE ? "No invite sent. Invite an owner." : "Open the customer to see or resend the invite." });
+    if (!(c.has_owner ?? c.members.some((m) => m.role === "owner")) && c.status !== "paused") out.push({ kind: "owner", tone: "info", c, text: "Owner hasn't signed in yet", sub: c.invites.length ? `Invite sent to ${c.invites[0].email}` : c.detail || !LIVE ? "No invite sent. Invite an owner." : "Open the customer to see or resend the invite." });
   }
   return out.sort((a, b) => ({ bad: 0, warn: 1, info: 2 }[a.tone] - { bad: 0, warn: 1, info: 2 }[b.tone]));
 }
+const cav = (c, lg) => `<span class="cav ${lg ? "lg" : ""}" style="background:${esc(hex(c.primary) ? c.primary : "#0B2350")};color:${inkOn(c.primary)}" aria-hidden="true">${esc(initials(c.name))}${c.logo_url ? `<img src="${esc(c.logo_url)}" alt="" onerror="this.remove()">` : ""}</span>`;
+const statusDot = (st) => `<span class="chip dotted ${STATUS[st][1]}">${STATUS[st][0]}</span>`;
+const planChip = (p) => `<span class="chip plan ${esc(p)}">${esc(planName(p))}</span>`;
+const daysLeft = (ms) => Math.ceil((ms - Date.now()) / DAY);
+const PAGE = 8;
 function vCustomers() {
   const all = api.customers(), now = Date.now();
   const fleet = api.fleet().filter((s) => s.customer_status !== "paused" && s.customer_status !== "cancelled");
-  const online = fleet.filter((s) => s.state.key === "online").length, offline = fleet.filter((s) => s.state.key === "offline").length;
-  const waiting = fleet.filter((s) => s.state.key === "waiting" || s.state.key === "expired").length;
-  const trials = all.filter((c) => c.status === "trial"), ending = trials.filter((c) => c.trial_ends - now < 14 * DAY);
+  const set = fleet.filter((s) => s.activated_at), online = fleet.filter((s) => s.state.key === "online").length, offline = fleet.filter((s) => s.state.key === "offline").length;
+  const waiting = fleet.filter((s) => s.state.key === "waiting" || s.state.key === "expired");
+  const active = all.filter((c) => c.status === "active"), trials = all.filter((c) => c.status === "trial");
+  const ending = trials.filter((c) => c.trial_ends && c.trial_ends - now < 14 * DAY);
+  const newMonth = all.filter((c) => c.created && now - c.created < 30 * DAY).length;
+  const noOwner = all.filter((c) => !(c.has_owner ?? c.members.some((m) => m.role === "owner")) && c.status !== "paused" && c.status !== "cancelled");
+  const att = attention();
   const q = S.f.q.trim().toLowerCase();
   const rows = all.filter((c) => (S.f.status === "all" || c.status === S.f.status) && (!q || (c.name + " " + c.slug + " " + (c.contact_name || "") + " " + (c.contact_email || "")).toLowerCase().includes(q)))
     .sort((a, b) => a.name.localeCompare(b.name));
-  const att = attention();
-  return `<div class="head"><div><h1>Customers</h1><p>Every company using ${esc(VENDOR.name)}.</p></div><a class="btn primary" href="#new">New customer</a></div>
-    <div class="kpis">
-      <div class="kpi ok"><b class="num">${all.filter((c) => c.status === "active").length}</b><span>Active customers</span><small>${trials.length} on trial</small></div>
-      <div class="kpi ${online === fleet.filter((s) => s.activated_at).length ? "ok" : ""}"><b class="num">${online}<span class="muted" style="font-size:22px"> / ${fleet.filter((s) => s.activated_at).length}</span></b><span>Stations online</span><small>Across all customers</small></div>
-      <div class="kpi ${offline ? "bad" : "ok"}"><b class="num">${offline}</b><span>Stations offline</span><small>${offline ? "Saving taps until they reconnect" : "All connected"}</small></div>
-      <div class="kpi ${waiting ? "warn" : ""}"><b class="num">${waiting}</b><span>Waiting for setup</span><small>Shipped, not activated yet</small></div>
-      <div class="kpi ${ending.length ? "warn" : ""}"><b class="num">${ending.length}</b><span>Trials ending soon</span><small>Within 14 days</small></div>
+  const pages = Math.max(1, Math.ceil(rows.length / PAGE)); const pg = Math.min(Math.max(1, S.f.page || 1), pages); S.f.page = pg;
+  const shown = rows.slice((pg - 1) * PAGE, pg * PAGE);
+  // System health (stations of active and trial customers)
+  const pct = (n, d) => (d ? Math.round((100 * n) / d) : 100);
+  const versions = set.map((s) => s.version).filter(Boolean); const latest = versions.sort((x, y) => y.localeCompare(x, undefined, { numeric: true }))[0];
+  const onLatest = latest ? set.filter((s) => s.version === latest).length : 0;
+  const ring = (v, label, sub) => { const r = 36, C = 2 * Math.PI * r, col = v >= 95 ? "var(--t-green)" : v >= 80 ? "var(--t-blue)" : v >= 60 ? "var(--t-orange)" : "var(--t-red)";
+    return `<div><div class="ring" role="img" aria-label="${esc(label)}: ${v}%"><svg viewBox="0 0 84 84"><circle cx="42" cy="42" r="${r}" fill="none" stroke="var(--surface-2)" stroke-width="7"/>
+      <circle cx="42" cy="42" r="${r}" fill="none" stroke="${col}" stroke-width="7" stroke-linecap="round" stroke-dasharray="${(C * v) / 100} ${C}"/></svg><b>${v}%</b></div><span>${esc(label)}</span><small>${esc(sub)}</small></div>`; };
+  // Station network by state
+  const net = [["Online", online, "var(--t-green)"], ["Offline", offline, "var(--t-red)"], ["Waiting for setup", waiting.length, "var(--t-blue)"],
+    ["Paused account", api.fleet().filter((s) => s.customer_status === "paused").length, "#94a3b8"]];
+  const netTotal = net.reduce((t, n) => t + n[1], 0);
+  // New customers per month, last 6 months
+  const months = Array.from({ length: 6 }, (_, i) => { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - (5 - i)); return { y: d.getFullYear(), m: d.getMonth() }; });
+  const counts = months.map(({ y, m }) => all.filter((c) => c.created && new Date(c.created).getFullYear() === y && new Date(c.created).getMonth() === m).length);
+  const top = Math.max(4, ...counts), step = Math.ceil(top / 4), ymax = step * 4;
+  const mname = (o) => new Intl.DateTimeFormat("en-US", { month: "short" }).format(new Date(o.y, o.m, 1));
+  const attIcon = { offline: ["bad", "wifiOff"], trial: ["warn", "clock"], expired: ["bad", "key"], waiting: ["info", "box"], owner: ["purple", "userPlus"] };
+  return `<div class="stats">
+      <a class="stat" href="#customers" data-seg="status:active"><span class="ic">${ic("users")}</span><div><span>Active customers</span><b>${active.length}</b><small>${trials.length} on trial${newMonth ? ` · <span class="up">+${newMonth}</span> joined this month` : ""}</small></div></a>
+      <a class="stat" href="#fleet"><span class="ic green">${ic("station")}</span><div><span>Stations online</span><b>${online}<em> / ${set.length}</em></b><small>${offline ? `${offline} offline` : set.length ? `${pct(online, set.length)}% online` : "None set up yet"}</small></div></a>
+      <a class="stat" href="#customers" data-seg="status:trial"><span class="ic orange">${ic("clock")}</span><div><span>Trials ending soon</span><b>${ending.length}</b><small>In the next 14 days</small></div></a>
+      <a class="stat" href="#customers"><span class="ic red">${ic("alert")}</span><div><span>Needs attention</span><b>${att.filter((x) => x.tone !== "info").length}</b><small>Stations or accounts</small></div></a>
+      <a class="stat" href="#customers"><span class="ic purple">${ic("userPlus")}</span><div><span>Owner invites</span><b>${noOwner.length}</b><small>Owner hasn't signed in yet</small></div></a>
     </div>
-    ${att.length ? `<section class="panel"><div class="panel-h"><h2>Needs attention</h2><span class="muted" style="font-size:13px">${att.length}</span></div><div class="list">
-      ${att.map((a) => `<a class="row" href="#customer/${a.c.id}" style="text-decoration:none;color:inherit"><span class="dot ${a.tone}"></span><span><b>${esc(a.c.name)}</b> · ${esc(a.text)}<span class="sub">${esc(a.sub)}</span></span><span class="muted" aria-hidden="true">›</span></a>`).join("")}</div></section>` : ""}
-    <section class="panel"><div class="panel-h"><h2>All customers</h2>
-      <div class="filters"><input class="field" type="search" data-f="q" placeholder="Search name or contact" aria-label="Search customers" value="${esc(S.f.q)}">
-        <div class="seg" role="group" aria-label="Status">${[["all", "All"], ["active", "Active"], ["trial", "Trial"], ["paused", "Paused"]].map(([k, l]) => `<button data-seg="status:${k}" class="${S.f.status === k ? "on" : ""}" aria-pressed="${S.f.status === k}">${l}</button>`).join("")}</div></div></div>
-      <div class="tablewrap"><table><thead><tr><th>Customer</th><th>Status</th><th>Plan</th><th>Stations</th><th class="num">People</th><th class="num">Equipment</th><th class="num">Taps (7 days)</th><th>Last tap</th></tr></thead><tbody>
-      ${rows.map((c) => `<tr class="click" data-go="customer/${c.id}" tabindex="0"><td><span class="cust">${swatch(c)}<span><b>${esc(c.name)}</b><span class="sub">${esc(c.contact_name || c.slug)}</span></span></span></td>
-        <td>${statusChip(c.status)}${c.status === "trial" && c.trial_ends ? `<span class="sub">${esc(untilText(c.trial_ends))}</span>` : ""}</td>
-        <td>${esc(planName(c.plan))}</td>
-        <td>${c.stations_total ? `${c.stations_online}/${c.stations_total - c.stations_waiting} online` : "—"}${c.stations_waiting ? `<span class="sub">${c.stations_waiting} waiting for setup</span>` : ""}${c.stations_offline ? `<span class="sub" style="color:var(--bad)">${c.stations_offline} offline</span>` : ""}</td>
-        <td class="num">${c.usage.employees}</td><td class="num">${c.usage.equipment}</td><td class="num">${c.usage.taps7d.toLocaleString()}</td><td>${c.usage.last_tap ? esc(ago(c.usage.last_tap)) : "—"}</td></tr>`).join("")
-        || `<tr><td colspan="8" class="empty">No customers match.</td></tr>`}
-      </tbody></table></div></section>`;
+    <div class="ov">
+      <div class="stack">
+        <section class="panel"><div class="panel-h"><h2>Customers<small>Every company using ${esc(VENDOR.name)}: their stations and account status.</small></h2>
+          <div class="ctools"><label class="search">${ic("search")}<input class="field" type="search" data-f="q" placeholder="Search customers" aria-label="Search customers" value="${esc(S.f.q)}"></label>
+            <div class="seg" role="group" aria-label="Status">${[["all", "All"], ["active", "Active"], ["trial", "Trial"], ["paused", "Paused"]].map(([k, l]) => `<button data-seg="status:${k}" class="${S.f.status === k ? "on" : ""}" aria-pressed="${S.f.status === k}">${l}</button>`).join("")}</div>
+            <a class="btn primary" href="#new">${ic("plus")}Add customer</a></div></div>
+          <div class="tablewrap"><table class="ctable"><thead><tr><th>Company</th><th>Plan</th><th>Status</th><th>Stations</th><th>Trial ends</th><th aria-label="Actions"></th></tr></thead><tbody>
+          ${shown.map((c) => { const d = c.trial_ends ? daysLeft(c.trial_ends) : null; return `<tr data-preview="${c.id}" tabindex="0">
+            <td><span class="cust">${cav(c)}<span class="cname"><b>${esc(c.name)}</b><small>${esc(c.contact_name || c.slug)}</small></span></span></td>
+            <td>${planChip(c.plan)}</td><td>${statusDot(c.status)}</td>
+            <td class="num">${c.stations_total ? `${c.stations_online} / ${c.stations_total - c.stations_waiting}` : "—"}${c.stations_waiting ? `<span class="sub">${c.stations_waiting} waiting for setup</span>` : ""}${c.stations_offline ? `<span class="sub" style="color:var(--bad)">${c.stations_offline} offline</span>` : ""}</td>
+            <td>${c.status === "trial" && c.trial_ends ? `${esc(fmtDate(c.trial_ends))}<span class="days ${d < 0 ? "bad" : ""}">${d < 0 ? `Ended ${-d} day${d === -1 ? "" : "s"} ago` : d === 0 ? "Ends today" : `${d} day${d === 1 ? "" : "s"}`}</span>` : `<span class="muted">—</span>`}</td>
+            <td style="text-align:right"><button class="kebab" data-preview="${c.id}" aria-label="More about ${esc(c.name)}">${ic("more")}</button></td></tr>`; }).join("")
+            || `<tr><td colspan="6" class="empty">${all.length ? "No customers match." : "No customers yet. Add your first one."}</td></tr>`}
+          </tbody></table></div>
+          ${rows.length ? `<div class="pager"><span>Showing ${(pg - 1) * PAGE + 1}–${Math.min(pg * PAGE, rows.length)} of ${rows.length} customer${rows.length === 1 ? "" : "s"}</span>
+            ${pages > 1 ? `<nav aria-label="Pages"><button data-page="${pg - 1}" ${pg === 1 ? "disabled" : ""} aria-label="Previous page">${ic("chevLeft")}</button>${Array.from({ length: pages }, (_, i) => `<button data-page="${i + 1}" class="${i + 1 === pg ? "on" : ""}" ${i + 1 === pg ? 'aria-current="page"' : ""}>${i + 1}</button>`).join("")}<button data-page="${pg + 1}" ${pg === pages ? "disabled" : ""} aria-label="Next page">${ic("chevRight")}</button></nav>` : ""}</div>` : ""}
+        </section>
+        <div class="ov2">
+          <section class="panel"><div class="panel-h"><h2>Station network</h2><a class="more" href="#fleet">All stations ${ic("arrowRight")}</a></div>
+            <div class="chartbox">${netTotal ? `<div class="netbar" role="img" aria-label="${net.map((n) => `${n[0]} ${n[1]}`).join(", ")}">${net.filter((n) => n[1]).map((n) => `<i style="flex:${n[1]};background:${n[2]}" data-tip="${esc(n[0])}: ${n[1]}"></i>`).join("")}</div>` : ""}
+              <div class="legend">${net.map((n) => `<span class="sw" style="background:${n[2]}"></span><span>${esc(n[0])}</span><b>${n[1]}</b>`).join("")}<span class="tot"></span><span class="tot">Total</span><b class="tot">${netTotal}</b></div></div></section>
+          <section class="panel"><div class="panel-h"><h2>New customers</h2><span class="muted" style="font-size:13px">Last 6 months</span></div>
+            <div class="chartbox"><div class="bars" role="img" aria-label="New customers per month: ${months.map((o, i) => `${mname(o)} ${counts[i]}`).join(", ")}">
+              <div class="yax">${[0, 1, 2, 3, 4].map((k) => `<span style="bottom:${k * 25}%">${k * step}</span>`).join("")}</div>
+              <div class="plot" style="grid-template-columns:repeat(6,minmax(0,1fr))">${[1, 2, 3, 4].map((k) => `<span class="grid" style="bottom:${k * 25}%"></span>`).join("")}
+                ${counts.map((n, i) => `<div class="col" data-tip="${esc(mname(months[i]))}: ${n} new customer${n === 1 ? "" : "s"}">${n ? `<span class="val">${n}</span><span class="bar" style="height:${(n / ymax) * 100}%"></span>` : ""}</div>`).join("")}</div></div>
+              <div class="xl" style="grid-template-columns:repeat(6,minmax(0,1fr))">${months.map((o) => `<span>${esc(mname(o))}</span>`).join("")}</div></div></section>
+        </div>
+      </div>
+      <div class="stack">
+        <section class="panel"><div class="panel-h"><h2>System health</h2><a class="more" href="#fleet">Stations ${ic("arrowRight")}</a></div>
+          <div class="health"><div class="ok-line ${offline || waiting.some((s) => s.state.key === "expired") ? "warn" : ""}"><span class="pip" style="background:currentColor"></span>${offline ? `${offline} station${offline === 1 ? "" : "s"} offline` : "All stations connected"}</div>
+            <div class="rings">${ring(pct(online, set.length), "Online now", `${online} / ${set.length}`)}${ring(pct(set.length, set.length + waiting.length), "Set up", `${set.length} / ${set.length + waiting.length} shipped`)}${ring(pct(onLatest, set.length), "Latest software", latest ? `${onLatest} / ${set.length}` : "—")}</div></div></section>
+        <section class="panel"><div class="panel-h"><h2>Needs attention</h2><span class="muted" style="font-size:13px">${att.length}</span></div>
+          <div class="list">${att.slice(0, 8).map((x) => { const [tone, icon] = attIcon[x.kind] || ["info", "alert"]; return `<button class="ev" data-preview="${x.c.id}">
+            <span class="tile ${tone}">${ic(icon)}</span><span><b>${esc(x.c.name)}</b><span class="sub">${esc(x.text)}. ${esc(x.sub)}</span></span><span></span></button>`; }).join("")
+            || `<div class="empty" style="text-align:left">Nothing needs a look. Every station is online and every trial has time left.</div>`}</div></section>
+      </div>
+    </div>`;
 }
-
+// Customer preview: opens over the overview from a row, the ⋮ button or an attention item.
+function vPreview() {
+  const c = custOf(S.preview); if (!c) return "";
+  const live = c.stations.filter((s) => !s.revoked); const owner = c.has_owner ?? c.members.some((m) => m.role === "owner");
+  const on = live.filter((s) => stationState(s, c).key === "online").length; const d = c.trial_ends ? daysLeft(c.trial_ends) : null;
+  return `<div class="scrim" data-act="closePreview"></div><aside class="preview" role="dialog" aria-modal="true" aria-labelledby="pvh">
+    <div class="ph">${cav(c, true)}<div><h2 id="pvh">${esc(c.name)}</h2><div class="actions" style="margin-top:6px;gap:6px">${statusDot(c.status)}${planChip(c.plan)}</div></div>
+      <button class="kebab x" data-act="closePreview" aria-label="Close">${ic("x")}</button></div>
+    <section class="panel"><div class="qstats"><div><b>${on}/${live.filter((s) => s.activated_at).length}</b><small>Online</small></div><div><b>${c.usage.employees}</b><small>People</small></div><div><b>${c.usage.equipment}</b><small>Equipment</small></div><div><b>${c.usage.taps7d.toLocaleString()}</b><small>Taps, 7 days</small></div></div></section>
+    <section class="panel"><div class="panel-h"><h2>Company</h2></div><div class="panel-b"><dl class="kv">
+      <dt>Contact</dt><dd>${esc(c.contact_name || "—")}</dd><dt>Email</dt><dd>${c.contact_email ? `<a href="mailto:${esc(c.contact_email)}" style="color:var(--t-blue)">${esc(c.contact_email)}</a>` : "—"}</dd>
+      <dt>Phone</dt><dd>${esc(c.contact_phone || "—")}</dd><dt>Short ID</dt><dd class="mono">${esc(c.slug)}</dd><dt>Customer since</dt><dd>${esc(fmtDate(c.created))}</dd>
+      <dt>Owner</dt><dd>${owner ? "Signed in" : c.invites.length ? `Invite sent to ${esc(c.invites[0].email)}` : "Not invited yet"}</dd></dl></div></section>
+    <section class="panel"><div class="panel-h"><h2>Plan and status</h2></div><div class="panel-b"><dl class="kv">
+      <dt>Plan</dt><dd>${planChip(c.plan)}</dd><dt>Status</dt><dd>${statusDot(c.status)}</dd>
+      ${c.status === "trial" && c.trial_ends ? `<dt>Trial ends</dt><dd style="color:${d < 3 ? "var(--bad)" : "var(--t-orange)"}">${esc(fmtDate(c.trial_ends))} (${esc(untilText(c.trial_ends))})</dd>` : ""}
+      <dt>Stations</dt><dd>${live.length}${c.station_limit != null ? ` of ${c.station_limit}` : ""}</dd></dl></div></section>
+    ${live.length ? `<section class="panel"><div class="panel-h"><h2>Stations</h2></div><div class="list">${live.map((s) => { const st = stationState(s, c); return `<div class="ev" style="grid-template-columns:minmax(0,1fr) auto"><span><b>${esc(s.name)}</b><span class="sub">${esc(s.location || s.version || "")}</span></span><span class="chip ${st.tone}">${esc(st.label)}</span></div>`; }).join("")}</div></section>` : ""}
+    <section class="panel"><div class="panel-h"><h2>Quick actions</h2></div><div class="qa">
+      <a class="btn primary" href="#customer/${c.id}" data-act="closePreview">${ic("ext")}Open customer</a>
+      <a class="btn" href="#customer/${c.id}" data-act="closePreview">${ic("station")}Stations and activation codes</a>
+      <a class="btn" href="#customer/${c.id}" data-act="closePreview">${ic("mail")}${owner ? "Invite another owner" : "Invite or resend to owner"}</a>
+      ${c.status === "paused" ? `<button class="btn" data-act="pvResume">${ic("play")}Resume account</button>`
+        : S.confirm === "pvpause" ? `<span class="confirm">Pause ${esc(c.name)}? Their stations stop recording right away. <button class="btn sm danger" data-act="pvPause">Pause</button><button class="btn sm" data-act="noConfirm">Cancel</button></span>`
+        : `<button class="btn danger" data-act="pvAskPause">${ic("pause")}Pause account</button>`}
+    </div></section></aside>`;
+}
 function stationPreview(c, terms) {
   const t = { ...DEFAULT_TERMS, ...terms };
   const logo = c.logo_url ? `<img src="${esc(c.logo_url)}" alt="" onerror="this.replaceWith(document.createTextNode('${esc(initials(c.name))}'))">` : esc(initials(c.name || "Company"));
@@ -1348,13 +1636,53 @@ const VIEWS = { customers: vCustomers, customer: vCustomer, new: vNew, fleet: vF
 function render() {
   if (LIVE && !S.ready) return renderAuth();
   const att = attention().filter((a) => a.tone !== "info").length;
-  const nav = [["customers", "Customers", att], ["new", "New customer"], ["fleet", "Stations"], ["hardware", "Hardware"], ["log", "Activity"], ["team", "Team"]];
+  const nav = [["customers", "Overview", "home", att], ["new", "New customer", "plus"], ["fleet", "Stations", "station"], ["hardware", "Hardware", "box"], ["log", "Activity", "list"], ["team", "Team", "shield"]];
   const cur = S.route === "customer" ? "customers" : S.route === "unit" ? "hardware" : S.route;
-  $("#app").innerHTML = `<aside class="rail"><div class="org">${LIVE ? `<img src="brand/mark-180.png" alt="" style="width:46px;height:46px;flex:none">` : `<div class="mark" aria-hidden="true">${esc(VENDOR.short)}</div>`}<div><b>${esc(VENDOR.name)}</b><small>Operator console</small></div></div>
-      <nav class="nav" aria-label="Sections">${nav.map(([r, l, n]) => `<a href="#${r}" class="${cur === r ? "on" : ""}" ${cur === r ? 'aria-current="page"' : ""}>${l}${n ? `<span class="n" aria-label="${n} need attention">${n}</span>` : ""}</a>`).join("")}</nav>
-      <div class="me">${LIVE ? "" : `<span class="pill">Demo data</span>`}<b>${esc(OPERATOR.name)}</b><span>${esc(ROLES[OPERATOR.role]?.[0] || "Operator")}</span>${LIVE ? `<button class="btn sm" data-act="signOut" style="margin-top:6px;align-self:flex-start;background:transparent;color:inherit;border-color:rgba(255,255,255,.3)">Sign out</button>` : ""}</div></aside>
-    <main class="main"><div class="wrap">${VIEWS[S.route]()}</div></main>`;
+  const role = ROLES[OPERATOR.role]?.[0] || "Operator";
+  $("#app").className = "app" + (S.navOpen ? " navopen" : "");
+  $("#app").innerHTML = `<aside class="side" aria-label="Main menu">
+      <a class="brandmark" href="#customers" aria-label="${esc(VENDOR.name)} operator console"><img src="brand/mark-180.png" alt=""><span>Sonoran<i>Point</i></span></a>
+      <div class="brandsub">Operator console</div>
+      <nav class="snav" aria-label="Sections">${nav.map(([r, l, i, n]) => `<a href="#${r}" class="${cur === r ? "on" : ""}" ${cur === r ? 'aria-current="page"' : ""}>${ic(i)}${l}${n ? `<span class="n" aria-label="${n} need attention">${n}</span>` : ""}</a>`).join("")}</nav>
+      ${LIVE ? "" : `<span class="pill">Demo data</span>`}
+      <div class="sidecard"><svg viewBox="0 0 240 110" preserveAspectRatio="xMidYMax slice" aria-hidden="true"><defs><radialGradient id="sg" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#ffd27a"/><stop offset=".55" stop-color="#f7931e"/><stop offset="1" stop-color="#e3621b"/></radialGradient></defs>
+        <circle cx="172" cy="62" r="26" fill="url(#sg)"/><path d="M0 110 L0 78 L38 52 L58 64 L96 30 L120 50 L138 40 L176 78 L198 66 L240 88 L240 110Z" fill="#163f7c"/>
+        <path d="M0 110 L0 92 L30 80 L64 90 L102 66 L134 84 L160 76 L196 92 L240 84 L240 110Z" fill="#0b2654"/><path d="M96 30 L106 46 L100 44 L92 50 L86 40Z" fill="#cfe2ff" opacity=".55"/></svg>
+        <p>Powering smarter operations across the Sonoran.</p></div>
+    </aside>
+    ${S.navOpen ? `<div class="navscrim" data-act="navClose"></div>` : ""}
+    <main class="main">
+      <header class="topbar">
+        <button class="iconbtn menu-btn" data-act="navOpen" aria-label="Open menu">${ic("menu")}</button>
+        <div class="gsearch" role="search">${ic("search")}<input type="search" id="gsearch" placeholder="Search customers, stations, hardware or people…" aria-label="Search customers, stations, hardware or people" autocomplete="off" value="${esc(S.gq || "")}">
+          <div class="pop" id="gsResults" ${S.gq ? "" : "hidden"}>${S.gq ? searchResults(S.gq) : ""}</div></div>
+        <span class="spacer"></span>
+        <a class="iconbtn" href="#customers" aria-label="${att ? `${att} things need attention` : "Nothing needs attention"}">${ic("bell")}${att ? `<span class="badge">${att}</span>` : ""}</a>
+        <div class="account me"><button type="button" data-act="acctMenu" aria-haspopup="true" aria-expanded="${S.pop === "acct"}"><span class="avatar" aria-hidden="true">${esc(initials(OPERATOR.name))}</span><span><b>${esc(OPERATOR.name)}</b><small>${esc(role)}</small></span>${ic("chevDown")}</button>
+          <div class="pop" role="menu" ${S.pop === "acct" ? "" : "hidden"}>
+            <div class="who"><b>${esc(OPERATOR.name)}</b><small>${esc(role)}${OPERATOR.email ? " · " + esc(OPERATOR.email) : ""}</small></div>
+            <a href="#team">${ic("user")}Your name and team</a>
+            ${LIVE ? `<button data-act="setPass">${ic("key")}Set a new password</button>` : ""}
+            <div class="themes" role="group" aria-label="Appearance"><div class="grp">Appearance</div>${THEMES.map(([k, l]) => `<button data-act="theme" data-v="${k}" aria-pressed="${getTheme() === k}">${ic(k === "light" ? "sun" : k === "dark" ? "moon" : "monitor")}${l}${getTheme() === k ? ic("check", "tick") : ""}</button>`).join("")}</div>
+            ${LIVE ? `<button data-act="signOut">${ic("logout")}Sign out</button>` : ""}
+          </div></div>
+      </header>
+      <div class="wrap">${VIEWS[S.route]()}</div></main>`;
   renderLayer();
+}
+// Top bar search: customers, stations, hardware and your team.
+function searchResults(q) {
+  q = q.trim().toLowerCase(); if (!q) return "";
+  const cs = api.customers().filter((c) => `${c.name} ${c.slug} ${c.contact_name || ""} ${c.contact_email || ""}`.toLowerCase().includes(q)).slice(0, 5);
+  const st = api.fleet().filter((s) => `${s.name} ${s.location || ""}`.toLowerCase().includes(q)).slice(0, 5);
+  const hw = (api.hardware() || []).filter((u) => `${u.serial} ${u.pi_serial || ""} ${u.tracking || ""}`.toLowerCase().includes(q)).slice(0, 5);
+  const tm = (api.team()?.operators || []).filter((o) => `${o.name} ${o.email}`.toLowerCase().includes(q)).slice(0, 3);
+  if (!cs.length && !st.length && !hw.length && !tm.length) return `<div class="none">Nothing matches “${esc(q)}”.</div>`;
+  const grp = (t, items) => (items.length ? `<div class="grp">${t}</div>${items.join("")}` : "");
+  return grp("Customers", cs.map((c) => `<button data-preview="${c.id}" data-act="gsPick">${ic("users")}${esc(c.name)}<small class="k">${esc(STATUS[c.status][0])}</small></button>`))
+    + grp("Stations", st.map((s) => `<a href="#customer/${s.org}" data-act="gsPick">${ic("station")}${esc(s.name)}<small class="k">${esc(s.customer)}</small></a>`))
+    + grp("Hardware", hw.map((u) => `<a href="#unit/${u.id}" data-act="gsPick">${ic("box")}<span class="mono">${esc(u.serial)}</span><small class="k">${esc(HW_STATUS[u.status][0])}</small></a>`))
+    + grp("Team", tm.map((o) => `<a href="#team" data-act="gsPick">${ic("user")}${esc(o.name)}<small class="k">${esc(ROLES[o.role]?.[0] || "")}</small></a>`));
 }
 
 /* =====================================================================
@@ -1368,6 +1696,8 @@ function readNewForm(form) {
 }
 document.addEventListener("input", (e) => {
   const t = e.target;
+  if (t.id === "gsearch") { S.gq = t.value; const r = $("#gsResults"); r.innerHTML = searchResults(S.gq); r.hidden = !S.gq.trim(); return; }
+  if (t.dataset.f === "q") S.f.page = 1;
   if (t.dataset.f) { S.f[t.dataset.f] = t.value; const pos = t.selectionStart; render(); const el = $(`[data-f="${t.dataset.f}"]`); el.focus(); try { el.setSelectionRange(pos, pos); } catch {} return; }
   if (t.dataset.pair) { const box = t.form.elements[t.dataset.pair]; box.value = t.value.toUpperCase(); box.dispatchEvent(new Event("input", { bubbles: true })); return; }
   if (S.route === "new" && t.form?.dataset.form === "new" && (t.dataset.new || t.dataset.station != null)) {
@@ -1400,14 +1730,36 @@ document.addEventListener("change", async (e) => {
   if (t.dataset.newmod) { const mods = new Set(S.newForm.modules); t.checked ? mods.add(t.dataset.newmod) : mods.delete(t.dataset.newmod); S.newForm.modules = [...mods]; return; }
   if (t.dataset.new === "status" || t.dataset.new === "plan" || t.dataset.new === "timezone") { readNewForm(t.form); return render(); }
 });
-document.addEventListener("keydown", (e) => { if ((e.key === "Enter" || e.key === " ") && e.target.matches("tr[data-go]")) { e.preventDefault(); location.hash = e.target.dataset.go; } });
+document.addEventListener("keydown", (e) => {
+  if ((e.key === "Enter" || e.key === " ") && e.target.matches("tr[data-go]")) { e.preventDefault(); location.hash = e.target.dataset.go; }
+  if ((e.key === "Enter" || e.key === " ") && e.target.matches("tr[data-preview]")) { e.preventDefault(); e.target.click(); }
+  if (e.key === "Escape") { if (S.preview) { S.preview = null; S.confirm = null; return renderLayer(); } if (S.pop || S.navOpen || S.gq) { S.pop = null; S.navOpen = false; if (e.target.id === "gsearch") { S.gq = ""; e.target.value = ""; } render(); } }
+  if (e.key === "Enter" && e.target.id === "gsearch") $("#gsResults button, #gsResults a")?.click();
+});
+// Chart tooltips
+document.addEventListener("mouseover", (e) => { const t = e.target.closest("[data-tip]"); let tip = $(".tip");
+  if (!t) { tip?.remove(); return; } if (!tip) { tip = document.createElement("div"); tip.className = "tip"; document.body.appendChild(tip); } tip.textContent = t.dataset.tip;
+  const r = t.getBoundingClientRect(); tip.style.left = Math.min(window.innerWidth - tip.offsetWidth - 8, Math.max(8, r.left + r.width / 2 - tip.offsetWidth / 2)) + "px"; tip.style.top = Math.max(8, r.top - tip.offsetHeight - 8) + "px"; });
 document.addEventListener("click", async (e) => {
+  if (S.pop && !e.target.closest(".pop") && !e.target.closest("[data-act=acctMenu]")) { S.pop = null; const pp = $(".account .pop"); if (pp) pp.hidden = true; $("[data-act=acctMenu]")?.setAttribute("aria-expanded", "false"); }
+  if (S.gq && !e.target.closest(".gsearch")) { const r = $("#gsResults"); if (r) r.hidden = true; }
+  if (e.target.closest("[data-act=gsPick]")) { S.gq = ""; const i = $("#gsearch"); if (i) i.value = ""; $("#gsResults").hidden = true; }
+  const pv = e.target.closest("[data-preview]"); if (pv) { S.preview = pv.dataset.preview; S.confirm = null; if (LIVE) live.detail(S.preview).then(() => { if (S.preview) renderLayer(); }).catch(() => {}); renderLayer(); $(".preview .x")?.focus(); return; }
+  const pgb = e.target.closest("[data-page]"); if (pgb) { S.f.page = +pgb.dataset.page; render(); $(".ctable")?.scrollIntoView({ block: "nearest" }); return; }
   const go = e.target.closest("tr[data-go]"); if (go) { location.hash = go.dataset.go; return; }
   if (e.target.closest('a[href="#new"]')) { S.made = null; S.newForm = null; S.formErr = null; if (location.hash === "#new") { e.preventDefault(); render(); window.scrollTo(0, 0); } return; }
-  const seg = e.target.closest("[data-seg]"); if (seg) { const [k, v] = seg.dataset.seg.split(":"); S.f[k] = v; return render(); }
+  const seg = e.target.closest("[data-seg]"); if (seg) { const [k, v] = seg.dataset.seg.split(":"); S.f[k] = v; S.f.page = 1; if (seg.matches("a.stat")) { e.preventDefault(); if (S.route !== "customers") location.hash = "customers"; } return render(); }
   const cp = e.target.closest("[data-copy]"); if (cp) { try { await navigator.clipboard.writeText(cp.dataset.copy); toast("Copied"); } catch { toast("Select it and copy"); } return; }
   const t = e.target.closest("[data-act]"); if (!t) return;
   const a = t.dataset.act, c = S.id ? custOf(S.id) : null;
+  if (a === "acctMenu") { S.pop = S.pop === "acct" ? null : "acct"; const pop = t.nextElementSibling; pop.hidden = S.pop !== "acct"; t.setAttribute("aria-expanded", String(!!S.pop)); if (S.pop) pop.querySelector("a, button")?.focus(); return; }
+  if (a === "theme") { applyTheme(t.dataset.v); return render(); }
+  if (a === "navOpen") { S.navOpen = true; render(); $(".snav a.on")?.focus(); return; }
+  if (a === "navClose") { S.navOpen = false; return render(); }
+  if (a === "closePreview") { S.preview = null; S.confirm = null; return renderLayer(); }
+  if (a === "pvAskPause") { S.confirm = "pvpause"; return renderLayer(); }
+  if (a === "pvPause" || a === "pvResume") { const pc = custOf(S.preview); const r = await api.updateCustomer(pc.id, { status: a === "pvPause" ? "paused" : "active" }); S.confirm = null;
+    toast(!r.ok ? r.error : a === "pvPause" ? "Account paused" : "Account resumed. Their stations come back on their own."); return render(); }
   if (a === "noConfirm") { S.confirm = null; return render(); }
   if (a === "askPause") { S.confirm = "pause"; return render(); }
   if (a === "signOut") { await sb.auth.signOut(); return; }
