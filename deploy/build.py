@@ -50,6 +50,9 @@ def build():
     (st / "index.html").write_text(page(ROOT / "station" / "station.html"))
     for f in ["wifi_helper.py", "nfc_reader.py", "README.md"]:
         shutil.copy(ROOT / "station" / "pi" / f, st / f)
+    (st / "brand").mkdir()   # the station shows Sonoran Point's logo when a company has none
+    for f in ["logo.svg", "mark-180.png", "favicon.ico"]:
+        shutil.copy(ROOT / "brand" / f, st / "brand" / f)
     print("built", ", ".join(str(p.relative_to(ROOT)) for p in sorted(DIST.iterdir())))
 
 if __name__ == "__main__":

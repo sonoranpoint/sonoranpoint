@@ -167,16 +167,25 @@ button.row:hover { background: var(--surface-2); }
 .feed time { color: var(--muted); font-size: 13px; }
 
 /* Station look preview (what their station will show) */
-.pv { border-radius: 14px; overflow: hidden; border: 1px solid var(--line); background: #0d1218; color: #fff; font-size: 13px; aspect-ratio: 16 / 10; display: flex; flex-direction: column; }
-.pv-top { display: flex; align-items: center; gap: 10px; padding: 10px 12px; }
-.pv-logo { width: 34px; height: 34px; border-radius: 8px; display: grid; place-items: center; font-family: var(--display); font-weight: 700; color: #1a1a1a; overflow: hidden; flex: none; }
+.pv { border-radius: 14px; overflow: hidden; border: 1px solid var(--line); background: #f7f8fa; color: #121820; font-size: 13px; aspect-ratio: 5 / 3; display: flex; flex-direction: column; container-type: inline-size; }
+.pv-top { display: flex; align-items: center; gap: 2cqw; padding: 2cqw 2.6cqw; }
+.pv-logo { width: 7.5cqw; height: 7.5cqw; border-radius: 1.6cqw; display: grid; place-items: center; font-family: var(--head); font-weight: 800; font-size: 3cqw; color: #1a1a1a; overflow: hidden; flex: none; }
 .pv-logo img { width: 100%; height: 100%; object-fit: contain; background: #fff; }
-.pv-top b { font-family: var(--display); font-size: 19px; line-height: 1; display: block; }
-.pv-top small { opacity: .8; font-size: 11px; }
-.pv-body { flex: 1; display: grid; place-items: center; text-align: center; padding: 10px; gap: 6px; align-content: center; }
-.pv-body h4 { margin: 0; font-family: var(--display); font-size: 30px; line-height: 1; }
-.pv-body p { margin: 0; opacity: .8; font-size: 12px; max-width: 30ch; }
-.pv-btn { display: inline-block; margin-top: 6px; border-radius: 9px; padding: 6px 14px; font-weight: 700; color: #1a1a1a; }
+.pv-top b { font-family: var(--head); font-weight: 700; font-size: 3.6cqw; line-height: 1.1; display: block; }
+.pv-top small { opacity: .85; font-size: 2.2cqw; }
+.pv-body { flex: 1; display: grid; grid-template-columns: 1fr 1.1fr; gap: 4cqw; align-items: center; padding: 4cqw 5cqw; }
+.pv-card { aspect-ratio: 1.15; background: #fff; border: 1px solid #dde2e8; border-radius: 3cqw; display: grid; place-items: center; padding: 4cqw; box-shadow: 0 2cqw 4cqw -2cqw rgba(12, 27, 51, .25); }
+.pv-card img { width: 100%; height: 100%; object-fit: contain; }
+.pv-body h4 { margin: 0 0 1.4cqw; font-family: var(--head); font-weight: 800; font-size: 6.4cqw; line-height: 1.05; letter-spacing: -.03em; white-space: nowrap; }
+.pv-body p { margin: 0; color: #5b6573; font-size: 2.6cqw; line-height: 1.4; }
+.pv-steps { display: flex; gap: 1.2cqw; margin-top: 2.4cqw; flex-wrap: wrap; }
+.pv-steps span { background: #fff; border: 1px solid #dde2e8; border-radius: 99px; padding: .6cqw 1.6cqw .6cqw .6cqw; font-weight: 700; font-size: 2.1cqw; display: inline-flex; align-items: center; gap: 1cqw; }
+.pv-steps i { font-style: normal; width: 3.2cqw; height: 3.2cqw; border-radius: 50%; display: grid; place-items: center; font-size: 1.8cqw; }
+.logo-row { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; }
+.logo-prev { width: 150px; height: 84px; border: 1px solid var(--line); border-radius: 12px; background: #fff; display: grid; place-items: center; padding: 8px; position: relative; overflow: hidden; }
+.logo-prev img { position: absolute; inset: 8px; width: calc(100% - 16px); height: calc(100% - 16px); object-fit: contain; }
+.logo-prev small { position: absolute; inset: auto 0 0 0; background: rgba(255, 255, 255, .92); color: #5a6a84; font-size: 11px; text-align: center; padding: 2px 4px; }
+label.btn { cursor: pointer; } label.btn.disabled { opacity: .55; cursor: default; }
 
 .check { display: flex; gap: 10px; align-items: flex-start; padding: 6px 0; font-size: 14px; }
 .check input { width: 18px; height: 18px; margin-top: 2px; flex: none; }
@@ -331,7 +340,7 @@ a.kpi:hover { border-color: var(--brand); transform: translateY(-1px); }
 .sidecard p { position: relative; margin: 0; font-size: 14px; line-height: 1.45; color: #eaf2ff; font-weight: 700; }
 .side .pill { margin: 0 10px; }
 .pop { position: absolute; z-index: 40; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); padding: 6px; min-width: 230px; }
-.pop[hidden] { display: none; }
+.pop[hidden], [hidden] { display: none !important; }
 .pop button, .pop a { display: flex; width: 100%; align-items: center; gap: 10px; background: none; border: 0; border-radius: 8px; padding: 9px 10px; text-align: left; font-weight: 700; font-size: 14px; color: inherit; text-decoration: none; }
 .pop button:hover, .pop a:hover { background: var(--surface-2); }
 .pop button svg, .pop a svg { width: 17px; height: 17px; flex: none; color: var(--muted); }
@@ -602,7 +611,8 @@ function buildDemo() {
       members: [], invites: [{ id: uid("inv"), email: "apereira@shcatering.example", role: "owner", expires: now + 5 * DAY, token: newToken() }],
       stations: [waiting("Commissary", "Building 2", 9)] }),
   ];
-  customers.forEach((c) => { c.members = c.members.map(([email, role, ago]) => ({ email, role, last_sign_in: now - ago })); });
+  const NAMES = { "morgan@demoair.example": "Morgan Reyes", "dana@demoair.example": "Dana Brooks", "kelly@demoair.example": "Kelly Park", "rmontoya@copperstate.example": "Rafael Montoya", "tbegay@desertground.example": "Tasha Begay", "jokafor@mesaramp.example": "Jim Okafor" };
+  customers.forEach((c) => { c.members = c.members.map(([email, role, ago]) => ({ email, name: NAMES[email] || "", role, last_sign_in: now - ago })); });
   const log = [];
   const L = (c, at, action, details = "") => log.push({ id: uid("lg"), at, by: OPERATOR.name, org: c.id, customer: c.name, action, details });
   customers.forEach((c) => { L(c, c.created, "created customer", `${c.stations.length} station${c.stations.length === 1 ? "" : "s"}, owner invite to ${c.contact_email}`); });
@@ -901,7 +911,7 @@ const live = {
     const o = r.organization;
     Object.assign(c, { detail: true, terms: { ...DEFAULT_TERMS, ...(o.terminology || {}) }, timezone: o.timezone, contact_phone: o.contact_phone || "", notes: o.notes || "",
       logo_url: o.logo_url || "", stations: r.stations.map(mapStation),
-      members: r.members.map((m) => ({ email: m.email, role: m.role, last_sign_in: ms(m.last_sign_in_at) })),
+      members: r.members.map((m) => ({ email: m.email, name: m.name || "", role: m.role, last_sign_in: ms(m.last_sign_in_at) })),
       invites: r.invites.map((i) => ({ id: i.id, email: i.email, role: i.role, expires: ms(i.expires_at) })) });
     if (c.members.length) c.has_owner = c.members.some((m) => m.role === "owner");
   },
@@ -1128,7 +1138,7 @@ const hwForStation = (stId) => (DB.hw || []).find((u) => u.station_id === stId &
 const planName = (id) => PLANS.find((p) => p.id === id)?.name || id;
 const statusChip = (s) => `<span class="chip ${STATUS[s][1]}">${STATUS[s][0]}</span>`;
 const swatch = (c, big) => `<span class="swatch" style="background:${esc(c.primary)};color:${inkOn(c.primary)}${big ? ";width:52px;height:52px;font-size:22px;border-radius:12px" : ""}" aria-hidden="true">${esc(initials(c.name))}</span>`;
-const inviteLink = (t) => `${VENDOR.appUrl}/invite/${t}`;
+const inviteLink = (t) => `${VENDOR.appUrl}/?invite=${t}`;   // the dashboard reads ?invite=
 
 /* =====================================================================
    State + routing
@@ -1252,6 +1262,28 @@ function vCustomers() {
       </div>
     </div>`;
 }
+// Any picture becomes a PNG at most 1024 px on its longest side (transparency kept), so only small, safe PNGs are stored.
+async function toPng(file) {
+  if (!/^image\/(png|jpeg|svg\+xml|webp)$/.test(file.type)) throw new Error("Pick a PNG, JPG, SVG or WebP image.");
+  if (file.size > 10e6) throw new Error("That image is over 10 MB.");
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((ok, bad) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => bad(new Error("That image couldn't be opened.")); i.src = url; });
+    let w = img.naturalWidth || 1024, h = img.naturalHeight || 1024;
+    const k = file.type === "image/svg+xml" ? 1024 / Math.max(w, h) : Math.min(1, 1024 / Math.max(w, h)); w = Math.round(w * k); h = Math.round(h * k);
+    const cv = document.createElement("canvas"); cv.width = w; cv.height = h; cv.getContext("2d").drawImage(img, 0, 0, w, h);
+    return await new Promise((ok, bad) => cv.toBlob((b) => (b ? ok(b) : bad(new Error("That image couldn't be converted."))), "image/png"));
+  } finally { URL.revokeObjectURL(url); }
+}
+// Saves a customer's logo: Supabase Storage on the live site (logos/<company>/…), kept in the page in the demo.
+async function uploadLogo(orgId, file) {
+  const png = await toPng(file);
+  if (!LIVE) return await new Promise((ok) => { const r = new FileReader(); r.onload = () => ok(r.result); r.readAsDataURL(png); });
+  const path = `${orgId}/logo-${Date.now()}.png`;
+  const { error } = await sb.storage.from("logos").upload(path, png, { contentType: "image/png", cacheControl: "31536000", upsert: false });
+  if (error) throw new Error(error.message);
+  return sb.storage.from("logos").getPublicUrl(path).data.publicUrl;
+}
 // Customer preview: opens over the overview from a row, the ⋮ button or an attention item.
 function vPreview() {
   const c = custOf(S.preview); if (!c) return "";
@@ -1281,12 +1313,15 @@ function vPreview() {
 }
 function stationPreview(c, terms) {
   const t = { ...DEFAULT_TERMS, ...terms };
-  const logo = c.logo_url ? `<img src="${esc(c.logo_url)}" alt="" onerror="this.replaceWith(document.createTextNode('${esc(initials(c.name))}'))">` : esc(initials(c.name || "Company"));
-  return `<div class="pv" aria-label="Preview of their station screen">
-    <div class="pv-top" style="background:${esc(hex(c.primary) ? c.primary : "#1F4E79")};color:${inkOn(c.primary)}"><span class="pv-logo" style="background:${esc(hex(c.accent) ? c.accent : "#F2A900")}">${logo}</span>
+  const pri = hex(c.primary) ? c.primary : "#1F4E79", acc = hex(c.accent) ? c.accent : "#F2A900";
+  const small = c.logo_url ? `<img src="${esc(c.logo_url)}" alt="" onerror="this.replaceWith(document.createTextNode('${esc(initials(c.name))}'))">` : esc(initials(c.name || "Company"));
+  const big = c.logo_url ? `<img src="${esc(c.logo_url)}" alt="" onerror="this.onerror=null;this.src='brand/logo.svg'">` : `<img src="brand/logo.svg" alt="">`;
+  return `<div class="pv" aria-label="Preview of their station's start screen">
+    <div class="pv-top" style="background:${esc(pri)};color:${inkOn(pri)}"><span class="pv-logo" style="background:${esc(acc)}">${small}</span>
       <span><b>${esc(c.name || "Company name")}</b><small>Equipment Room 01</small></span></div>
-    <div class="pv-body"><h4>Tap your badge</h4><p>Then tap each ${esc(t.equipment.toLowerCase())} to ${esc(t.checkout.toLowerCase())}, or tap one you have to ${esc(t.checkin.toLowerCase())} it.</p>
-      <span class="pv-btn" style="background:${esc(hex(c.accent) ? c.accent : "#F2A900")};color:${inkOn(c.accent)}">${esc(t.checkout)}</span></div></div>`;
+    <div class="pv-body"><div class="pv-card">${big}</div>
+      <div><h4>Tap your badge</h4><p>Then tap what you're taking or bringing back.</p>
+        <div class="pv-steps">${["Badge", t.equipment, "Done"].map((w, i) => `<span><i style="background:${esc(pri)};color:${inkOn(pri)}">${i + 1}</i>${esc(w)}</span>`).join("")}</div></div></div></div>`;
 }
 
 function vCustomer() {
@@ -1328,7 +1363,7 @@ function vCustomer() {
           || `<div class="empty">Nothing shipped to them yet. Open a unit on the Hardware page to ship it.</div>`}</div></section>`; })() : ""}
 
       <section class="panel"><div class="panel-h"><h2>Their team</h2><span class="muted" style="font-size:13px">They add the rest of their people themselves</span></div>
-        <div class="list">${c.members.map((m) => `<div class="row"><span class="dot ${m.role === "owner" ? "ok" : ""}"></span><span>${esc(m.email)}<span class="sub">${esc({ owner: "Owner", admin: "Admin", supervisor: "Supervisor", viewer: "View only" }[m.role])} · signed in ${esc(ago(m.last_sign_in))}</span></span><span></span></div>`).join("")}
+        <div class="list">${c.members.map((m) => `<div class="row"><span class="dot ${m.role === "owner" ? "ok" : ""}"></span><span>${m.name ? `<b>${esc(m.name)}</b><span class="sub">${esc(m.email)}</span>` : esc(m.email)}<span class="sub">${esc({ owner: "Owner", admin: "Admin", supervisor: "Supervisor", viewer: "View only" }[m.role])} · ${m.last_sign_in ? "signed in " + esc(ago(m.last_sign_in)) : "hasn't signed in yet"}</span></span><span></span></div>`).join("")}
           ${c.invites.map((i) => `<div class="row"><span class="dot info"></span><span>${esc(i.email)}<span class="sub">Owner invite sent · expires ${esc(fmtDate(i.expires))}</span></span><button class="btn sm" data-act="resend" data-email="${esc(i.email)}">Resend</button></div>`).join("")}
           ${!c.members.length && !c.invites.length ? `<div class="empty">Nobody yet. Invite their owner.</div>` : ""}</div>
         ${S.lastInvite ? `<div class="panel-b" style="border-top:1px solid var(--line);display:flex;flex-direction:column;gap:8px"><b>Invite for ${esc(S.lastInvite.email)}</b>
@@ -1352,7 +1387,7 @@ function vCustomer() {
         <form class="panel-b fgrid" data-form="account">
           <label>Status<select class="field" name="status">${Object.entries(STATUS).map(([k, [l]]) => `<option value="${k}" ${c.status === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
           <label>Plan<select class="field" name="plan">${PLANS.map((p) => `<option value="${p.id}" ${c.plan === p.id ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select></label>
-          <label>Trial ends<small>Only used on trial</small><input class="field" type="date" name="trial_ends" value="${c.trial_ends ? new Date(c.trial_ends).toISOString().slice(0, 10) : ""}"></label>
+          <label id="trialEnds" ${c.status === "trial" ? "" : "hidden"}>Trial ends<input class="field" type="date" name="trial_ends" value="${c.trial_ends ? new Date(c.trial_ends).toISOString().slice(0, 10) : ""}"></label>
           <label>Station limit<small>Blank = no limit</small><input class="field" type="number" min="0" max="500" name="station_limit" value="${c.station_limit ?? ""}"></label>
           <label>Contact<input class="field" name="contact_name" maxlength="60" value="${esc(c.contact_name || "")}"></label>
           <label>Contact phone<input class="field" name="contact_phone" maxlength="30" value="${esc(c.contact_phone || "")}"></label>
@@ -1368,7 +1403,11 @@ function vCustomer() {
           <label class="full">Company name<input class="field" name="name" required maxlength="80" value="${esc(c.name)}"></label>
           <label>Main color<span class="colorrow"><input type="color" data-pair="primary" value="${esc(c.primary)}" aria-label="Pick main color"><input class="field" name="primary" value="${esc(c.primary)}" maxlength="7"></span></label>
           <label>Accent color<span class="colorrow"><input type="color" data-pair="accent" value="${esc(c.accent)}" aria-label="Pick accent color"><input class="field" name="accent" value="${esc(c.accent)}" maxlength="7"></span></label>
-          <label class="full">Logo link<small>A PNG or SVG web address. Blank shows their initials.</small><input class="field" name="logo_url" value="${esc(c.logo_url || "")}" placeholder="https://..."></label>
+          <div class="full"><b style="font-size:13.5px">Logo</b><small style="display:block;color:var(--muted);font-size:12.5px;margin:2px 0 8px">Shows large on their stations' start screen. With none, stations show Sonoran Point's.</small>
+            <span class="logo-row"><span class="logo-prev">${c.logo_url ? `<img src="${esc(c.logo_url)}" alt="Their logo">` : `<img src="brand/logo.svg" alt="Sonoran Point logo"><small>No logo yet</small>`}</span>
+              <span class="actions"><label class="btn sm ${S.logoBusy ? "disabled" : ""}">${S.logoBusy ? "Uploading…" : c.logo_url ? "Replace logo" : "Upload logo"}<input type="file" id="logoFile" accept="image/png,image/jpeg,image/svg+xml,image/webp" hidden ${S.logoBusy ? "disabled" : ""}></label>
+              ${c.logo_url ? `<button type="button" class="btn sm danger" data-act="rmLogo">Remove</button>` : ""}</span></span>
+            <input type="hidden" name="logo_url" value="${esc(c.logo_url || "")}"></div>
           <details class="full"><summary style="cursor:pointer;font-weight:700;font-size:13.5px">Their words for things</summary>
             <div class="fgrid" style="margin-top:10px">${TERMS.map(([k, l, ph]) => `<label>${l}<input class="field" name="t_${k}" maxlength="24" value="${esc(c.terms[k])}" placeholder="${ph}"></label>`).join("")}</div></details>
           <div class="err full" role="alert">${S.formErr?.form === "brand" ? esc(S.formErr.text) : ""}</div>
@@ -1399,7 +1438,7 @@ function vNew() {
         <label>Time zone<small>Shift times and due times use this</small><select class="field" name="timezone" data-new="timezone">${tzs.map((t) => `<option ${f.timezone === t ? "selected" : ""}>${t}</option>`).join("")}</select></label>`)}
       ${sec(2, "Look", `<label>Main color<span class="colorrow"><input type="color" data-pair="primary" value="${esc(hex(f.primary) ? f.primary : "#0B2350")}" aria-label="Pick main color"><input class="field" name="primary" value="${esc(f.primary)}" maxlength="7" data-new="primary"></span></label>
         <label>Accent color<span class="colorrow"><input type="color" data-pair="accent" value="${esc(hex(f.accent) ? f.accent : "#F7931E")}" aria-label="Pick accent color"><input class="field" name="accent" value="${esc(f.accent)}" maxlength="7" data-new="accent"></span></label>
-        <label class="full">Logo link<small>Optional. You can add it later.</small><input class="field" name="logo_url" value="${esc(f.logo_url)}" placeholder="https://..." data-new="logo_url"></label>
+        <p class="full muted" style="margin:0;font-size:13px">Add their logo from the customer page once they're set up. Until then their stations show Sonoran Point's.</p>
         <details class="full"><summary style="cursor:pointer;font-weight:700;font-size:13.5px">Their words for things (optional)</summary>
           <div class="fgrid" style="margin-top:10px">${TERMS.map(([k, l, ph]) => `<label>${l}<input class="field" name="t_${k}" maxlength="24" value="${esc(f.terms[k])}" placeholder="${ph}" data-new="t_${k}"></label>`).join("")}</div></details>`)}
       ${sec(3, "Plan", `<label>Start as<select class="field" name="status" data-new="status"><option value="trial" ${f.status === "trial" ? "selected" : ""}>Trial</option><option value="active" ${f.status === "active" ? "selected" : ""}>Active (paying)</option></select></label>
@@ -1722,6 +1761,10 @@ document.addEventListener("input", (e) => {
 });
 document.addEventListener("change", async (e) => {
   const t = e.target;
+  if (t.id === "logoFile" && t.files?.[0]) { const cc = custOf(S.id), file = t.files[0]; S.logoBusy = true; render();
+    try { const url = await uploadLogo(cc.id, file); const r = await api.updateCustomer(cc.id, { logo_url: url }, "updated look"); toast(r.ok ? "Logo saved. Their stations show it within a minute." : r.error); }
+    catch (err) { toast(err.message); } S.logoBusy = false; return render(); }
+  if (t.form?.dataset.form === "account" && t.name === "status") { const tr = $("#trialEnds"); if (tr) tr.hidden = t.value !== "trial"; }
   if (t.dataset.mod) { const c = custOf(S.id); const mods = new Set(c.modules); t.checked ? mods.add(t.dataset.mod) : mods.delete(t.dataset.mod);
     const mr = await api.updateCustomer(c.id, { modules: [...mods], _note: `${MODULES.find((m) => m.id === t.dataset.mod).name} ${t.checked ? "on" : "off"}` }); if (mr && !mr.ok) { toast(mr.error); return render(); } toast(`${MODULES.find((m) => m.id === t.dataset.mod).name} ${t.checked ? "on" : "off"}`); return render(); }
   if (t.matches("[data-hwcust]")) { if (S.hwAssign) S.hwAssign.org = t.value; const sel = t.form.elements.station_id; sel.innerHTML = stationOptions(t.value, null);
@@ -1753,6 +1796,7 @@ document.addEventListener("click", async (e) => {
   const t = e.target.closest("[data-act]"); if (!t) return;
   const a = t.dataset.act, c = S.id ? custOf(S.id) : null;
   if (a === "acctMenu") { S.pop = S.pop === "acct" ? null : "acct"; const pop = t.nextElementSibling; pop.hidden = S.pop !== "acct"; t.setAttribute("aria-expanded", String(!!S.pop)); if (S.pop) pop.querySelector("a, button")?.focus(); return; }
+  if (a === "rmLogo") { const r = await api.updateCustomer(c.id, { logo_url: "" }, "updated look"); toast(r.ok ? "Logo removed. Their stations show Sonoran Point's." : r.error); return render(); }
   if (a === "theme") { applyTheme(t.dataset.v); return render(); }
   if (a === "navOpen") { S.navOpen = true; render(); $(".snav a.on")?.focus(); return; }
   if (a === "navClose") { S.navOpen = false; return render(); }

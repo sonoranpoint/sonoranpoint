@@ -44,7 +44,7 @@ const submit = async (sel) => { doc.querySelector(sel).dispatchEvent(new dom.win
   await type('[data-new="primary"]', "#225533");
   check(/#225533/i.test(doc.querySelector(".pv-top").getAttribute("style")), "preview takes the color");
   await type('[data-new="t_equipment"]', "Radio");
-  check(/each radio/.test(doc.querySelector(".pv").textContent), "preview uses their word");
+  check(/Radio/.test(doc.querySelector(".pv-steps").textContent), "preview uses their word");
   await submit('[data-form="new"]');
   check(/owner's email/.test(page()), "needs owner email");
   await type('[data-new="slug"]', "demo"); await type('[data-new="owner_email"]', "Boss@CactusAir.example");
@@ -56,7 +56,7 @@ const submit = async (sel) => { doc.querySelector(sel).dispatchEvent(new dom.win
   check(/Cactus Air Logistics is set up/.test(page()) && doc.querySelectorAll(".shipcard").length === 2, "created: one card per station");
   const codes = [...doc.querySelectorAll(".shipcard .codebox")].map((x) => x.textContent);
   check(codes.every((c) => /^[A-Z2-9]{4}-[A-Z2-9]{4}$/.test(c)) && codes[0] !== codes[1], "each station has its own code " + codes.join(" "));
-  check(/boss@cactusair.example/.test(page()) && /app\.sonoranpoint\.com\/invite\/[0-9a-f]{48}/.test(page()), "owner invite link shown");
+  check(/boss@cactusair.example/.test(page()) && /app\.sonoranpoint\.com\/\?invite=[0-9a-f]{48}/.test(page()), "owner invite link shown, in the form the dashboard reads (?invite=)");
   check(/Blank admin tag/.test(page()) && /Quick-start card/.test(page()), "packing checklist");
   await click('[data-act="print"]'); check(dom.window.__printed, "print setup sheets");
   const id = E("DB.customers.find(c => c.slug === 'cactusair').id");
@@ -80,7 +80,7 @@ const submit = async (sel) => { doc.querySelector(sel).dispatchEvent(new dom.win
   check(/Invite for second@cactusair.example/.test(page()), "invite another owner");
   // brand
   await type('[data-form="brand"] [name=accent]', "#FF0000");
-  check(/#FF0000/i.test(doc.querySelector('[data-form="brand"] .pv-btn').getAttribute("style")), "brand preview updates live");
+  check(/#FF0000/i.test(doc.querySelector('[data-form="brand"] .pv-logo').getAttribute("style")), "brand preview updates live");
   await type('[data-form="brand"] [name=accent]', "red"); await submit('[data-form="brand"]');
   check(/Colors must look like/.test(page()), "bad color refused");
   await type('[data-form="brand"] [name=accent]', "#cc3300"); await submit('[data-form="brand"]');
@@ -104,6 +104,14 @@ const submit = async (sel) => { doc.querySelector(sel).dispatchEvent(new dom.win
   check(doc.querySelectorAll("tbody tr").length === E("api.fleet().length"), "fleet: all stations");
   await go("log");
   check(/created customer/.test(page()) && /Cactus Air Logistics/.test(page()) && /status: paused/.test(page()), "activity log");
+  // customer page polish
+  const demoId = E("DB.customers.find(c => c.slug === 'demo').id");
+  await go("customer/" + demoId);
+  check(/Morgan Reyes/.test(doc.querySelector(".main").textContent) && /morgan@demoair.example/.test(doc.querySelector(".main").textContent), "their team shows names with emails");
+  check(doc.querySelector("#trialEnds").hidden, "no trial date box for a paying customer");
+  const stSel = doc.querySelector('[data-form="account"] [name=status]'); stSel.value = "trial"; stSel.dispatchEvent(new dom.window.Event("change", { bubbles: true })); await sleep(10);
+  check(!doc.querySelector("#trialEnds").hidden, "it appears when you switch them to trial");
+  check(doc.querySelector("#logoFile") && doc.querySelector(".pv-card img")?.getAttribute("src") === "brand/logo.svg", "logo upload on the customer page; preview shows our logo until they have one");
   // team
   await go("team");
   check(/Jordan Ellis/.test(page()) && /\(you\)/.test(page()) && /Invited as Operator/.test(page()) && /Invite someone/.test(page()), "team page (demo)");

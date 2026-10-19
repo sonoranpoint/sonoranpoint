@@ -723,6 +723,7 @@ select pg_temp.ok((select (l->'details') ?& array['status','station_limit','name
 select platform_update_customer(:'dg', '{"station_limit":3}') \g /dev/null
 select pg_temp.ok((select count(*) from jsonb_array_elements(platform_log()) l where l->>'action' = 'updated customer' and l->'details' = '{}'::jsonb) = 0, 'saving with no changes logs nothing empty');
 select pg_temp.ok(platform_me()->>'role' = 'owner' and platform_me()->>'name' = 'Dez', 'platform_me: name and role');
+select pg_temp.ok((select bool_and(m ? 'name') from jsonb_array_elements(platform_customer('00000000-0000-0000-0000-00000000d3e0')->'members') m), 'customer page members carry their names');
 select pg_temp.ok(platform_invite_operator('Casey@SonoranPoint.example', 'operator', 'Casey')->>'ok' = 'true', 'owner invites an operator');
 select platform_invite_operator('casey@sonoranpoint.example', 'operator', 'Casey')->>'token' as optok \gset
 select pg_temp.ok(jsonb_array_length(platform_team()->'invites') = 1, 're-inviting replaces the open invite');

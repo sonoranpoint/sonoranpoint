@@ -17,6 +17,10 @@ const ALEX = "04BA00000001", JORDAN = "04BA00000002", SAM = "04BA00000003";
   E("demoDevice.skip(); wizStart(); S.wiz.code='DEMO0001'"); await E("activate()"); await sleep(300); E("finishSetup()"); await sleep(100);
   E(`document.querySelector('#timeSel').value='09:00'; document.querySelector('#timeSel').dispatchEvent(new Event('change'))`);
   check(E("S.screen") === "idle", "station activated");
+  check(dom.window.document.querySelector(".hero-logo img")?.getAttribute("src") === "brand/logo.svg", "no company logo -> Sonoran Point's logo, large");
+  E("S.saved.config.organization.logo_url = 'https://example.test/acme.png'; render()"); await sleep(20);
+  check(dom.window.document.querySelector(".hero-logo img")?.getAttribute("src") === "https://example.test/acme.png" && /brand\/logo\.svg/.test(dom.window.document.querySelector(".hero-logo img").getAttribute("onerror")), "company logo shown large, falls back to ours if it won't load");
+  E("S.saved.config.organization.logo_url = null; render()");
 
   await tap("04DE000501");
   check(/Radio 01/.test(text()) && /AVAILABLE/.test(text()) && /Tap your badge to check it out/.test(text()), "tap Radio 01 with no badge -> AVAILABLE, prompts for a badge");

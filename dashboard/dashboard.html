@@ -200,6 +200,11 @@ button.row:hover { background: var(--surface-2); }
 .switch span::after { content: ""; position: absolute; left: 3px; top: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; transition: transform .15s; box-shadow: 0 1px 2px rgba(0,0,0,.3); }
 .switch input:checked + span { background: var(--ok); } .switch input:checked + span::after { transform: translateX(18px); }
 .switch input:focus-visible + span { outline: 3px solid var(--focus); outline-offset: 2px; }
+.logo-row { display: flex; flex-wrap: wrap; gap: 12px 16px; align-items: center; }
+.logo-prev { width: 168px; height: 96px; border: 1px solid var(--line); border-radius: 12px; background: #fff; display: grid; place-items: center; padding: 10px; position: relative; overflow: hidden; }
+.logo-prev img { position: absolute; inset: 8px; width: calc(100% - 16px); height: calc(100% - 16px); object-fit: contain; }
+.logo-prev small { position: absolute; inset: auto 0 0 0; background: rgba(255, 255, 255, .92); color: #5a6a84; font-size: 11px; text-align: center; padding: 3px 4px; }
+label.btn { cursor: pointer; } label.btn.disabled { opacity: .55; cursor: default; }
 .swatch { width: 28px; height: 28px; border-radius: 8px; border: 1px solid var(--line); display: inline-block; vertical-align: middle; }
 
 .fgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 14px; }
@@ -948,6 +953,28 @@ function render() {
       <div class="wrap">${VIEWS[S.route]()}</div></main>`;
   renderLayer();
 }
+// Any picture becomes a PNG at most 1024 px on its longest side (transparency kept), so only small, safe PNGs are stored.
+async function toPng(file) {
+  if (!/^image\/(png|jpeg|svg\+xml|webp)$/.test(file.type)) throw new Error("Pick a PNG, JPG, SVG or WebP image.");
+  if (file.size > 10e6) throw new Error("That image is over 10 MB.");
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((ok, bad) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => bad(new Error("That image couldn't be opened.")); i.src = url; });
+    let w = img.naturalWidth || 1024, h = img.naturalHeight || 1024;
+    const k = file.type === "image/svg+xml" ? 1024 / Math.max(w, h) : Math.min(1, 1024 / Math.max(w, h)); w = Math.round(w * k); h = Math.round(h * k);
+    const c = document.createElement("canvas"); c.width = w; c.height = h; c.getContext("2d").drawImage(img, 0, 0, w, h);
+    return await new Promise((ok, bad) => c.toBlob((b) => (b ? ok(b) : bad(new Error("That image couldn't be converted."))), "image/png"));
+  } finally { URL.revokeObjectURL(url); }
+}
+// Saves the logo: Supabase Storage on the live site (logos/<company>/…), kept in the page in the demo.
+async function uploadLogo(file) {
+  const png = await toPng(file);
+  if (!LIVE) return await new Promise((ok) => { const r = new FileReader(); r.onload = () => ok(r.result); r.readAsDataURL(png); });
+  const path = `${DB.org.id}/logo-${Date.now()}.png`;
+  const { error } = await sb.storage.from("logos").upload(path, png, { contentType: "image/png", cacheControl: "31536000", upsert: false });
+  if (error) throw new Error(/row-level|not allowed|unauthor/i.test(error.message) ? "Only admins can change the logo." : error.message);
+  return sb.storage.from("logos").getPublicUrl(path).data.publicUrl;
+}
 // The company's own mark at the bottom of the menu: their logo, or initials on their accent color.
 function companyBadge() {
   return `<span class="clogo" aria-hidden="true">${DB.org.logo_url ? `<img src="${esc(DB.org.logo_url)}" alt="" onerror="this.remove()">` : ""}${esc(initialsOf(DB.org.name))}</span>`;
@@ -1188,6 +1215,10 @@ function vSettings() {
   return head("Settings", "Changes reach every station within a minute.") + (ro ? `<div class="readonly-note">You have ${esc(ROLE_NAME[DB.me.role])} access. Ask an admin to change settings.</div>` : "") + `<fieldset ${ro ? "disabled" : ""} style="border:0;padding:0;margin:0;display:flex;flex-direction:column;gap:22px;min-width:0">
     <section class="panel"><div class="panel-h"><h2>Company</h2></div><form class="panel-b form-grid" data-form="company">
       <label for="sName">Company name</label><input class="field" id="sName" name="name" value="${esc(o.name)}" maxlength="80">
+      <label>Logo<small>Shows large on your stations' start screen. PNG, JPG or SVG.</small></label>
+      <span class="logo-row"><span class="logo-prev">${o.logo_url ? `<img src="${esc(o.logo_url)}" alt="Your logo">` : `<img src="brand/logo.svg" alt="Sonoran Point logo"><small>No logo yet. Stations show ours.</small>`}</span>
+        <span class="actions"><label class="btn sm ${S.logoBusy ? "disabled" : ""}">${S.logoBusy ? "Uploading…" : o.logo_url ? "Replace logo" : "Upload logo"}<input type="file" id="logoFile" accept="image/png,image/jpeg,image/svg+xml,image/webp" hidden ${S.logoBusy ? "disabled" : ""}></label>
+        ${o.logo_url ? `<button type="button" class="btn sm danger" data-act="rmLogo">Remove</button>` : ""}</span></span>
       <label for="sPrimary">Main color<small>Station top bar and buttons</small></label><span><input type="color" id="sPrimary" name="primary" value="${esc(o.primary)}"> <span class="mono">${esc(o.primary)}</span></span>
       <label for="sAccent">Accent color<small>Logo tile and highlights</small></label><span><input type="color" id="sAccent" name="accent" value="${esc(o.accent)}"> <span class="mono">${esc(o.accent)}</span></span>
       <label for="sExt">Out-too-long alert<small>Hours, for any item. Categories and items can override.</small></label>
@@ -1422,6 +1453,7 @@ document.addEventListener("click", async (e) => {
   const a = t.dataset.act, D = S.drawer;
   if (a === "acctMenu" || a === "orgMenu") { const k = a === "acctMenu" ? "acct" : "org"; S.pop = S.pop === k ? null : k; const pop = t.nextElementSibling; pop.hidden = S.pop !== k;
     t.setAttribute("aria-expanded", String(S.pop === k)); if (S.pop) pop.querySelector("button, a, select")?.focus(); return; }
+  if (a === "rmLogo") { api.saveSettings({ logo_url: null }); toast("Logo removed. Stations show Sonoran Point's."); return render(); }
   if (a === "theme") { applyTheme(t.dataset.v); return render(); }
   if (a === "navOpen") { S.navOpen = true; render(); $(".snav a.on")?.focus(); return; }
   if (a === "navClose") { S.navOpen = false; return render(); }
@@ -1472,6 +1504,9 @@ document.addEventListener("input", (e) => {
 document.addEventListener("change", (e) => {
   const t = e.target;
   if (t.id === "switchOrg") { S.drawer = null; return openCompany(t.value); }
+  if (t.id === "logoFile" && t.files?.[0]) { const file = t.files[0]; S.logoBusy = true; render();
+    uploadLogo(file).then((url) => { api.saveSettings({ logo_url: url }); toast("Logo updated. Stations show it within a minute."); })
+      .catch((err) => toast(err.message)).finally(() => { S.logoBusy = false; render(); }); return; }
   if (t.id === "viewAs") { DB.me.role = t.value; S.drawer = null; S.confirm = null; toast(`Previewing as ${ROLE_NAME[t.value]}`); return render(); }
   if (t.dataset.member) { const r = api.setMemberRole(t.dataset.member, t.value); toast(r.ok ? "Role updated" : r.error); return render(); }
   if (t.dataset.actChange === "formRole") { const form = t.form; const keep = Object.fromEntries(new FormData(form)); S.formRole = t.value; renderLayer();
@@ -1674,7 +1709,7 @@ const REMOTE = {
   revokeStation: ([id]) => rpc("revoke_station", { p_station: id }),
   setActive: ([id, active]) => upd("employees", id, { active }),
   saveSettings: () => { const o = DB.org;
-    return upd("organizations", o.id, { name: o.name, primary_color: o.primary.toUpperCase(), accent_color: o.accent.toUpperCase(), extended_checkout_hours: o.extended_hours, settings: o.settings }); },
+    return upd("organizations", o.id, { name: o.name, logo_url: o.logo_url || null, primary_color: o.primary.toUpperCase(), accent_color: o.accent.toUpperCase(), extended_checkout_hours: o.extended_hours, settings: o.settings }); },
   saveCategory: ([id]) => { const c = catOf(id); if (!c) return;
     return upd("equipment_categories", id, { name: c.name, time_limit_type: c.rule, default_checkout_hours: c.hours, extended_alert_hours: c.extended }); },
   addCategory: async ([d]) => { const c = DB.categories.find((x) => x.name.toLowerCase() === (d.name || "").trim().toLowerCase()); if (!c) return;

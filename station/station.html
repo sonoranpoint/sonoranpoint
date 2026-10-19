@@ -2,7 +2,7 @@
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@600;700;800&family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
 /* Layout: the station's 7" touchscreen (5:3) in its case on the left; the test bench panel on the right, stacking below on narrow screens.
    The station screen is a fixed kiosk look (it's a device), branded at runtime from the company's colors. The bench follows the viewer's theme. */
@@ -33,7 +33,7 @@
   --brand-ink: #ffffff;
   --brand-accent: #f2a900;
   /* type */
-  --display: "Barlow Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
+  --display: "Plus Jakarta Sans", "Segoe UI", system-ui, sans-serif;
   --body: "Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", sans-serif;
   --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
 }
@@ -81,13 +81,13 @@ html.kiosk .screen { border-radius: 0; }
 .screen { aspect-ratio: 5 / 3; max-width: 100%; width: 100%; background: var(--screen); color: var(--screen-ink); border-radius: 6px; overflow: hidden; position: relative; container-type: inline-size; display: flex; flex-direction: column; font-size: 2.3cqw; user-select: none; }
 
 .topbar { background: var(--brand); color: var(--brand-ink); display: flex; align-items: center; gap: 1.6cqw; padding: 1.3cqw 2cqw; min-height: 9cqw; }
-.logo { width: 6.2cqw; height: 6.2cqw; border-radius: 1cqw; background: var(--brand-accent); color: #1a1a1a; display: grid; place-items: center; font-family: var(--display); font-weight: 700; font-size: 3cqw; flex: none; overflow: hidden; touch-action: none; }
+.logo { width: 6.2cqw; height: 6.2cqw; border-radius: 1.2cqw; background: var(--brand-accent); color: #1a1a1a; display: grid; place-items: center; font-family: var(--display); font-weight: 700; font-size: 3cqw; flex: none; overflow: hidden; touch-action: none; }
 .logo img { width: 100%; height: 100%; object-fit: contain; background: #fff; }
 .org { min-width: 0; flex: 1; }
-.org-name { font-family: var(--display); font-weight: 600; font-size: 3.2cqw; line-height: 1.05; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.org-name { font-family: var(--display); font-weight: 700; font-size: 2.9cqw; line-height: 1.1; letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .org-sub { font-size: 1.7cqw; opacity: .85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .clock { text-align: right; font-variant-numeric: tabular-nums; }
-.clock b { display: block; font-family: var(--display); font-weight: 600; font-size: 3.6cqw; line-height: 1; }
+.clock b { display: block; font-family: var(--display); font-weight: 700; font-size: 3.3cqw; line-height: 1; letter-spacing: -.02em; }
 .clock span { font-size: 1.6cqw; opacity: .85; }
 .net { font-size: 1.55cqw; font-weight: 700; padding: .5cqw 1.1cqw; border-radius: 99px; background: rgba(255,255,255,.18); white-space: nowrap; }
 .net.off { background: var(--bad-bg); color: var(--bad); }
@@ -95,25 +95,35 @@ html.kiosk .screen { border-radius: 0; }
 .main { flex: 1; min-height: 0; position: relative; display: flex; }
 
 /* idle */
-.idle { flex: 1; display: grid; grid-template-columns: 1fr 1.25fr; align-items: center; gap: 3cqw; padding: 3cqw 5cqw; }
+.idle { flex: 1; display: grid; grid-template-columns: 1fr 1.1fr; align-items: center; gap: 4.5cqw; padding: 3cqw 5cqw; }
+/* The company's logo, large; Sonoran Point's when they haven't given one. */
+.hero-logo { justify-self: stretch; align-self: center; aspect-ratio: 1.15; background: #fff; border-radius: 2.4cqw; display: grid; place-items: center; padding: 3.4cqw;
+  box-shadow: 0 .3cqw .8cqw rgba(12, 27, 51, .06), 0 1.6cqw 4cqw -1.6cqw rgba(12, 27, 51, .22); border: 1px solid var(--screen-line); }
+.hero-logo img { max-width: 100%; max-height: 100%; width: 100%; height: 100%; object-fit: contain; }
+.ready { display: inline-flex; align-items: center; gap: 1cqw; margin-top: 2.6cqw; font-size: 1.9cqw; font-weight: 700; color: var(--ok); }
+.ready i { width: 1.4cqw; height: 1.4cqw; border-radius: 50%; background: var(--ok); position: relative; }
+.ready i::after { content: ""; position: absolute; inset: 0; border-radius: 50%; background: var(--ok); animation: readyPulse 1.8s ease-out infinite; }
+@keyframes readyPulse { 0% { transform: scale(1); opacity: .6; } 100% { transform: scale(2.6); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .ready i::after { animation: none; } }
 .rings { position: relative; aspect-ratio: 1; width: 100%; max-width: 26cqw; justify-self: center; display: grid; place-items: center; }
 .rings span { position: absolute; inset: 0; border-radius: 50%; border: .5cqw solid var(--brand); opacity: 0; animation: ring 2.4s ease-out infinite; }
 .rings span:nth-child(2) { animation-delay: .8s; } .rings span:nth-child(3) { animation-delay: 1.6s; }
 .rings .badge-ico { width: 46%; height: auto; position: relative; }
 @keyframes ring { 0% { transform: scale(.45); opacity: .55; } 100% { transform: scale(1); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .rings span { animation: none; opacity: .25; } .rings span:nth-child(2){ transform: scale(.75);} .rings span:nth-child(3){ transform: scale(.5);} }
-.idle h2 { font-family: var(--display); font-weight: 700; font-size: 7.4cqw; line-height: .95; margin: 0 0 1.4cqw; letter-spacing: .005em; }
+.idle h2 { font-family: var(--display); font-weight: 800; font-size: 6cqw; line-height: 1.02; margin: 0 0 1.6cqw; letter-spacing: -.03em; white-space: nowrap; }
 .idle.paused h2 { font-size: 5.6cqw; } .idle.paused p { font-size: 2.3cqw; }
-.idle p { margin: 0; font-size: 2.6cqw; color: var(--screen-muted); max-width: 30ch; }
+.idle p { margin: 0; font-size: 2.5cqw; line-height: 1.4; color: var(--screen-muted); max-width: 26ch; }
 .steps { display: flex; gap: 1.2cqw; margin-top: 2.6cqw; font-size: 1.9cqw; color: var(--screen-muted); flex-wrap: wrap; }
-.steps span { background: var(--screen-card); border: 1px solid var(--screen-line); border-radius: 99px; padding: .5cqw 1.4cqw; }
+.steps span { background: var(--screen-card); border: 1px solid var(--screen-line); border-radius: 99px; padding: .6cqw 1.5cqw .6cqw .6cqw; display: inline-flex; align-items: center; gap: .9cqw; font-weight: 700; color: var(--screen-ink); }
+.steps span b { width: 2.8cqw; height: 2.8cqw; border-radius: 50%; background: var(--brand); color: var(--brand-ink); display: grid; place-items: center; font-size: 1.6cqw; }
 .steps b { color: var(--screen-ink); }
 
 /* session */
 .session { flex: 1; display: grid; grid-template-columns: 1fr 1.35fr; min-height: 0; }
 .mine { border-right: 1px solid var(--screen-line); padding: 2.2cqw 2.4cqw; display: flex; flex-direction: column; gap: 1.2cqw; min-height: 0; background: var(--screen-card); }
-.hello { font-family: var(--display); font-weight: 700; font-size: 4.6cqw; line-height: 1; margin: 0; }
-.mine h3, .feed h3 { margin: 0; font-size: 1.7cqw; letter-spacing: .08em; text-transform: uppercase; color: var(--screen-muted); font-weight: 700; }
+.hello { font-family: var(--display); font-weight: 800; font-size: 4.6cqw; line-height: 1.05; margin: 0; letter-spacing: -.03em; }
+.mine h3, .feed h3 { margin: 0; font-size: 2.1cqw; color: var(--screen-muted); font-weight: 700; }
 .mine ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .9cqw; overflow: hidden; }
 .mine li { display: grid; grid-template-columns: 1fr auto; gap: .2cqw 1cqw; align-items: center; padding: 1cqw 1.2cqw; border: 1px solid var(--screen-line); border-radius: 1cqw; }
 .mine li b { font-size: 2.2cqw; }
@@ -124,7 +134,10 @@ html.kiosk .screen { border-radius: 0; }
 .chip.ext { background: var(--warn-bg); color: var(--warn); }
 .chip.okc { background: var(--ok-bg); color: var(--ok); }
 .feed { padding: 2.2cqw 2.4cqw 0; display: flex; flex-direction: column; gap: 1.2cqw; min-height: 0; }
-.prompt { font-family: var(--display); font-weight: 600; font-size: 3.6cqw; line-height: 1.05; margin: 0; }
+.prompt { font-family: var(--display); font-weight: 800; font-size: 3.4cqw; line-height: 1.1; margin: 0; letter-spacing: -.02em; }
+.tapcard { flex: 1; min-height: 0; border: .25cqw dashed var(--screen-line); border-radius: 2cqw; display: grid; place-items: center; align-content: center; gap: 1.2cqw; text-align: center; color: var(--screen-muted); margin-bottom: 2.2cqw; padding: 2cqw; }
+.tapcard svg { width: 9cqw; height: 9cqw; color: var(--brand); }
+.tapcard b { color: var(--screen-ink); font-size: 2.6cqw; } .tapcard span { font-size: 1.9cqw; max-width: 34ch; }
 .prompt small { display: block; font-family: var(--body); font-weight: 400; font-size: 1.9cqw; color: var(--screen-muted); margin-top: .5cqw; }
 .results { display: flex; flex-direction: column; gap: 1cqw; overflow: hidden; flex: 1; min-height: 0; }
 .result { border-radius: 1.1cqw; padding: 1.2cqw 1.6cqw; display: grid; grid-template-columns: auto 1fr; gap: .2cqw 1.4cqw; align-items: center; border: 1px solid transparent; animation: pop .22s ease-out; }
@@ -1072,14 +1085,24 @@ function renderMain() {
         <p class="sup" style="font-size:1.8cqw;margin-top:1.4cqw">It starts working again on its own when the account is back on. ${esc(SUPPORT.name)}: ${esc(SUPPORT.phone)} · ${esc(SUPPORT.email)}</p></div>
     </div>`; return;
   }
+  const org = S.saved.config?.organization;
   el.innerHTML = `
     <div class="idle">
-      <div class="rings" aria-hidden="true"><span></span><span></span><span></span>${BADGE_SVG}</div>
+      <div class="hero-logo">${heroLogo(org)}</div>
       <div><h2>Tap your badge</h2>
-        <p>Then tap each item to check it out, or tap one you have to return it. Tap any ${esc(term().equipment.toLowerCase())} on its own to see who has it.</p>
-        <div class="steps"><span><b>1</b> Badge</span><span><b>2</b> ${esc(term().equipment)}</span><span><b>3</b> Done</span></div></div>
+        <p>Then tap what you're taking or bringing back. Tap ${esc(term().equipment.toLowerCase())} on its own to see who has it.</p>
+        <div class="steps"><span><b>1</b>Badge</span><span><b>2</b>${esc(term().equipment)}</span><span><b>3</b>Done</span></div>
+        <div class="ready"><i></i>Ready</div></div>
     </div>`;
 }
+// The company's logo; Sonoran Point's when they have none (or it won't load).
+const SP_LOGO = "brand/logo.svg";
+function heroLogo(o) {
+  const sp = `<img src="${SP_LOGO}" alt="Sonoran Point">`;
+  if (!o?.logo_url) return sp;
+  return `<img src="${esc(o.logo_url)}" alt="${esc(o.name || "")}" onerror="this.onerror=null;this.src='${SP_LOGO}';this.alt='Sonoran Point'">`;
+}
+const TAP_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8.32a7.43 7.43 0 0 1 0 7.36"/><path d="M9.46 6.21a11.76 11.76 0 0 1 0 11.58"/><path d="M12.91 4.1a15.91 15.91 0 0 1 .01 15.8"/><path d="M16.37 2a20.16 20.16 0 0 1 0 20"/></svg>`;
 const BADGE_SVG = `<svg class="badge-ico" viewBox="0 0 64 64" fill="none" aria-hidden="true">
   <rect x="14" y="6" width="36" height="52" rx="5" fill="var(--screen-card)" stroke="var(--brand)" stroke-width="3"/>
   <rect x="25" y="12" width="14" height="3" rx="1.5" fill="var(--brand)"/>
@@ -1455,13 +1478,14 @@ function renderSession(el) {
       <div class="session">
         <div class="mine">
           <p class="hello">Hi, ${esc(first)}</p>
-          <h3>You have ${mine.length || "nothing"}${mine.length ? " item" + (mine.length > 1 ? "s" : "") : " checked out"}</h3>
+          <h3>${mine.length ? `${mine.length} item${mine.length > 1 ? "s" : ""} checked out` : "Nothing checked out"}</h3>
           ${mine.length ? `<ul class="fit" data-fit=",dense,tight,tight cols2">${items}</ul>` : `<div class="empty">Tap an item to check it out.</div>`}
         </div>
         <div class="feed ${shown.length > 2 ? "compact" : ""}">
           <p class="prompt">Tap ${esc(term().equipment.toLowerCase())} now<small>New items are checked out to you. Items you have are returned.</small></p>
           ${tallyHtml(shown)}
-          <div class="results fit" data-fit=",dense,dense tight,dense tight cols2,dense tight cols2 cols3">${shown.map((r, i) => (i === 0 ? resultHtml(r) : rowHtml(r))).join("")}</div>
+          ${shown.length ? `<div class="results fit" data-fit=",dense,dense tight,dense tight cols2,dense tight cols2 cols3">${shown.map((r, i) => (i === 0 ? resultHtml(r) : rowHtml(r))).join("")}</div>`
+            : `<div class="tapcard">${TAP_SVG}<b>Hold a tag to the reader</b><span>Everything you tap shows up here.</span></div>`}
         </div>
       </div>
       <div class="sessbar">

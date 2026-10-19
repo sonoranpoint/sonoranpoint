@@ -2,7 +2,7 @@
 
 Three pieces run on each station:
 
-1. **The station app**: `station.html` (the production build of the test bench, without the test panel), opened full-screen in Chromium kiosk mode.
+1. **The station app**: the `deploy/dist/station` folder from `python3 deploy/build.py` (its `index.html` plus the `brand/` folder, which holds the Sonoran Point logo shown when a company has none), opened full-screen in Chromium kiosk mode. Copy the whole folder, not just the page.
 2. **The NFC reader service**: `nfc_reader.py`. Reads the PN532 board built into the case and sends each tap to the app (`127.0.0.1:8766`).
 3. **The Wi-Fi helper**: `wifi_helper.py`. It lets the app list and join Wi-Fi networks during first-time setup and from Admin menu › Station. It listens only on `127.0.0.1:8765`.
 
