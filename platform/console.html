@@ -169,13 +169,12 @@ button.row:hover { background: var(--surface-2); }
 /* Station look preview (what their station will show) */
 .pv { border-radius: 14px; overflow: hidden; border: 1px solid var(--line); background: #f7f8fa; color: #121820; font-size: 13px; aspect-ratio: 5 / 3; display: flex; flex-direction: column; container-type: inline-size; }
 .pv-top { display: flex; align-items: center; gap: 2cqw; padding: 2cqw 2.6cqw; }
-.pv-logo { width: 7.5cqw; height: 7.5cqw; border-radius: 1.6cqw; display: grid; place-items: center; font-family: var(--head); font-weight: 800; font-size: 3cqw; color: #1a1a1a; overflow: hidden; flex: none; }
-.pv-logo img { width: 100%; height: 100%; object-fit: contain; background: #fff; }
+.pv-logo { height: 8cqw; max-width: 34cqw; min-width: 8cqw; border-radius: 1.6cqw; background: #fff; padding: .8cqw 1.2cqw; display: flex; align-items: center; justify-content: center; overflow: hidden; flex: none; }
+.pv-logo img { height: 100%; width: auto; max-width: 100%; object-fit: contain; display: block; }
+.pv-ring { display: grid; place-items: center; } .pv-ring svg { width: 70%; height: auto; }
 .pv-top b { font-family: var(--head); font-weight: 700; font-size: 3.6cqw; line-height: 1.1; display: block; }
 .pv-top small { opacity: .85; font-size: 2.2cqw; }
 .pv-body { flex: 1; display: grid; grid-template-columns: 1fr 1.1fr; gap: 4cqw; align-items: center; padding: 4cqw 5cqw; }
-.pv-card { aspect-ratio: 1.15; background: #fff; border: 1px solid #dde2e8; border-radius: 3cqw; display: grid; place-items: center; padding: 4cqw; box-shadow: 0 2cqw 4cqw -2cqw rgba(12, 27, 51, .25); }
-.pv-card img { width: 100%; height: 100%; object-fit: contain; }
 .pv-body h4 { margin: 0 0 1.4cqw; font-family: var(--head); font-weight: 800; font-size: 6.4cqw; line-height: 1.05; letter-spacing: -.03em; white-space: nowrap; }
 .pv-body p { margin: 0; color: #5b6573; font-size: 2.6cqw; line-height: 1.4; }
 .pv-steps { display: flex; gap: 1.2cqw; margin-top: 2.4cqw; flex-wrap: wrap; }
@@ -1313,13 +1312,12 @@ function vPreview() {
 }
 function stationPreview(c, terms) {
   const t = { ...DEFAULT_TERMS, ...terms };
-  const pri = hex(c.primary) ? c.primary : "#1F4E79", acc = hex(c.accent) ? c.accent : "#F2A900";
-  const small = c.logo_url ? `<img src="${esc(c.logo_url)}" alt="" onerror="this.replaceWith(document.createTextNode('${esc(initials(c.name))}'))">` : esc(initials(c.name || "Company"));
-  const big = c.logo_url ? `<img src="${esc(c.logo_url)}" alt="" onerror="this.onerror=null;this.src='brand/logo.svg'">` : `<img src="brand/logo.svg" alt="">`;
+  const pri = hex(c.primary) ? c.primary : "#1F4E79";
+  const logo = c.logo_url ? `<img src="${esc(c.logo_url)}" alt="" onerror="this.onerror=null;this.src='brand/logo.svg'">` : `<img src="brand/logo.svg" alt="">`;
   return `<div class="pv" aria-label="Preview of their station's start screen">
-    <div class="pv-top" style="background:${esc(pri)};color:${inkOn(pri)}"><span class="pv-logo" style="background:${esc(acc)}">${small}</span>
-      <span><b>${esc(c.name || "Company name")}</b><small>Equipment Room 01</small></span></div>
-    <div class="pv-body"><div class="pv-card">${big}</div>
+    <div class="pv-top" style="background:${esc(pri)};color:${inkOn(pri)}"><span class="pv-logo">${logo}</span>
+      <span><b>Equipment Room 01</b><small>${c.logo_url ? "Terminal 3" : esc(c.name || "Company name") + " · Terminal 3"}</small></span></div>
+    <div class="pv-body"><div class="pv-ring" aria-hidden="true"><svg viewBox="0 0 64 64" fill="none"><circle cx="32" cy="32" r="30" stroke="${esc(pri)}" stroke-opacity=".25" stroke-width="2"/><circle cx="32" cy="32" r="22" stroke="${esc(pri)}" stroke-opacity=".45" stroke-width="2"/><rect x="22" y="14" width="20" height="36" rx="3" fill="#fff" stroke="${esc(pri)}" stroke-width="2.5"/><circle cx="32" cy="28" r="4.5" fill="${esc(pri)}"/><rect x="26" y="37" width="12" height="2.5" rx="1.2" fill="#5b6573"/></svg></div>
       <div><h4>Tap your badge</h4><p>Then tap what you're taking or bringing back.</p>
         <div class="pv-steps">${["Badge", t.equipment, "Done"].map((w, i) => `<span><i style="background:${esc(pri)};color:${inkOn(pri)}">${i + 1}</i>${esc(w)}</span>`).join("")}</div></div></div></div>`;
 }
@@ -1403,7 +1401,7 @@ function vCustomer() {
           <label class="full">Company name<input class="field" name="name" required maxlength="80" value="${esc(c.name)}"></label>
           <label>Main color<span class="colorrow"><input type="color" data-pair="primary" value="${esc(c.primary)}" aria-label="Pick main color"><input class="field" name="primary" value="${esc(c.primary)}" maxlength="7"></span></label>
           <label>Accent color<span class="colorrow"><input type="color" data-pair="accent" value="${esc(c.accent)}" aria-label="Pick accent color"><input class="field" name="accent" value="${esc(c.accent)}" maxlength="7"></span></label>
-          <div class="full"><b style="font-size:13.5px">Logo</b><small style="display:block;color:var(--muted);font-size:12.5px;margin:2px 0 8px">Shows large on their stations' start screen. With none, stations show Sonoran Point's.</small>
+          <div class="full"><b style="font-size:13.5px">Logo</b><small style="display:block;color:var(--muted);font-size:12.5px;margin:2px 0 8px">Shows at the top of their stations' screens. With none, stations show Sonoran Point's.</small>
             <span class="logo-row"><span class="logo-prev">${c.logo_url ? `<img src="${esc(c.logo_url)}" alt="Their logo">` : `<img src="brand/logo.svg" alt="Sonoran Point logo"><small>No logo yet</small>`}</span>
               <span class="actions"><label class="btn sm ${S.logoBusy ? "disabled" : ""}">${S.logoBusy ? "Uploading…" : c.logo_url ? "Replace logo" : "Upload logo"}<input type="file" id="logoFile" accept="image/png,image/jpeg,image/svg+xml,image/webp" hidden ${S.logoBusy ? "disabled" : ""}></label>
               ${c.logo_url ? `<button type="button" class="btn sm danger" data-act="rmLogo">Remove</button>` : ""}</span></span>

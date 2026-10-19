@@ -79,8 +79,8 @@ const submit = async (sel) => { doc.querySelector(sel).dispatchEvent(new dom.win
   await type('[data-form="invite"] [name=email]', "second@cactusair.example"); await submit('[data-form="invite"]');
   check(/Invite for second@cactusair.example/.test(page()), "invite another owner");
   // brand
-  await type('[data-form="brand"] [name=accent]', "#FF0000");
-  check(/#FF0000/i.test(doc.querySelector('[data-form="brand"] .pv-logo').getAttribute("style")), "brand preview updates live");
+  await type('[data-form="brand"] [name=primary]', "#FF0000");
+  check(/#FF0000/i.test(doc.querySelector('[data-form="brand"] .pv-top').getAttribute("style")), "brand preview updates live");
   await type('[data-form="brand"] [name=accent]', "red"); await submit('[data-form="brand"]');
   check(/Colors must look like/.test(page()), "bad color refused");
   await type('[data-form="brand"] [name=accent]', "#cc3300"); await submit('[data-form="brand"]');
@@ -111,7 +111,7 @@ const submit = async (sel) => { doc.querySelector(sel).dispatchEvent(new dom.win
   check(doc.querySelector("#trialEnds").hidden, "no trial date box for a paying customer");
   const stSel = doc.querySelector('[data-form="account"] [name=status]'); stSel.value = "trial"; stSel.dispatchEvent(new dom.window.Event("change", { bubbles: true })); await sleep(10);
   check(!doc.querySelector("#trialEnds").hidden, "it appears when you switch them to trial");
-  check(doc.querySelector("#logoFile") && doc.querySelector(".pv-card img")?.getAttribute("src") === "brand/logo.svg", "logo upload on the customer page; preview shows our logo until they have one");
+  check(doc.querySelector("#logoFile") && doc.querySelector(".pv-logo img")?.getAttribute("src") === "brand/logo.svg", "logo upload on the customer page; preview shows our logo until they have one");
   // team
   await go("team");
   check(/Jordan Ellis/.test(page()) && /\(you\)/.test(page()) && /Invited as Operator/.test(page()) && /Invite someone/.test(page()), "team page (demo)");

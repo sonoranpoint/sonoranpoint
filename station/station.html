@@ -81,8 +81,12 @@ html.kiosk .screen { border-radius: 0; }
 .screen { aspect-ratio: 5 / 3; max-width: 100%; width: 100%; background: var(--screen); color: var(--screen-ink); border-radius: 6px; overflow: hidden; position: relative; container-type: inline-size; display: flex; flex-direction: column; font-size: 2.3cqw; user-select: none; }
 
 .topbar { background: var(--brand); color: var(--brand-ink); display: flex; align-items: center; gap: 1.6cqw; padding: 1.3cqw 2cqw; min-height: 9cqw; }
-.logo { width: 6.2cqw; height: 6.2cqw; border-radius: 1.2cqw; background: var(--brand-accent); color: #1a1a1a; display: grid; place-items: center; font-family: var(--display); font-weight: 700; font-size: 3cqw; flex: none; overflow: hidden; touch-action: none; }
-.logo img { width: 100%; height: 100%; object-fit: contain; background: #fff; }
+.logo { width: 6.2cqw; height: 6.2cqw; border-radius: 1.2cqw; background: #fff; color: #1a1a1a; display: grid; place-items: center; font-family: var(--display); font-weight: 700; font-size: 3cqw; flex: none; overflow: hidden; touch-action: none; padding: .4cqw; }
+.logo img { width: 100%; height: 100%; object-fit: contain; }
+/* Top bar: the company's logo (Sonoran Point's when they have none) on a white plate, sized to the logo's own shape. */
+.toplogo { height: 6.8cqw; max-width: 30cqw; min-width: 6.8cqw; border-radius: 1.2cqw; background: #fff; padding: .7cqw 1.1cqw; display: flex; align-items: center; justify-content: center; flex: none; overflow: hidden; touch-action: none;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, .25), 0 .4cqw 1cqw -.4cqw rgba(0, 0, 0, .35); }
+.toplogo img { height: 100%; width: auto; max-width: 100%; object-fit: contain; display: block; }
 .org { min-width: 0; flex: 1; }
 .org-name { font-family: var(--display); font-weight: 700; font-size: 2.9cqw; line-height: 1.1; letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .org-sub { font-size: 1.7cqw; opacity: .85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -96,10 +100,6 @@ html.kiosk .screen { border-radius: 0; }
 
 /* idle */
 .idle { flex: 1; display: grid; grid-template-columns: 1fr 1.1fr; align-items: center; gap: 4.5cqw; padding: 3cqw 5cqw; }
-/* The company's logo, large; Sonoran Point's when they haven't given one. */
-.hero-logo { justify-self: stretch; align-self: center; aspect-ratio: 1.15; background: #fff; border-radius: 2.4cqw; display: grid; place-items: center; padding: 3.4cqw;
-  box-shadow: 0 .3cqw .8cqw rgba(12, 27, 51, .06), 0 1.6cqw 4cqw -1.6cqw rgba(12, 27, 51, .22); border: 1px solid var(--screen-line); }
-.hero-logo img { max-width: 100%; max-height: 100%; width: 100%; height: 100%; object-fit: contain; }
 .ready { display: inline-flex; align-items: center; gap: 1cqw; margin-top: 2.6cqw; font-size: 1.9cqw; font-weight: 700; color: var(--ok); }
 .ready i { width: 1.4cqw; height: 1.4cqw; border-radius: 50%; background: var(--ok); position: relative; }
 .ready i::after { content: ""; position: absolute; inset: 0; border-radius: 50%; background: var(--ok); animation: readyPulse 1.8s ease-out infinite; }
@@ -542,7 +542,7 @@ select, .field { background: var(--chip); border: 1px solid var(--line); border-
 "use strict";
 const VERSION = "station-0.1.0";
 /* Shown on the setup screens. Replace with your real support details before shipping. */
-const SUPPORT = { name: "Station support", email: "support@sonoranpoint.com", phone: "(555) 010-0100", web: "sonoranpoint.com/help" };
+const SUPPORT = { name: "Station support", email: "support@sonoranpoint.com" };
 
 /* ================= Utilities ================= */
 const $ = (s) => document.querySelector(s);
@@ -1037,9 +1037,9 @@ function renderTop() {
   const date = new Intl.DateTimeFormat("en-US", { timeZone: tz(), weekday: "short", month: "short", day: "numeric" }).format(new Date(now));
   const q = S.saved.queue.length;
   el.innerHTML = `
-    <div class="logo" id="logo" title="Hold for station menu">${o?.logo_url ? `<img src="${esc(o.logo_url)}" alt="">` : esc(initials(o?.name || "Equipment Station"))}</div>
-    <div class="org"><div class="org-name">${esc(o?.name || "Equipment Station")}</div>
-      <div class="org-sub">${cfg ? esc(cfg.station.name) + (cfg.station.location ? " · " + esc(cfg.station.location) : "") : "Not set up yet"}</div></div>
+    <div class="toplogo" id="logo" title="Hold for station menu">${logoImg(o)}</div>
+    <div class="org"><div class="org-name">${cfg ? esc(cfg.station.name) : "Equipment Station"}</div>
+      <div class="org-sub">${cfg ? [o?.logo_url ? "" : o?.name, cfg.station.location].filter(Boolean).map(esc).join(" · ") || esc(o?.name || "") : "Not set up yet"}</div></div>
     ${cfg ? `<div class="net ${S.online ? "" : "off"}">${S.online ? "Online" : "Offline" + (q ? ` · ${q} saved` : "")}</div>` : ""}
     <div class="clock"><b>${esc(time)}</b><span>${esc(date)}</span></div>`;
   bindLongPress($("#logo"));
@@ -1082,13 +1082,12 @@ function renderMain() {
       <div class="rings" aria-hidden="true" style="opacity:.35">${BADGE_SVG}</div>
       <div><h2>This station is paused</h2>
         <p>${esc(S.saved.config?.organization?.name || "This company")}'s account is paused, so checkouts and returns aren't being recorded right now. Ask your manager.</p>
-        <p class="sup" style="font-size:1.8cqw;margin-top:1.4cqw">It starts working again on its own when the account is back on. ${esc(SUPPORT.name)}: ${esc(SUPPORT.phone)} · ${esc(SUPPORT.email)}</p></div>
+        <p class="sup" style="font-size:1.8cqw;margin-top:1.4cqw">It starts working again on its own when the account is back on. ${esc(SUPPORT.name)}: ${esc(SUPPORT.email)}</p></div>
     </div>`; return;
   }
-  const org = S.saved.config?.organization;
   el.innerHTML = `
     <div class="idle">
-      <div class="hero-logo">${heroLogo(org)}</div>
+      <div class="rings" aria-hidden="true"><span></span><span></span><span></span>${BADGE_SVG}</div>
       <div><h2>Tap your badge</h2>
         <p>Then tap what you're taking or bringing back. Tap ${esc(term().equipment.toLowerCase())} on its own to see who has it.</p>
         <div class="steps"><span><b>1</b>Badge</span><span><b>2</b>${esc(term().equipment)}</span><span><b>3</b>Done</span></div>
@@ -1097,7 +1096,7 @@ function renderMain() {
 }
 // The company's logo; Sonoran Point's when they have none (or it won't load).
 const SP_LOGO = "brand/logo.svg";
-function heroLogo(o) {
+function logoImg(o) {
   const sp = `<img src="${SP_LOGO}" alt="Sonoran Point">`;
   if (!o?.logo_url) return sp;
   return `<img src="${esc(o.logo_url)}" alt="${esc(o.name || "")}" onerror="this.onerror=null;this.src='${SP_LOGO}';this.alt='Sonoran Point'">`;
@@ -1217,7 +1216,7 @@ function renderSetup(el) {
         <div class="err" role="alert">${esc(W.err)}</div>
         ${W.act?.has_admin_fob ? `<button class="sbtn" data-w="skipAdmin">Skip, we already have an admin fob</button>` : ""}</div>
       <div style="display:flex;flex-direction:column;align-items:center;gap:1.4cqw">
-        <div class="brandcard" style="margin:0;align-self:stretch"><div class="logo">${o.logo_url ? `<img src="${esc(o.logo_url)}" alt="">` : esc(initials(o.name))}</div>
+        <div class="brandcard" style="margin:0;align-self:stretch"><div class="logo">${logoImg(o)}</div>
           <div><b>${esc(o.name)}</b><span>${esc(S.saved.config.station.name)} is activated</span></div></div>
         <div class="rings" aria-hidden="true" style="max-width:17cqw"><span></span><span></span><span></span>${BADGE_SVG}</div></div></div>`;
   } else if (W.step === "adminDetails") body = wizFormHtml();
@@ -1332,7 +1331,7 @@ async function activate() {
   try {
     const r = await call("activate_station", { p_activation_code: code, p_software_version: VERSION });
     if (!r.ok) W.err = r.error === "invalid_or_expired_code" ? "That code didn't work. Check it, or ask for a new one. Codes expire after 7 days."
-      : r.error === "account_paused" ? `This company's account is paused. Contact ${SUPPORT.name}: ${SUPPORT.phone}.`
+      : r.error === "account_paused" ? `This company's account is paused. Contact ${SUPPORT.name}: ${SUPPORT.email}.`
       : r.error === "bad_response" || /^\d+$/.test(String(r.error)) ? `${S.saved.url} isn't answering like a station server. Check the address, or use the hosted server.`
       : "Activation failed: " + r.error;
     else {
@@ -1537,7 +1536,7 @@ function overlayHtml() {
       done: ["Tap the admin fob, then Admin menu, any time you need to add people or equipment."],
     }[st] || [];
     return `<div class="overlay"><div class="sheet help"><h2>Need help?</h2><ul>${tips.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>
-      <p class="sup">Still stuck? ${esc(SUPPORT.name)}: ${esc(SUPPORT.phone)} · ${esc(SUPPORT.email)} · ${esc(SUPPORT.web)}</p>
+      <p class="sup">Still stuck? Email ${esc(SUPPORT.name.toLowerCase())}: ${esc(SUPPORT.email)}</p>
       <div class="row"><button class="sbtn primary" data-a="close">Got it</button></div></div></div>`;
   }
   if (S.overlay === "confirmUnpair") return `<div class="overlay"><div class="sheet">
