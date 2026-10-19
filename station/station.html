@@ -105,11 +105,6 @@ html.kiosk .screen { border-radius: 0; }
 
 /* idle */
 .idle { flex: 1; display: grid; grid-template-columns: 1fr 1.1fr; align-items: center; gap: 4.5cqw; padding: 3cqw 5cqw; }
-.ready { display: inline-flex; align-items: center; gap: 1cqw; margin-top: 2.6cqw; font-size: 1.9cqw; font-weight: 700; color: var(--ok); }
-.ready i { width: 1.4cqw; height: 1.4cqw; border-radius: 50%; background: var(--ok); position: relative; }
-.ready i::after { content: ""; position: absolute; inset: 0; border-radius: 50%; background: var(--ok); animation: readyPulse 1.8s ease-out infinite; }
-@keyframes readyPulse { 0% { transform: scale(1); opacity: .6; } 100% { transform: scale(2.6); opacity: 0; } }
-@media (prefers-reduced-motion: reduce) { .ready i::after { animation: none; } }
 .rings { position: relative; aspect-ratio: 1; width: 100%; max-width: 26cqw; justify-self: center; display: grid; place-items: center; }
 .rings span { position: absolute; inset: 0; border-radius: 50%; border: .5cqw solid var(--brand); opacity: 0; animation: ring 2.4s ease-out infinite; }
 .rings span:nth-child(2) { animation-delay: .8s; } .rings span:nth-child(3) { animation-delay: 1.6s; }
@@ -1096,8 +1091,7 @@ function renderMain() {
       <div class="rings" aria-hidden="true"><span></span><span></span><span></span>${BADGE_SVG}</div>
       <div><h2>Tap your badge</h2>
         <p>Then tap what you're taking or bringing back. Tap ${esc(term().equipment.toLowerCase())} on its own to see who has it.</p>
-        <div class="steps"><span><b>1</b>Badge</span><span><b>2</b>${esc(term().equipment)}</span><span><b>3</b>Done</span></div>
-        <div class="ready"><i></i>Ready</div></div>
+        <div class="steps"><span><b>1</b>Badge</span><span><b>2</b>${esc(term().equipment)}</span><span><b>3</b>Done</span></div></div>
     </div>`;
 }
 // The company's logo; Sonoran Point's when they have none (or it won't load).
@@ -1417,7 +1411,6 @@ async function saveAdmin() {
 function finishSetup() {
   S.saved.setupDone = true; S.saved.setupStep = null; persist();
   S.wiz = null; S.screen = "idle"; render();
-  toast("Station ready", `${S.saved.config.station.name} is connected to ${S.saved.config.organization.name}.`, "ok");
 }
 function unpair(msg) {
   Object.assign(S.saved, { deviceKey: null, config: null, cache: null, queue: [], lastSync: null, syncIssues: [] });
