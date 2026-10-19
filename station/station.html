@@ -80,13 +80,15 @@ html.kiosk .device { background: none; border: 0; padding: 0; box-shadow: none; 
 html.kiosk .screen { border-radius: 0; }
 .screen { aspect-ratio: 5 / 3; max-width: 100%; width: 100%; background: var(--screen); color: var(--screen-ink); border-radius: 6px; overflow: hidden; position: relative; container-type: inline-size; display: flex; flex-direction: column; font-size: 2.3cqw; user-select: none; }
 
-.topbar { background: var(--brand); color: var(--brand-ink); display: flex; align-items: center; gap: 1.6cqw; padding: 1.3cqw 2cqw; min-height: 9cqw; }
+.topbar { background: var(--brand); color: var(--brand-ink); display: flex; align-items: center; gap: 1.8cqw; padding: 1.4cqw 2.4cqw; min-height: 11.5cqw; }
+.topbar .grow { flex: 1; }
 .logo { width: 6.2cqw; height: 6.2cqw; border-radius: 1.2cqw; background: #fff; color: #1a1a1a; display: grid; place-items: center; font-family: var(--display); font-weight: 700; font-size: 3cqw; flex: none; overflow: hidden; touch-action: none; padding: .4cqw; }
 .logo img { width: 100%; height: 100%; object-fit: contain; }
-/* Top bar: the company's logo (Sonoran Point's when they have none) on a white plate, sized to the logo's own shape. */
-.toplogo { height: 6.8cqw; max-width: 30cqw; min-width: 6.8cqw; border-radius: 1.2cqw; background: #fff; padding: .7cqw 1.1cqw; display: flex; align-items: center; justify-content: center; flex: none; overflow: hidden; touch-action: none;
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, .25), 0 .4cqw 1cqw -.4cqw rgba(0, 0, 0, .35); }
-.toplogo img { height: 100%; width: auto; max-width: 100%; object-fit: contain; display: block; }
+/* Top bar: the company's logo straight on their color, large. No logo: our icon with their name. */
+.toplogo { height: 8.6cqw; max-width: 46cqw; display: flex; align-items: center; gap: 1.6cqw; flex: none; touch-action: none; min-width: 0; }
+.toplogo > img { height: 100%; width: auto; max-width: 100%; object-fit: contain; object-position: left center; display: block; }
+.toplogo.sp > img { height: 7.4cqw; width: 7.4cqw; border-radius: 1.6cqw; }
+.toplogo.sp b { font-family: var(--display); font-weight: 800; font-size: 3.4cqw; line-height: 1.05; letter-spacing: -.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .org { min-width: 0; flex: 1; }
 .org-name { font-family: var(--display); font-weight: 700; font-size: 2.9cqw; line-height: 1.1; letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .org-sub { font-size: 1.7cqw; opacity: .85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -321,6 +323,7 @@ html.kiosk .screen { border-radius: 0; }
 .toast.bad { background: var(--bad); color: #fff; } .toast.warn { background: #3a2a07; color: #fff4dc; } .toast.ok { background: var(--ok); color: #fff; }
 .statusbar { display: flex; justify-content: space-between; gap: 2cqw; font-size: 1.5cqw; color: var(--screen-muted); padding: .7cqw 2cqw; border-top: 1px solid var(--screen-line); background: var(--screen); }
 .statusbar .q { color: var(--warn); font-weight: 700; }
+.statusbar .where { font-size: 1.8cqw; color: var(--screen-ink); } .statusbar .where b { font-weight: 700; }
 .overlay { position: absolute; inset: 0; background: rgba(12,16,22,.55); display: grid; place-items: center; z-index: 5; }
 .sheet { background: var(--screen-card); color: var(--screen-ink); width: 70%; border-radius: 1.6cqw; padding: 2.6cqw; display: flex; flex-direction: column; gap: 1.4cqw; }
 .sheet h2 { margin: 0; font-family: var(--display); font-size: 4cqw; line-height: 1; }
@@ -1037,9 +1040,7 @@ function renderTop() {
   const date = new Intl.DateTimeFormat("en-US", { timeZone: tz(), weekday: "short", month: "short", day: "numeric" }).format(new Date(now));
   const q = S.saved.queue.length;
   el.innerHTML = `
-    <div class="toplogo" id="logo" title="Hold for station menu">${logoImg(o)}</div>
-    <div class="org"><div class="org-name">${cfg ? esc(cfg.station.name) : "Equipment Station"}</div>
-      <div class="org-sub">${cfg ? [o?.logo_url ? "" : o?.name, cfg.station.location].filter(Boolean).map(esc).join(" · ") || esc(o?.name || "") : "Not set up yet"}</div></div>
+    ${topLogo(o)}<span class="grow"></span>
     ${cfg ? `<div class="net ${S.online ? "" : "off"}">${S.online ? "Online" : "Offline" + (q ? ` · ${q} saved` : "")}</div>` : ""}
     <div class="clock"><b>${esc(time)}</b><span>${esc(date)}</span></div>`;
   bindLongPress($("#logo"));
@@ -1048,8 +1049,8 @@ function renderStatus() {
   const el = $("#status"); if (!el) return;
   const q = S.saved.queue.length;
   if (S.reader === false) { el.innerHTML = `<span><span class="q">NFC reader not responding. Check its cable inside the case, or restart the station.</span></span><span>${VERSION}</span>`; return; }
-  el.innerHTML = `<span>${q ? `<span class="q">${q} tap${q > 1 ? "s" : ""} saved on this station, will sync when the connection is back</span>` :
-    S.saved.lastSync ? "Everything synced · " + esc(fmtTime(S.saved.lastSync)) : ""}</span><span>${VERSION}</span>`;
+  const st = S.saved.config?.station;
+  el.innerHTML = `<span class="where">${st ? `<b>${esc(st.name)}</b>${st.location ? " · " + esc(st.location) : ""}` : "Not set up yet"}</span><span>${VERSION}</span>`;
 }
 /* Step each list down through its sizes until it fits; only scroll (by finger) if the tightest size still doesn't. */
 function fitLists() {
@@ -1096,6 +1097,11 @@ function renderMain() {
 }
 // The company's logo; Sonoran Point's when they have none (or it won't load).
 const SP_LOGO = "brand/logo.svg";
+function topLogo(o) {
+  const sp = `<div class="toplogo sp" id="logo" title="Hold for station menu"><img src="brand/mark-180.png" alt=""><b>${esc(o?.name || "Equipment Station")}</b></div>`;
+  if (!o?.logo_url) return sp;
+  return `<div class="toplogo" id="logo" title="Hold for station menu"><img src="${esc(o.logo_url)}" alt="${esc(o.name || "")}" onerror="this.onerror=null;this.parentNode.classList.add('sp');this.src='brand/mark-180.png';this.insertAdjacentHTML('afterend','<b>${esc(esc(o.name || ""))}</b>')"></div>`;
+}
 function logoImg(o) {
   const sp = `<img src="${SP_LOGO}" alt="Sonoran Point">`;
   if (!o?.logo_url) return sp;

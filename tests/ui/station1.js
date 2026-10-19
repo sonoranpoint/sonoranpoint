@@ -17,9 +17,9 @@ const ALEX = "04BA00000001", JORDAN = "04BA00000002", SAM = "04BA00000003";
   E("demoDevice.skip(); wizStart(); S.wiz.code='DEMO0001'"); await E("activate()"); await sleep(300); E("finishSetup()"); await sleep(100);
   E(`document.querySelector('#timeSel').value='09:00'; document.querySelector('#timeSel').dispatchEvent(new Event('change'))`);
   check(E("S.screen") === "idle", "station activated");
-  check(dom.window.document.querySelector("#logo img")?.getAttribute("src") === "brand/logo.svg" && /Demo Air Services/.test(dom.window.document.querySelector(".org-sub").textContent), "no company logo -> Sonoran Point's logo at the top, company name beside it");
+  { const d = dom.window.document; check(d.querySelector("#logo.sp img")?.getAttribute("src") === "brand/mark-180.png" && /Demo Air Services/.test(d.querySelector("#logo").textContent) && /Equipment Room 01/.test(d.querySelector("#status").textContent) && !/synced/i.test(d.querySelector("#status").textContent), "no company logo -> our icon + their name at the top; station name at the bottom, no sync line"); }
   E("S.saved.config.organization.logo_url = 'https://example.test/acme.png'; render()"); await sleep(20);
-  check(dom.window.document.querySelector("#logo img")?.getAttribute("src") === "https://example.test/acme.png" && /brand\/logo\.svg/.test(dom.window.document.querySelector("#logo img").getAttribute("onerror")), "company logo at the top, falls back to ours if it won't load");
+  { const d = dom.window.document; check(d.querySelector("#logo:not(.sp) img")?.getAttribute("src") === "https://example.test/acme.png" && !/Demo Air Services/.test(d.querySelector("#logo").textContent) && /mark-180/.test(d.querySelector("#logo img").getAttribute("onerror")), "company logo alone at the top (no name), falls back to ours if it won't load"); }
   E("S.saved.config.organization.logo_url = null; render()");
 
   await tap("04DE000501");

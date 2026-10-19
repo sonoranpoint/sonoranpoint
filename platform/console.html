@@ -169,8 +169,12 @@ button.row:hover { background: var(--surface-2); }
 /* Station look preview (what their station will show) */
 .pv { border-radius: 14px; overflow: hidden; border: 1px solid var(--line); background: #f7f8fa; color: #121820; font-size: 13px; aspect-ratio: 5 / 3; display: flex; flex-direction: column; container-type: inline-size; }
 .pv-top { display: flex; align-items: center; gap: 2cqw; padding: 2cqw 2.6cqw; }
-.pv-logo { height: 8cqw; max-width: 34cqw; min-width: 8cqw; border-radius: 1.6cqw; background: #fff; padding: .8cqw 1.2cqw; display: flex; align-items: center; justify-content: center; overflow: hidden; flex: none; }
-.pv-logo img { height: 100%; width: auto; max-width: 100%; object-fit: contain; display: block; }
+.pv-top { min-height: 14cqw; }
+.pv-logo { height: 10cqw; max-width: 56cqw; display: flex; align-items: center; gap: 2cqw; flex: none; min-width: 0; }
+.pv-logo > img { height: 100%; width: auto; max-width: 100%; object-fit: contain; object-position: left center; display: block; }
+.pv-logo.sp > img { height: 8.6cqw; width: 8.6cqw; border-radius: 1.8cqw; }
+.pv-logo.sp b { font-family: var(--head); font-weight: 800; font-size: 4cqw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pv-foot { border-top: 1px solid #dde2e8; padding: 1.2cqw 2.6cqw; font-size: 2.2cqw; color: #121820; }
 .pv-ring { display: grid; place-items: center; } .pv-ring svg { width: 70%; height: auto; }
 .pv-top b { font-family: var(--head); font-weight: 700; font-size: 3.6cqw; line-height: 1.1; display: block; }
 .pv-top small { opacity: .85; font-size: 2.2cqw; }
@@ -181,8 +185,9 @@ button.row:hover { background: var(--surface-2); }
 .pv-steps span { background: #fff; border: 1px solid #dde2e8; border-radius: 99px; padding: .6cqw 1.6cqw .6cqw .6cqw; font-weight: 700; font-size: 2.1cqw; display: inline-flex; align-items: center; gap: 1cqw; }
 .pv-steps i { font-style: normal; width: 3.2cqw; height: 3.2cqw; border-radius: 50%; display: grid; place-items: center; font-size: 1.8cqw; }
 .logo-row { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; }
-.logo-prev { width: 150px; height: 84px; border: 1px solid var(--line); border-radius: 12px; background: #fff; display: grid; place-items: center; padding: 8px; position: relative; overflow: hidden; }
+.logo-prev { width: 200px; height: 84px; border: 1px solid var(--line); border-radius: 12px; background: #1f4e79; display: grid; place-items: center; padding: 8px; position: relative; overflow: hidden; }
 .logo-prev img { position: absolute; inset: 8px; width: calc(100% - 16px); height: calc(100% - 16px); object-fit: contain; }
+.logo-prev img.sp { inset: 16px; width: calc(100% - 32px); height: calc(100% - 32px); }
 .logo-prev small { position: absolute; inset: auto 0 0 0; background: rgba(255, 255, 255, .92); color: #5a6a84; font-size: 11px; text-align: center; padding: 2px 4px; }
 label.btn { cursor: pointer; } label.btn.disabled { opacity: .55; cursor: default; }
 
@@ -1313,13 +1318,13 @@ function vPreview() {
 function stationPreview(c, terms) {
   const t = { ...DEFAULT_TERMS, ...terms };
   const pri = hex(c.primary) ? c.primary : "#1F4E79";
-  const logo = c.logo_url ? `<img src="${esc(c.logo_url)}" alt="" onerror="this.onerror=null;this.src='brand/logo.svg'">` : `<img src="brand/logo.svg" alt="">`;
+  const logo = c.logo_url ? `<span class="pv-logo"><img src="${esc(c.logo_url)}" alt=""></span>` : `<span class="pv-logo sp"><img src="brand/mark-180.png" alt=""><b>${esc(c.name || "Company name")}</b></span>`;
   return `<div class="pv" aria-label="Preview of their station's start screen">
-    <div class="pv-top" style="background:${esc(pri)};color:${inkOn(pri)}"><span class="pv-logo">${logo}</span>
-      <span><b>Equipment Room 01</b><small>${c.logo_url ? "Terminal 3" : esc(c.name || "Company name") + " · Terminal 3"}</small></span></div>
+    <div class="pv-top" style="background:${esc(pri)};color:${inkOn(pri)}">${logo}</div>
     <div class="pv-body"><div class="pv-ring" aria-hidden="true"><svg viewBox="0 0 64 64" fill="none"><circle cx="32" cy="32" r="30" stroke="${esc(pri)}" stroke-opacity=".25" stroke-width="2"/><circle cx="32" cy="32" r="22" stroke="${esc(pri)}" stroke-opacity=".45" stroke-width="2"/><rect x="22" y="14" width="20" height="36" rx="3" fill="#fff" stroke="${esc(pri)}" stroke-width="2.5"/><circle cx="32" cy="28" r="4.5" fill="${esc(pri)}"/><rect x="26" y="37" width="12" height="2.5" rx="1.2" fill="#5b6573"/></svg></div>
       <div><h4>Tap your badge</h4><p>Then tap what you're taking or bringing back.</p>
-        <div class="pv-steps">${["Badge", t.equipment, "Done"].map((w, i) => `<span><i style="background:${esc(pri)};color:${inkOn(pri)}">${i + 1}</i>${esc(w)}</span>`).join("")}</div></div></div></div>`;
+        <div class="pv-steps">${["Badge", t.equipment, "Done"].map((w, i) => `<span><i style="background:${esc(pri)};color:${inkOn(pri)}">${i + 1}</i>${esc(w)}</span>`).join("")}</div></div></div>
+    <div class="pv-foot"><b>Equipment Room 01</b> · Terminal 3</div></div>`;
 }
 
 function vCustomer() {
@@ -1401,8 +1406,8 @@ function vCustomer() {
           <label class="full">Company name<input class="field" name="name" required maxlength="80" value="${esc(c.name)}"></label>
           <label>Main color<span class="colorrow"><input type="color" data-pair="primary" value="${esc(c.primary)}" aria-label="Pick main color"><input class="field" name="primary" value="${esc(c.primary)}" maxlength="7"></span></label>
           <label>Accent color<span class="colorrow"><input type="color" data-pair="accent" value="${esc(c.accent)}" aria-label="Pick accent color"><input class="field" name="accent" value="${esc(c.accent)}" maxlength="7"></span></label>
-          <div class="full"><b style="font-size:13.5px">Logo</b><small style="display:block;color:var(--muted);font-size:12.5px;margin:2px 0 8px">Shows at the top of their stations' screens. With none, stations show Sonoran Point's.</small>
-            <span class="logo-row"><span class="logo-prev">${c.logo_url ? `<img src="${esc(c.logo_url)}" alt="Their logo">` : `<img src="brand/logo.svg" alt="Sonoran Point logo"><small>No logo yet</small>`}</span>
+          <div class="full"><b style="font-size:13.5px">Logo</b><small style="display:block;color:var(--muted);font-size:12.5px;margin:2px 0 8px">Shows large at the top of their stations, over their main color, so a white version reads best on a dark color. With none, stations show our icon and their name.</small>
+            <span class="logo-row"><span class="logo-prev" style="background:${esc(hex(c.primary) ? c.primary : "#1F4E79")}">${c.logo_url ? `<img src="${esc(c.logo_url)}" alt="Their logo">` : `<img src="brand/mark-180.png" alt="Sonoran Point" class="sp"><small>No logo yet</small>`}</span>
               <span class="actions"><label class="btn sm ${S.logoBusy ? "disabled" : ""}">${S.logoBusy ? "Uploading…" : c.logo_url ? "Replace logo" : "Upload logo"}<input type="file" id="logoFile" accept="image/png,image/jpeg,image/svg+xml,image/webp" hidden ${S.logoBusy ? "disabled" : ""}></label>
               ${c.logo_url ? `<button type="button" class="btn sm danger" data-act="rmLogo">Remove</button>` : ""}</span></span>
             <input type="hidden" name="logo_url" value="${esc(c.logo_url || "")}"></div>

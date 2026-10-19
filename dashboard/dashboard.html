@@ -201,8 +201,9 @@ button.row:hover { background: var(--surface-2); }
 .switch input:checked + span { background: var(--ok); } .switch input:checked + span::after { transform: translateX(18px); }
 .switch input:focus-visible + span { outline: 3px solid var(--focus); outline-offset: 2px; }
 .logo-row { display: flex; flex-wrap: wrap; gap: 12px 16px; align-items: center; }
-.logo-prev { width: 168px; height: 96px; border: 1px solid var(--line); border-radius: 12px; background: #fff; display: grid; place-items: center; padding: 10px; position: relative; overflow: hidden; }
+.logo-prev { width: 220px; height: 96px; border: 1px solid var(--line); border-radius: 12px; background: #1f4e79; display: grid; place-items: center; padding: 10px; position: relative; overflow: hidden; }
 .logo-prev img { position: absolute; inset: 8px; width: calc(100% - 16px); height: calc(100% - 16px); object-fit: contain; }
+.logo-prev img.sp { inset: 18px; width: calc(100% - 36px); height: calc(100% - 36px); }
 .logo-prev small { position: absolute; inset: auto 0 0 0; background: rgba(255, 255, 255, .92); color: #5a6a84; font-size: 11px; text-align: center; padding: 3px 4px; }
 label.btn { cursor: pointer; } label.btn.disabled { opacity: .55; cursor: default; }
 .swatch { width: 28px; height: 28px; border-radius: 8px; border: 1px solid var(--line); display: inline-block; vertical-align: middle; }
@@ -1215,8 +1216,8 @@ function vSettings() {
   return head("Settings", "Changes reach every station within a minute.") + (ro ? `<div class="readonly-note">You have ${esc(ROLE_NAME[DB.me.role])} access. Ask an admin to change settings.</div>` : "") + `<fieldset ${ro ? "disabled" : ""} style="border:0;padding:0;margin:0;display:flex;flex-direction:column;gap:22px;min-width:0">
     <section class="panel"><div class="panel-h"><h2>Company</h2></div><form class="panel-b form-grid" data-form="company">
       <label for="sName">Company name</label><input class="field" id="sName" name="name" value="${esc(o.name)}" maxlength="80">
-      <label>Logo<small>Shows at the top of your stations' screens. PNG, JPG or SVG.</small></label>
-      <span class="logo-row"><span class="logo-prev">${o.logo_url ? `<img src="${esc(o.logo_url)}" alt="Your logo">` : `<img src="brand/logo.svg" alt="Sonoran Point logo"><small>No logo yet. Stations show ours.</small>`}</span>
+      <label>Logo<small>Shows large at the top of your stations, over your main color. A white version reads best on a dark color. PNG, JPG or SVG.</small></label>
+      <span class="logo-row"><span class="logo-prev" style="background:${esc(o.primary)}">${o.logo_url ? `<img src="${esc(o.logo_url)}" alt="Your logo">` : `<img src="brand/mark-180.png" alt="Sonoran Point" class="sp"><small>No logo yet. Stations show ours.</small>`}</span>
         <span class="actions"><label class="btn sm ${S.logoBusy ? "disabled" : ""}">${S.logoBusy ? "Uploading…" : o.logo_url ? "Replace logo" : "Upload logo"}<input type="file" id="logoFile" accept="image/png,image/jpeg,image/svg+xml,image/webp" hidden ${S.logoBusy ? "disabled" : ""}></label>
         ${o.logo_url ? `<button type="button" class="btn sm danger" data-act="rmLogo">Remove</button>` : ""}</span></span>
       <label for="sPrimary">Main color<small>Station top bar and buttons</small></label><span><input type="color" id="sPrimary" name="primary" value="${esc(o.primary)}"> <span class="mono">${esc(o.primary)}</span></span>
