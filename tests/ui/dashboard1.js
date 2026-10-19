@@ -95,7 +95,7 @@ const go = async (r) => { dom.window.location.hash = r; await sleep(30); };
   check([...doc.querySelectorAll("tbody tr")].every((tr) => /Returned for/.test(tr.textContent)) && doc.querySelectorAll("tbody tr").length > 0, "activity filter: returned for someone");
   // logo in Settings
   await go("settings");
-  check(doc.querySelector("#logoFile") && /No logo yet\. Stations show ours/.test(doc.querySelector(".logo-row").textContent), "settings offers a logo upload, Sonoran Point's shown until then");
+  check(doc.querySelector("#logoFile") && /No logo yet: stations show your name/.test(doc.querySelector(".logo-row").textContent), "settings offers a logo upload, their name shown until then");
   const lf = doc.querySelector("#logoFile"); Object.defineProperty(lf, "files", { value: [new dom.window.File(["hi"], "notes.txt", { type: "text/plain" })] });
   lf.dispatchEvent(new dom.window.Event("change", { bubbles: true })); await sleep(50);
   check(/Pick a PNG, JPG, SVG or WebP image/.test(doc.querySelector("#layer").textContent) && !E("DB.org.logo_url"), "a non-image file is refused");

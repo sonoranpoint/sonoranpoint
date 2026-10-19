@@ -111,7 +111,7 @@ const submit = async (sel) => { doc.querySelector(sel).dispatchEvent(new dom.win
   check(doc.querySelector("#trialEnds").hidden, "no trial date box for a paying customer");
   const stSel = doc.querySelector('[data-form="account"] [name=status]'); stSel.value = "trial"; stSel.dispatchEvent(new dom.window.Event("change", { bubbles: true })); await sleep(10);
   check(!doc.querySelector("#trialEnds").hidden, "it appears when you switch them to trial");
-  check(doc.querySelector("#logoFile") && doc.querySelector(".pv-logo img")?.getAttribute("src") === "brand/mark-180.png", "logo upload on the customer page; preview shows our logo until they have one");
+  check(doc.querySelector("#logoFile") && !doc.querySelector(".pv-logo img") && /Copper State Cargo|Demo Air Services/.test(doc.querySelector(".pv-logo").textContent), "logo upload on the customer page; preview shows their name until they have a logo");
   // team
   await go("team");
   check(/Jordan Ellis/.test(page()) && /\(you\)/.test(page()) && /Invited as Operator/.test(page()) && /Invite someone/.test(page()), "team page (demo)");
