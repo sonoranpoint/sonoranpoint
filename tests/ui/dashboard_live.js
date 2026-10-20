@@ -197,6 +197,10 @@ const ORG = "00000000-0000-0000-0000-00000000d3e0";
     const cb = P.doc.querySelector(`input[data-email="${me}"][value="overdue"]`); cb.checked = true; cb.dispatchEvent(new P.dom.window.Event("change", { bubbles: true }));
     check(await P.until(() => one(`select array_to_string(kinds, ',') from notification_prefs where user_id='${me}' and org_id='${ORG}'`) === "problem,overdue"), "turning on overdue emails is saved");
     await P.settled(); }
+  { const eid = one(`select id from equipment where org_id='${ORG}' and name='Radio 02'`);
+    P.dom.window.location.hash = `equipment?open=equipment:${eid}&org=${ORG}`;
+    check(await P.until(() => P.E("S.drawer && S.drawer.id") === eid && /Radio 02/.test(P.doc.querySelector(".drawer")?.textContent || "")), "a link from an alert email opens the item");
+    P.click('[data-act="close"]'); }
   // a failed save is reported and the screen goes back to the database's version
   one(`update equipment set nfc_uid = '04DEADBEEF01' where name = 'Radio 09'`);
   P.go("equipment"); await P.E("live.reload()"); await P.until(() => /Radio/.test(P.text()));

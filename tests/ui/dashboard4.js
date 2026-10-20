@@ -70,6 +70,18 @@ const change = async (el, v) => { if (typeof v === "boolean") el.checked = v; el
   check(doc.querySelectorAll("tr[data-email-row]").length === 1 && doc.querySelector('tr[data-email-row="u1"]'), "a supervisor only sees (and sets) their own");
   check(!E("api.setEmailPrefs('u2', []).ok"), "and can't change someone else's");
   E("DB.me.role = 'owner'; render()");
+
+  // Links from alert emails open the exact thing
+  const bat5 = E("DB.equipment.find(q => q.name === 'Battery 05').id");
+  dom.window.location.hash = `equipment?open=equipment:${bat5}&org=x`; await sleep(60);
+  check(E("S.route") === "equipment" && E("S.drawer && S.drawer.id") === bat5 && dom.window.location.hash === "#equipment", "an email link opens that item (and tidies the address)");
+  E("S.drawer = null; render()");
+  const rep = E("api.shiftReports().find(r => !r.inProgress).key");
+  dom.window.location.hash = `shifts?open=report:${rep}`; await sleep(60);
+  check(E("S.route") === "shifts" && E("S.drawer && S.drawer.kind") === "report", "a shift report email link opens the report");
+  E("S.drawer = null; render()");
+  dom.window.location.hash = "equipment?open=equipment:gone"; await sleep(60);
+  check(!E("S.drawer") && /isn't in your equipment anymore/.test(doc.body.textContent), "a link to something deleted says so");
   check(errors.length === 0, "no script errors " + errors.join(";"));
   process.exit();
 })();

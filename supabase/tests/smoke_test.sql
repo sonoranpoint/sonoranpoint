@@ -909,6 +909,23 @@ select pg_temp.ok((select count(*) from private.email_batches where to_email = '
                   'waiting alerts are grouped into one email per person');
 select pg_temp.ok((select html like '%Cracked screen%' and html like '%https://app.sonoranpoint.com/#equipment%' and body_text like '%Settings, Email alerts%'
                    from private.email_batches where to_email = 'owner-a@example.com'), 'the email has the details, a link and how to change settings');
+select pg_temp.ok((select link from private.email_queue where kind = 'problem' order by id limit 1)
+                   = '#equipment?open=equipment:' || (select id from equipment where nfc_uid = '04DE000402') || '&org=00000000-0000-0000-0000-00000000d3e0',
+                  'the link opens that item, in the right company');
+select pg_temp.ok((select html like '%/brand/logo.png%' and html like '%Open the item%' and html like '%Problem reported%' and html ~ '(Mon|Tue|Wed|Thu|Fri|Sat|Sun), [A-Z][a-z]{2} [0-9]{1,2} at [0-9]{1,2}:[0-9]{2} (AM|PM)'
+                   from private.email_batches where to_email = 'viewer@example.com' and subject = 'PDA 02 is overdue') is not null,
+                  'one alert: says what kind, when it happened, and has a button to the item');
+select pg_temp.ok((select html like '%/brand/logo.png%' and html like '%Equipment overdue%' and html like '%Open the item%'
+                   from private.email_batches where to_email = 'viewer@example.com' and subject = 'PDA 02 is overdue'),
+                  'no company logo -> Sonoran Point''s logo on white');
+select pg_temp.ok((select html like '%See all alerts%' and html like '%#alerts?org=%' and html like '%4 things need a look%' and html like '%on the dashboard%'
+                   from private.email_batches where to_email = 'owner-a@example.com'), 'several alerts: one email, a button to all alerts, and where each came from');
+update organizations set logo_url = 'https://example.test/l.png' where id = '00000000-0000-0000-0000-00000000d3e0';
+select private.enqueue_email('00000000-0000-0000-0000-00000000d3e0', 'problem', 'Test item: Damaged', 'Reported.', '#equipment', now()) \g /dev/null
+select private.build_email_batches() \g /dev/null
+select pg_temp.ok((select html like '%background:#1F4E79%' and html like '%https://example.test/l.png%' from private.email_batches order by id desc limit 1),
+                  'with a logo: their logo on their main color');
+update organizations set logo_url = null where id = '00000000-0000-0000-0000-00000000d3e0';
 select pg_temp.ok((select count(*) from private.email_queue where batch_id is null) = 0 and private.build_email_batches() = 0, 'nothing is sent twice');
 delete from org_members where user_id = 'cccccccc-0000-0000-0000-000000000003';
 select pg_temp.ok(not exists (select 1 from notification_prefs where user_id = 'cccccccc-0000-0000-0000-000000000003'), 'removing someone removes their email settings');

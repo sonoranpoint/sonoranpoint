@@ -713,6 +713,9 @@ function buildDemo() {
     { id: "p3", eq: byName("Vacuum 02").id, reason_id: "r3", reason: "Missing part", blocks: false, notes: "No hose attachment", at: now - 2 * 86400000, by: "Sam Patel", place: "Bag Room",
       cleared_at: now - 30 * HOUR, cleared_by: "Dana Brooks", clear_notes: "Found it in the van" },
   ];
+  // Battery 05's report lands just before its latest checkout, so the demo always shows a flagged checkout.
+  { const lastOut = txns.filter((t) => t.eq === problems[0].eq && t.action === "checkout").reduce((m, t) => Math.max(m, t.at), 0);
+    if (lastOut) problems[0].at = lastOut - 40 * MIN; }
   // Checkouts of an item with an open problem are flagged (the station warns them to look it over).
   for (const p of problems) if (!p.cleared_at) txns.filter((t) => t.eq === p.eq && t.action === "checkout" && t.at > p.at).forEach((t) => t.flags.push("reported_problem"));
   const emailPrefs = { u1: ["problem"], u2: ["problem", "overdue"], u3: ["overdue", "shift_report"], u4: [] };
@@ -998,12 +1001,38 @@ const OUTCOME = { not_returned: ["bad", "Still out"], returned_late: ["warn", "R
    App state + routing
    ===================================================================== */
 const ROUTES = ["overview", "equipment", "employees", "activity", "alerts", "shifts", "stations", "settings", "team"];
+/* Links from alert emails open one thing: #equipment?open=equipment:<id>&org=<company>, #shifts?open=report:<id>, #alerts?org=…
+   Kept for an hour so it still works after signing in (a sign-in link can open in a new tab). */
+function parseHash(h = location.hash) { const [r, qs = ""] = h.slice(1).split("?"); const p = new URLSearchParams(qs);
+  return { route: ROUTES.includes(r) ? r : null, open: p.get("open"), org: p.get("org") }; }
+let DEEP = (() => {
+  const d = parseHash();
+  if (d.route && (d.open || d.org)) { try { localStorage.setItem("sp.deep", JSON.stringify({ ...d, at: Date.now() })); } catch {} return d; }
+  try { const x = JSON.parse(localStorage.getItem("sp.deep") || "null"); if (x && Date.now() - x.at < HOUR) return x; } catch {}
+  return null;
+})();
+function applyDeep() {
+  const d = DEEP;
+  // The link is for another of your companies: switch to it first (this runs again once it's loaded).
+  if (LIVE && d.org && d.org !== L.org && L.companies.some((c) => c.org_id === d.org)) { S.ready = false; openCompany(d.org); return true; }
+  DEEP = null; try { localStorage.removeItem("sp.deep"); } catch {}
+  if (d.route) S.route = d.route;
+  history.replaceState(null, "", location.pathname + location.search + "#" + S.route);
+  if (LIVE && d.org && d.org !== L.org) { setTimeout(() => toast("That alert is for a company you're not part of."), 0); return false; }
+  if (d.open) {
+    const [k, ...rest] = d.open.split(":"); const id = rest.join(":");
+    const found = { equipment: () => eqOf(id), report: () => api.shiftReports().some((r) => r.key === id) }[k];
+    if (found && found()) setTimeout(() => openDrawer(k, id), 0);
+    else if (found) setTimeout(() => toast(k === "equipment" ? "That item isn't in your equipment anymore." : "That shift report isn't available anymore."), 0);
+  }
+  return false;
+}
 const S = {
-  route: ROUTES.includes(location.hash.slice(1)) ? location.hash.slice(1) : "overview",
+  route: parseHash().route || DEEP?.route || "overview",
   drawer: null, confirm: null, toast: null,
   f: { eqSearch: "", eqCat: "", eqStatus: "all", empSearch: "", actSearch: "", actType: "all", actRange: "7d", alertTab: "open", newStation: null },
 };
-window.addEventListener("hashchange", () => { const r = location.hash.slice(1); if (ROUTES.includes(r)) { S.route = r; S.drawer = null; S.navOpen = false; S.pop = null; render(); window.scrollTo(0, 0); } });
+window.addEventListener("hashchange", () => { const d = parseHash(); const r = d.route; if (d.open || d.org) DEEP = d; if (r) { S.route = r; S.drawer = null; S.navOpen = false; S.pop = null; render(); window.scrollTo(0, 0); } });
 let toastT;
 function toast(text) { S.toast = text; renderLayer(); clearTimeout(toastT); toastT = setTimeout(() => { S.toast = null; renderLayer(); }, 2600); }
 
@@ -1039,6 +1068,7 @@ const firstName = (n) => (String(n || "").includes("@") ? n.split("@")[0] : Stri
 
 function render() {
   if (LIVE && !S.ready) return renderAuth();
+  if (DEEP && applyDeep()) return;
   const open = api.alerts().filter((a) => !a.resolved_at && !a.ack_at).length + api.problems().filter((p) => !p.cleared_at).length;
   const nav = [["overview", "Dashboard", "home"], ["equipment", "Equipment", "box"], ["activity", "Activity", "list"], ["employees", "Employees", "users"],
     ["stations", "Stations", "station"], ["shifts", "Shifts", "calendar"], ["alerts", "Alerts", "bell", open], "-", ["settings", "Settings", "sliders"], ...(can("admin") ? [["team", "Team access", "shield"]] : [])];
@@ -2143,7 +2173,7 @@ async function afterSignIn() {
   }
   try { L.companies = await rpc("my_companies"); } catch (e) { AUTH.view = "signin"; AUTH.err = niceErr(e); return renderAuth(); }
   if (!L.companies.length) { AUTH.view = "nocompany"; return renderAuth(); }
-  let pick = AUTH.joined || localStorage.getItem("sp.org");
+  let pick = AUTH.joined || (DEEP?.org && L.companies.some((c) => c.org_id === DEEP.org) ? DEEP.org : null) || localStorage.getItem("sp.org");
   if (!L.companies.some((c) => c.org_id === pick)) pick = L.companies.length === 1 ? L.companies[0].org_id : null;
   if (!pick) { AUTH.view = "pick"; return renderAuth(); }
   if (AUTH.joined && !AUTH.passwordAsked) { AUTH.passwordAsked = true; AUTH.company = L.companies.find((c) => c.org_id === pick)?.name; L.org = pick; AUTH.view = "welcome"; return renderAuth(); }
