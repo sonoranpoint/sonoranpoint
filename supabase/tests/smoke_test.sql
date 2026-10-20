@@ -917,14 +917,14 @@ select pg_temp.ok((select html like '%/brand/logo.png%' and html like '%Open the
                   'one alert: says what kind, when it happened, and has a button to the item');
 select pg_temp.ok((select html like '%/brand/logo.png%' and html like '%Equipment overdue%' and html like '%Open the item%'
                    from private.email_batches where to_email = 'viewer@example.com' and subject = 'PDA 02 is overdue'),
-                  'no company logo -> Sonoran Point''s logo on white');
+                  'Sonoran Point''s logo on white');
 select pg_temp.ok((select html like '%See all alerts%' and html like '%#alerts?org=%' and html like '%4 things need a look%' and html like '%on the dashboard%'
                    from private.email_batches where to_email = 'owner-a@example.com'), 'several alerts: one email, a button to all alerts, and where each came from');
 update organizations set logo_url = 'https://example.test/l.png' where id = '00000000-0000-0000-0000-00000000d3e0';
 select private.enqueue_email('00000000-0000-0000-0000-00000000d3e0', 'problem', 'Test item: Damaged', 'Reported.', '#equipment', now()) \g /dev/null
 select private.build_email_batches() \g /dev/null
-select pg_temp.ok((select html like '%background:#1F4E79%' and html like '%https://example.test/l.png%' from private.email_batches order by id desc limit 1),
-                  'with a logo: their logo on their main color');
+select pg_temp.ok((select html like '%/brand/logo.png%' and html not like '%example.test/l.png%' and html not like '%#1F4E79%' from private.email_batches order by id desc limit 1),
+                  'even when the company has a logo: Sonoran Point''s logo on white, no company colors');
 update organizations set logo_url = null where id = '00000000-0000-0000-0000-00000000d3e0';
 select pg_temp.ok((select count(*) from private.email_queue where batch_id is null) = 0 and private.build_email_batches() = 0, 'nothing is sent twice');
 delete from org_members where user_id = 'cccccccc-0000-0000-0000-000000000003';

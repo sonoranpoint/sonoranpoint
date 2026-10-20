@@ -1158,7 +1158,7 @@ function renderMain() {
     </div>`;
 }
 // The company's logo; Sonoran Point's when they have none (or it won't load).
-const SP_LOGO = "brand/logo.svg";
+const SP_LOGO = "brand/logo.png";
 function topLogo(o) {
   const name = `<b>${esc(o?.name || "Equipment Station")}</b>`;
   if (!o?.logo_url) return `<div class="toplogo name" id="logo" title="Hold for station menu">${name}</div>`;

@@ -8,7 +8,7 @@ See README.md for the full product description.
 - `platform/console.html` — operator console, console.sonoranpoint.com (customers, stations, hardware, team, activity)
 - `station/station.html` — the kiosk screen on each Pi; `station/pi/` — PN532 reader service, Wi-Fi helper
 - `supabase/migrations/` — database, applied in filename order; `supabase/tests/smoke_test.sql` — DB tests
-- `brand/` — logos, icons, `sp-theme.css` (injected between `SP-THEME:start/end` in dashboard + console)
+- `brand/` — logos (`source-logo.png` is the official logo; `logo.png`/`logo@2x.png` are made from it — no SVG), icons, `sp-theme.css` (injected between `SP-THEME:start/end` in dashboard + console)
 - `deploy/build.py` — builds `deploy/dist/{app,console,station}`; `deploy/email-templates/` — Supabase auth emails
 - `tests/run.sh` — runs everything; `tests/ui/` — jsdom screen tests
 
@@ -16,7 +16,7 @@ See README.md for the full product description.
 - Push to `main` → GitHub Actions runs `tests/run.sh db` + `ui`, then deploys app + console to Cloudflare Pages
   (projects `sonoranpoint-app`, `sonoranpoint-console`).
 - Database changes are NOT automatic. Add a new migration file (never edit one already run on the live
-  project), then tell Dez to run it in the Supabase SQL editor. Migrations 1–12 have been run, 13 handed over (2026-10-20;
+  project), then tell Dez to run it in the Supabase SQL editor. Migrations 1–12 have been run, 13 and 14 handed over (2026-10-20;
   ask if unsure). Alert emails are live (Resend key in Vault, first send
   confirmed 2026-10-20).
 - Station changes reach the Pis by copying `deploy/dist/station` onto each Pi (not automatic yet).

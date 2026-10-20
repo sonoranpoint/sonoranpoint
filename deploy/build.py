@@ -44,14 +44,14 @@ def build():
         (out / "_headers").write_text(HEADERS)
         (out / "robots.txt").write_text("User-agent: *\nDisallow: /\n")
         (out / "brand").mkdir()
-        for f in ["logo.svg", "logo.png", "logo@2x.png", "mark-64.png", "mark-180.png", "mark-512.png", "favicon.ico", "apple-touch-icon.png", "app-icon-512.png"]:
+        for f in ["logo.png", "logo@2x.png", "mark-64.png", "mark-180.png", "mark-512.png", "favicon.ico", "apple-touch-icon.png", "app-icon-512.png"]:
             shutil.copy(ROOT / "brand" / f, out / "brand" / f)
     st = DIST / "station"; st.mkdir(parents=True)
     (st / "index.html").write_text(page(ROOT / "station" / "station.html"))
     for f in ["wifi_helper.py", "nfc_reader.py", "README.md"]:
         shutil.copy(ROOT / "station" / "pi" / f, st / f)
     (st / "brand").mkdir()   # the station shows Sonoran Point's logo when a company has none
-    for f in ["logo.svg", "mark-180.png", "favicon.ico"]:
+    for f in ["logo.png", "mark-180.png", "favicon.ico"]:
         shutil.copy(ROOT / "brand" / f, st / "brand" / f)
     print("built", ", ".join(str(p.relative_to(ROOT)) for p in sorted(DIST.iterdir())))
 
