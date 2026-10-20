@@ -22,6 +22,8 @@ See README.md for the full product description.
 - Station changes reach the Pis by copying `deploy/dist/station` onto each Pi (not automatic yet).
 
 ## Email
+- Sign-in and invite emails: Supabase Auth sends through Resend SMTP (smtp.resend.com, from no-reply@sonoranpoint.com,
+  set up 2026-10-20); templates in `deploy/email-templates/` are pasted into Supabase by hand.
 - Alert emails go out from the database: `private.send_emails()` runs every minute (pg_cron) and posts to Resend
   with pg_net. The Resend key lives in Supabase Vault as `resend_api_key` (never in code). Check sends with
   `select status, error, to_email, subject from private.email_batches order by id desc limit 20;`
