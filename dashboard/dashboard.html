@@ -704,15 +704,17 @@ function buildDemo() {
   ];
   const invites = [{ id: "i1", email: "station-lead@demoair.example", role: "viewer", created: now - 1 * 86400000, expires: now + 13 * 86400000 }];
   // Reported problems: reasons are the company's own list (Settings).
-  const reasons = [["Damaged", true], ["Not charging", false], ["Missing part", false], ["Other", false]]
+  const reasons = [["Damaged", false], ["Not charging", false], ["Missing part", false], ["Other", false]]
     .map(([label, blocks], i) => ({ id: "r" + (i + 1), label, blocks, sort: i + 1 }));
   const byName = (n) => equipment.find((q) => q.name === n);
   const problems = [
-    { id: "p1", eq: byName("Battery 05").id, reason_id: "r1", reason: "Damaged", blocks: true, notes: "Case is cracked near the plug", at: now - 3.5 * HOUR, by: "Luis Ortega", place: "Equipment Room 01" },
+    { id: "p1", eq: byName("Battery 05").id, reason_id: "r1", reason: "Damaged", blocks: false, notes: "Case is cracked near the plug", at: now - 3.5 * HOUR, by: "Luis Ortega", place: "Equipment Room 01" },
     { id: "p2", eq: byName("Radio 06").id, reason_id: "r2", reason: "Not charging", blocks: false, notes: null, at: now - 50 * MIN, by: "Priya Shah", place: "Equipment Room 01" },
     { id: "p3", eq: byName("Vacuum 02").id, reason_id: "r3", reason: "Missing part", blocks: false, notes: "No hose attachment", at: now - 2 * 86400000, by: "Sam Patel", place: "Bag Room",
       cleared_at: now - 30 * HOUR, cleared_by: "Dana Brooks", clear_notes: "Found it in the van" },
   ];
+  // Checkouts of an item with an open problem are flagged (the station warns them to look it over).
+  for (const p of problems) if (!p.cleared_at) txns.filter((t) => t.eq === p.eq && t.action === "checkout" && t.at > p.at).forEach((t) => t.flags.push("reported_problem"));
   const emailPrefs = { u1: ["problem"], u2: ["problem", "overdue"], u3: ["overdue", "shift_report"], u4: [] };
   return { now, org, categories, equipment, employees, shifts, stations, txns, alerts, audit, reportAcks, occs, members, invites, reasons, problems, emailPrefs,
            me: { id: "u1", name: "Morgan Reyes", role: "owner", email: "morgan.reyes@demoair.example" } };
@@ -1166,7 +1168,7 @@ function vOverview() {
       <div><section class="panel"><div class="panel-h"><h2>Recent activity</h2><a class="more" href="#activity">View all</a></div>
         <div class="list">${act.slice(0, 7).map((x) => `<button class="ev" data-open="equipment:${x.eq}">
           <span class="tile ${x.action === "checkout" ? "out" : x.flags.includes("returned_after_extended") ? "late" : "in"}">${ic(x.action === "checkout" ? "out" : "in")}</span>
-          <span><b>${esc(x.equipment)} ${esc(x.action === "checkout" ? "checked out" : x.forOther ? "returned for " + (x.previous || "someone") : "returned")}${x.flags.includes("returned_after_extended") ? ` <span class="chip warn">late</span>` : ""}</b>
+          <span><b>${esc(x.equipment)} ${esc(x.action === "checkout" ? "checked out" : x.forOther ? "returned for " + (x.previous || "someone") : "returned")}${x.flags.includes("returned_after_extended") ? ` <span class="chip warn">late</span>` : ""}${x.flags.includes("reported_problem") ? ` <span class="chip warn">had a reported problem</span>` : ""}</b>
             <span class="sub">${esc(x.by)}${x.place ? " · " + esc(x.place) : ""}</span></span><time datetime="${new Date(x.at).toISOString()}">${esc(agoShort(x.at))}</time></button>`).join("")
           || `<div class="empty">No taps yet. Checkouts and returns show up here as they happen at a station.</div>`}</div></section></div>
       <div><section class="panel"><div class="panel-h"><h2>Stations</h2>${can("admin") ? `<a class="more" href="#stations">Manage stations</a>` : ""}</div>
@@ -1274,7 +1276,7 @@ function vActivity() {
     if (k !== lastDay) { lastDay = k; const n = rows.filter((x) => dayKey(localDay(x.at, tz())) === k).length;
       html += `<tr class="dayrow"><td colspan="5">${esc(k === today ? "Today" : fmtDay(d))}<span>${n} tap${n === 1 ? "" : "s"}</span></td></tr>`; }
     html += `<tr><td class="num" data-label="When">${esc(fmtTime(a.at))}</td><td class="lead"><button class="link" data-open="employee:${a.byId}">${esc(a.by)}</button></td>
-      <td class="pin">${a.action === "checkout" ? `<span class="chip info">Out</span>` : `<span class="chip ok">In</span>`} ${esc(a.description)}${a.flags.includes("returned_after_extended") ? ` <span class="chip warn">late</span>` : ""}</td>
+      <td class="pin">${a.action === "checkout" ? `<span class="chip info">Out</span>` : `<span class="chip ok">In</span>`} ${esc(a.description)}${a.flags.includes("returned_after_extended") ? ` <span class="chip warn">late</span>` : ""}${a.flags.includes("reported_problem") ? ` <span class="chip warn">had a reported problem</span>` : ""}</td>
       <td data-label="Item"><button class="link" data-open="equipment:${a.eq}">${esc(a.equipment)}</button></td><td class="muted" data-label="Where">${esc(a.place || "")}</td></tr>`;
   }
   return head("Activity", "Every tap, who made it, and for whom. History can't be edited or deleted.", `<button class="btn" data-act="csvActivity">${ic("download")}Download CSV</button>`) + `
@@ -1445,7 +1447,7 @@ function vSettings() {
         <button class="btn primary">Add category</button><span class="err" id="catErr" role="alert"></span></form>
       <div class="panel-b muted" style="border-top:1px solid var(--line);font-size:13.5px">Changes save as you go. A new limit applies from the next checkout. Individual items can override this from Equipment. Categories with equipment can't be deleted.</div></section>
     <section class="panel"><div class="panel-h"><h2>Problem reasons</h2></div>
-      <div class="panel-b muted" style="font-size:13.5px;padding-bottom:0">What crews pick from when they report a problem at a station. Turn on <b>Stops checkout</b> for anything that isn't safe to use: nobody can check the item out until a supervisor clears it.</div>
+      <div class="panel-b muted" style="font-size:13.5px;padding-bottom:0">What crews pick from when they report a problem at a station. Normally a reported item can still be checked out: the station tells the person what was reported, and the checkout is flagged here. Turn on <b>Stops checkout</b> for anything that isn't safe to use: nobody can check it out until a supervisor clears it.</div>
       <div class="tablewrap"><table class="reasons-t">
       <thead><tr><th>Reason</th><th>Stops checkout</th><th></th></tr></thead>
       <tbody>${api.reasons().map((r) => `<tr>
@@ -1545,7 +1547,7 @@ function dEquipment(id) {
       <button class="btn primary">Save</button></form>
       <p class="muted" style="margin:8px 0 0;font-size:13px">Applies from the next checkout. Leave "Alert after" blank to use the category or company setting.</p></div>` : ""}
     <div class="sect"><h3>History</h3>${hist.length ? `<div class="hist">${hist.map((a) => `<div class="${a.action === "checkin" ? "in" : ""} ${a.flags.length ? "flag" : ""}">
-        <time>${esc(fmtWhen(a.at))} · ${esc(a.place)}</time><b>${esc(a.by)}</b> ${esc(a.description.charAt(0).toLowerCase() + a.description.slice(1))}${a.flags.includes("returned_after_extended") ? " (late)" : ""}</div>`).join("")}</div>` : `<p class="muted">No checkouts yet.</p>`}</div>
+        <time>${esc(fmtWhen(a.at))} · ${esc(a.place)}</time><b>${esc(a.by)}</b> ${esc(a.description.charAt(0).toLowerCase() + a.description.slice(1))}${a.flags.includes("returned_after_extended") ? " (late)" : ""}${a.flags.includes("reported_problem") ? " (had a reported problem)" : ""}</div>`).join("")}</div>` : `<p class="muted">No checkouts yet.</p>`}</div>
   </div>`;
 }
 function problemsSect(x) {

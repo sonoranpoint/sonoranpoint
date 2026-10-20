@@ -18,7 +18,9 @@ const change = async (el, v) => { if (typeof v === "boolean") el.checked = v; el
 (async () => {
   await sleep(100);
   // Home and alerts show what's reported
-  check(/Battery 05: Damaged/.test(page()) && /Can't be checked out until it's cleared/.test(page()) && /Radio 06: Not charging/.test(page()), "home: reported problems need attention");
+  check(/Battery 05: Damaged/.test(page()) && /Radio 06: Not charging/.test(page()), "home: reported problems need attention");
+  await go("activity");
+  check(/had a reported problem/.test(page()), "activity flags a checkout of an item with a reported problem");
   await go("alerts"); await click('[data-seg="alertTab:problems"]');
   check(/Open \(2\)/.test(page()) && /Cleared by Dana Brooks/.test(page()) && /Found it in the van/.test(page()), "alerts: a Reported problems tab with open and cleared ones");
   await go("equipment"); await click('[data-seg="eqStatus:problem"]');
@@ -29,11 +31,11 @@ const change = async (el, v) => { if (typeof v === "boolean") el.checked = v; el
   E(`openDrawer('equipment', '${vac1}')`); await sleep(20);
   check(/Nothing reported/.test(drawer()), "an item with no problems says so");
   await click("[data-act=reportStart]");
-  check(doc.querySelectorAll(".drawer .reasons input[type=radio]").length === 4 && /Stops checkout until cleared/.test(drawer()), "report form lists the company's reasons");
+  check(doc.querySelectorAll(".drawer .reasons input[type=radio]").length === 4 && !/Stops checkout/.test(drawer()), "report form lists the company's reasons");
   doc.querySelector('.drawer .reasons input[value="r1"]').checked = true;
   await submit('[data-form^="problem:"]', { notes: "Hose split" });
-  check(/Nobody can check it out until it's cleared/.test(doc.body.textContent) && /Damaged/.test(drawer()) && /Hose split/.test(drawer()), "reporting it damaged shows on the item");
-  check(E(`api.equipment().find(q => q.id === '${vac1}').problem.blocks`) === true, "and it's marked as blocking checkout");
+  check(/Reported/.test(doc.body.textContent) && /Damaged/.test(drawer()) && /Hose split/.test(drawer()), "reporting it damaged shows on the item");
+  check(E(`api.equipment().find(q => q.id === '${vac1}').problem.blocks`) === false, "damaged flags it but doesn't stop checkout");
   await click("[data-act=clearStart]"); await submit('[data-form^="clear:"]', { note: "New hose fitted" });
   check(!E(`api.equipment().find(q => q.id === '${vac1}').problem`) && /Cleared before \(1\)/.test(drawer()), "clearing it keeps it in the item's past problems");
   E("S.drawer = null; render()");

@@ -37,14 +37,19 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   check(E("reasons().length") === 4, "the station gets the company's problem reasons");
   E("endSession()"); await sleep(100);
   E(`handleTag('${badge}')`); await sleep(400); E("$('#reportBtn').click()"); await sleep(100); E(`handleTag('${tag}')`); await sleep(200);
-  E("$('.rbtn.stop').click()");
+  E("$('.rbtn[data-reason]').click()");
   check(await until(() => psql(`select count(*) from equipment_problems p join equipment q on q.id = p.equipment_id where q.nfc_uid='${tag}' and p.reason='Damaged' and p.cleared_at is null`) === "1"),
     "reporting it damaged at the station is saved in the database");
   check(await until(() => /Problem reported/.test(text())), "station confirms the report");
   E(`handleTag('${tag}')`); await until(() => /Returned/.test(text()));
+  E("$('#doneBtn').click()"); check(await until(() => /Any problems with what you returned/.test(text())), "after a return the station asks about problems");
+  E("$('#ckYes').click()"); await sleep(100); E("$('.ckchip[data-ck-reason]:nth-child(2)').click()"); await sleep(50); E("$('#ckSend').click()");
+  check(await until(() => psql(`select count(*) from equipment_problems p join equipment q on q.id = p.equipment_id where q.nfc_uid='${tag}' and p.cleared_at is null`) === "2")
+        && await until(() => /Checked in/.test(text())), "reporting from the returns screen is saved, then the green Checked in screen", text());
   const jordan = psql("select badge_uid from employees where first_name='Jordan'");
-  E("endSession()"); await sleep(100); E(`handleTag('${jordan}')`); await sleep(400); E(`handleTag('${tag}')`);
-  check(await until(() => /Can't check out/.test(text()) && /Reported: Damaged/.test(text())), "the database refuses the next checkout and the station says why", text());
+  E("endSummary()"); await sleep(100); E(`handleTag('${jordan}')`); await sleep(400); E(`handleTag('${tag}')`);
+  check(await until(() => /Checked out/.test(text()) && /Look it over before you use it/.test(text())), "a damaged item can still be checked out, with a heads-up", text());
+  check(await until(() => psql(`select count(*) from transactions t join equipment q on q.id = t.equipment_id where q.nfc_uid='${tag}' and 'reported_problem' = any(t.flags)`) === "1"), "and the checkout is flagged in the database");
   check(errors.length === 0, "no script errors " + errors.join(";"));
   b.pg.kill(); b.server.close(); process.exit();
 })().catch((e) => { console.log("CRASH", e.stack); process.exit(1); });

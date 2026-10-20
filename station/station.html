@@ -185,6 +185,25 @@ html.kiosk .screen { border-radius: 0; }
 .results.tight .rrow .dot { width: 1.8cqw; height: 1.8cqw; font-size: 1.1cqw; }
 .results.tight .result { padding: .5cqw 1.2cqw; } .results.tight .result .ico { width: 3cqw; height: 3cqw; font-size: 1.6cqw; }
 .results.tight .result .t { font-size: 2.3cqw; } .results.tight .result .l { font-size: 1.5cqw; }
+/* After returns: any problems? */
+.check { flex: 1; display: grid; grid-template-rows: auto 1fr auto; gap: 2cqw; padding: 3cqw 3.4cqw 1.6cqw; min-height: 0; }
+.ck-ask h2 { margin: 0; font-family: var(--display); font-weight: 700; font-size: 4.6cqw; line-height: 1.05; }
+.ck-ask p { margin: .8cqw 0 0; font-size: 2.2cqw; color: var(--screen-muted); }
+.ck-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 2.4cqw; align-content: center; }
+.ckbtn { border: 0; border-radius: 2cqw; padding: 4.4cqw 2cqw; font-family: var(--display); font-weight: 700; font-size: 3.4cqw; color: #fff; }
+.ckbtn.no { background: var(--ok); } .ckbtn.yes { background: var(--screen); color: var(--screen-ink); border: .3cqw solid var(--screen-line); }
+.ck-foot { display: flex; align-items: center; gap: 2cqw; } .ck-foot .timer { flex: 1; } .ck-foot span { font-size: 1.7cqw; color: var(--screen-muted); white-space: nowrap; }
+.ck-foot .done[disabled] { opacity: .45; }
+.ck-rows { display: flex; flex-direction: column; gap: 1.2cqw; min-height: 0; }
+.ck-row { border: .25cqw solid var(--screen-line); border-radius: 1.4cqw; padding: 1.4cqw 1.8cqw; display: grid; gap: 1cqw; background: var(--screen); }
+.ck-row.on { border-color: var(--warn); } .ck-row b { font-family: var(--display); font-size: 2.6cqw; }
+.ck-chips { display: flex; flex-wrap: wrap; gap: 1cqw; }
+.ckchip { border: .25cqw solid var(--screen-line); background: var(--screen); color: var(--screen-ink); border-radius: 99px; padding: 1cqw 2.2cqw; font-size: 2cqw; font-weight: 700; }
+.ckchip.on { background: var(--warn); border-color: var(--warn); color: #fff; }
+.ck-rows.dense { gap: .6cqw; } .ck-rows.dense .ck-row { padding: .8cqw 1.4cqw; grid-template-columns: minmax(0, 1fr) auto; align-items: center; } .ck-rows.dense .ckchip { padding: .6cqw 1.6cqw; font-size: 1.7cqw; }
+.summary.good { background: color-mix(in srgb, var(--ok) 30%, var(--screen)); } .summary.good .sum-col.reported li { border-left-color: var(--warn); }
+.summary.good .sum-check { width: 9cqw; height: 9cqw; font-size: 5cqw; }
+.sum-col.reported li span { color: var(--warn); }
 /* Report a problem */
 .mine li.pick { cursor: pointer; border: .25cqw solid var(--brand); }
 .rgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.2cqw; align-content: start; flex: 1; min-height: 0; margin-bottom: 2.2cqw; }
@@ -636,11 +655,12 @@ function demoSeed() {
     problems: [],
   };
 }
-function demoReasons() { return [["Damaged", true], ["Not charging", false], ["Missing part", false], ["Other", false]].map(([label, blocks_checkout], i) => ({ id: "r" + (i + 1), label, blocks_checkout, sort: i + 1 })); }
+function demoReasons() { return [["Damaged", false], ["Not charging", false], ["Missing part", false], ["Other", false]].map(([label, blocks_checkout], i) => ({ id: "r" + (i + 1), label, blocks_checkout, sort: i + 1 })); }
 
 const demo = {
   db: null, wifi: true, listeners: [],
-  load() { this.db = store.get("demoServer.v2") || demoSeed(); this.db.reasons ||= demoReasons(); this.db.problems ||= []; },
+  load() { this.db = store.get("demoServer.v2") || demoSeed(); this.db.reasons ||= demoReasons(); this.db.problems ||= [];
+    const dmg = this.db.reasons.find((r) => r.label === "Damaged"); if (dmg && !this.db.reasonsV2) { dmg.blocks_checkout = false; this.db.reasonsV2 = true; } },
   openProblem(eqId) {
     const p = (this.db.problems || []).filter((x) => x.equipment_id === eqId && !x.cleared_at).sort((a, b) => (b.blocks_checkout - a.blocks_checkout) || (b.reported_at - a.reported_at))[0];
     return p ? { id: p.id, reason: p.reason, blocks_checkout: p.blocks_checkout, reported_at: new Date(p.reported_at).toISOString() } : null;
@@ -870,6 +890,7 @@ const demo = {
     else if (action === "checkout") {
       if (eq.current_employee_id && eq.current_employee_id !== emp.id) flags.push("conflict_already_held");
       if (["maintenance", "retired", "lost"].includes(eq.status)) flags.push("item_" + eq.status);
+      if (this.openProblem(eq.id)) flags.push("reported_problem");
       const lim = this.resolveLimit(eq); rule = lim.rule;
       if (rule === "shift_end") {
         due = this.employeeShiftEnd(emp.id, when);
@@ -895,7 +916,7 @@ const demo = {
     const ph = prev && prev !== emp.id ? this.emp(prev) : null;
     return { ok: true, transaction_id: txn.id, action, flags, equipment: { id: eq.id, name: eq.name }, employee: { id: emp.id, name: emp.name },
       previous_holder: ph ? { id: ph.id, name: ph.name } : null,
-      due_at: due ? new Date(due).toISOString() : null, due_rule: rule };
+      due_at: due ? new Date(due).toISOString() : null, due_rule: rule, problem: action === "checkout" ? this.openProblem(eq.id) : null };
   },
   staffSession(a, min) {
     const st = this.station(a.p_device_key); if (!st) return { ok: false, error: "station_not_authorized" };
@@ -1117,6 +1138,7 @@ function renderMain() {
   if (S.screen === "session" && S.session) return renderSession(el);
   if (S.screen === "lookup" && S.lookup) return renderLookup(el);
   if (S.screen === "summary" && S.summary) return renderSummary(el);
+  if (S.screen === "check" && S.check) return renderCheck(el);
   if (S.screen === "pin" && S.pinEntry) return renderPin(el);
   if (S.screen === "staff" && S.staff) return renderStaff(el);
   if (S.saved.paused) {
@@ -1569,28 +1591,35 @@ function chooseReportItem(uid) {
   if (!item) { beep("bad"); return toast("Tag not registered", "That tag isn't linked to any equipment. Give it to a supervisor."); }
   s.report = { step: "reason", item }; s.last = Date.now(); beep("ok"); renderMain();
 }
-async function submitReport(reasonId) {
-  const s = S.session; if (!s?.report?.item) return;
-  const item = s.report.item; s.report = null; s.last = Date.now();
+// Send one report (or save it on the station when offline). Returns what happened.
+async function sendReport(emp, item, reasonId) {
   const r0 = reasons().find((x) => x.id === reasonId) || { label: "Problem", blocks_checkout: false };
-  const args = { p_device_key: S.saved.deviceKey, p_client_report_id: uuid(), p_badge_uid: s.emp.badge_uid, p_equipment_uid: item.nfc_uid,
+  const args = { p_device_key: S.saved.deviceKey, p_client_report_id: uuid(), p_badge_uid: emp.badge_uid, p_equipment_uid: item.nfc_uid,
                  p_reason: reasonId, p_occurred_at: new Date(clock.now()).toISOString() };
-  const pending = { tone: "wait", title: "Reporting", item: item.name, lines: [] };
-  addResult(pending);
   let r = null;
   if (!S.saved.queue.length) { try { r = await call("station_report_problem", args); } catch { r = null; } }
-  if (r && !r.ok && r.error === "station_not_authorized") return lockedOut();
-  if (r && !r.ok) { beep("bad"); return replaceResult(pending, { tone: "bad", kind: "refused", title: "Not reported", item: item.name, detail: "try again", lines: [{ text: "Try again, or tell a supervisor. Error: " + r.error }] }); }
+  if (r && !r.ok && r.error === "station_not_authorized") { lockedOut(); return { ok: false, error: r.error }; }
+  if (r && !r.ok) return { ok: false, error: r.error, label: r0.label };
   if (!r) S.saved.queue.push({ fn: "station_report_problem", args });
   const label = r?.reason || r0.label, blocks = r ? !!r.blocks_checkout : !!r0.blocks_checkout;
   const cached = S.saved.cache.equipment.find((q) => q.id === item.id);
   if (cached && (!cached.problem || blocks)) cached.problem = { reason: label, blocks_checkout: blocks };
-  persist(); renderTop(); renderStatus(); beep("ok");
-  const mine = cached?.current_employee_id === s.emp.id;
-  const lines = [{ text: r?.already_reported ? `${label} was already reported. Thanks for letting us know.` : `${label}. A supervisor will take a look.`, note: true }];
-  if (blocks) lines.push({ text: mine ? "Nobody can check it out until it's fixed. Tap it again to return it." : "Nobody can check it out until it's fixed." });
-  if (!r) lines.push({ text: "Saved on this station. It's sent when the connection is back." });
-  replaceResult(pending, { tone: "warn", kind: "report", title: "Problem reported", item: item.name, detail: label.toLowerCase(), lines });
+  persist(); renderTop(); renderStatus();
+  return { ok: true, label, blocks, offline: !r, already: !!r?.already_reported, mine: cached?.current_employee_id === emp.id };
+}
+async function submitReport(reasonId) {
+  const s = S.session; if (!s?.report?.item) return;
+  const item = s.report.item; s.report = null; s.last = Date.now();
+  const pending = { tone: "wait", title: "Reporting", item: item.name, lines: [] };
+  addResult(pending);
+  const x = await sendReport(s.emp, item, reasonId);
+  if (!x.ok) { if (x.error === "station_not_authorized") return; beep("bad");
+    return replaceResult(pending, { tone: "bad", kind: "refused", title: "Not reported", item: item.name, detail: "try again", lines: [{ text: "Try again, or tell a supervisor. Error: " + x.error }] }); }
+  beep("ok");
+  const lines = [{ text: x.already ? `${x.label} was already reported. Thanks for letting us know.` : `${x.label}. A supervisor will take a look.`, note: true }];
+  if (x.blocks) lines.push({ text: x.mine ? "Nobody can check it out until it's fixed. Tap it again to return it." : "Nobody can check it out until it's fixed." });
+  if (x.offline) lines.push({ text: "Saved on this station. It's sent when the connection is back." });
+  replaceResult(pending, { tone: "warn", kind: "report", title: "Problem reported", item: item.name, detail: x.label.toLowerCase(), lines });
 }
 function rowHtml(r) {
   const ico = { ok: "✓", ret: "↩", warn: "!", bad: "×", wait: "…" }[r.tone];
@@ -1743,6 +1772,7 @@ function handleTag(raw) {
     toast("Finish setup first", "Follow the steps on the screen to connect this station."); return beep("bad");
   }
   if (S.screen === "summary") { S.summary = null; S.screen = "idle"; }
+  if (S.screen === "check" && S.check) { if (uid === S.check.emp.badge_uid) return; finishCheck(true); S.check = null; S.screen = "idle"; }
   if (S.staff) {
     S.staff.at = Date.now();
     if (S.staff.capture) return handleCapture(uid);
@@ -1803,10 +1833,53 @@ function endSession() {
     S.session = null;
     const have = S.saved.cache ? S.saved.cache.equipment.filter((q) => q.current_employee_id === s.emp.id).length : 0;
     S.summary = { emp: s.emp, outs: [...final.values()].filter((r) => r.kind === "out"), ins: [...final.values()].filter((r) => r.kind === "in"),
-                  refused: [...refused.values()], have, at: Date.now() };
+                  refused: [...refused.values()], have, at: Date.now(), reported: [] };
     S.screen = "summary";
+    // Brought something back: ask if anything's wrong with it before showing the summary.
+    const back = S.summary.ins.map((r) => S.saved.cache?.equipment.find((q) => q.nfc_uid === r.uid)).filter(Boolean);
+    if (back.length && reasons().length) { S.check = { emp: s.emp, items: back, step: "ask", picks: {}, at: Date.now() }; S.screen = "check"; }
   } else S.screen = "idle";
   render();
+}
+/* ---------- After returns: any problems? ---------- */
+const CHECK_MS = 25000;
+function renderCheck(el) {
+  const c = S.check; const n = c.items.length; const left = Math.max(0, CHECK_MS - (Date.now() - c.at));
+  const timer = `<div class="timer" aria-hidden="true"><i id="ckBar" style="width:${(left / CHECK_MS) * 100}%"></i></div>`;
+  if (c.step === "ask") {
+    el.innerHTML = `<div class="check">
+      <div class="ck-ask"><h2>Any problems with what you returned?</h2>
+        <p>${c.items.map((q) => esc(q.name)).join(", ")}</p></div>
+      <div class="ck-btns"><button class="ckbtn yes" id="ckYes">Yes, report a problem</button><button class="ckbtn no" id="ckNo">No, all good</button></div>
+      <div class="ck-foot">${timer}<span>No answer counts as no</span></div></div>`;
+    $("#ckYes").addEventListener("click", () => { c.step = "report"; c.at = Date.now(); beep("ok"); renderMain(); });
+    $("#ckNo").addEventListener("click", () => finishCheck());
+    return;
+  }
+  const count = Object.keys(c.picks).length;
+  el.innerHTML = `<div class="check rep">
+    <div class="ck-ask"><h2>What's wrong?</h2><p>Pick a reason for each item with a problem. Leave the others.</p></div>
+    <div class="ck-rows fit" data-fit=",dense">${c.items.map((q) => `<div class="ck-row ${c.picks[q.id] ? "on" : ""}"><b>${esc(q.name)}</b>
+      <div class="ck-chips">${reasons().map((r) => `<button class="ckchip ${c.picks[q.id] === r.id ? "on" : ""}" data-ck-item="${esc(q.id)}" data-ck-reason="${esc(r.id)}">${esc(r.label)}</button>`).join("")}</div></div>`).join("")}</div>
+    <div class="ck-foot">${timer}<button class="sbtn" id="ckBack">Back</button>
+      <button class="done" id="ckSend" ${count && !c.busy ? "" : "disabled"}>${c.busy ? "Sending…" : count ? `Report ${count} item${count > 1 ? "s" : ""}` : "Pick a reason"}</button></div></div>`;
+  el.querySelectorAll("[data-ck-item]").forEach((b) => b.addEventListener("click", () => {
+    const id = b.dataset.ckItem; c.picks[id] = c.picks[id] === b.dataset.ckReason ? undefined : b.dataset.ckReason; if (!c.picks[id]) delete c.picks[id];
+    c.at = Date.now(); renderMain(); }));
+  $("#ckBack").addEventListener("click", () => { c.step = "ask"; c.picks = {}; c.at = Date.now(); renderMain(); });
+  $("#ckSend").addEventListener("click", () => finishCheck());
+}
+// Send whatever was picked, then show the (green) summary. quiet = someone else tapped in: skip the summary.
+async function finishCheck(quiet) {
+  const c = S.check; if (!c || c.busy) return;
+  const picks = Object.entries(c.picks);
+  if (picks.length) { c.busy = true; if (!quiet) renderMain();
+    for (const [id, reason] of picks) { const q = c.items.find((x) => x.id === id); const x = await sendReport(c.emp, q, reason);
+      if (S.summary) S.summary.reported.push({ item: q.name, label: x.label || "Problem", ok: x.ok, offline: x.offline }); } }
+  if (S.check !== c) return;
+  S.check = null;
+  if (quiet || !S.summary) { S.summary = null; S.screen = "idle"; return render(); }
+  S.summary.good = true; S.summary.at = Date.now(); S.screen = "summary"; beep("ok"); render();
 }
 function endSummary() { S.summary = null; if (S.screen === "summary") { S.screen = "idle"; render(); } }
 function renderSummary(el) {
@@ -1814,15 +1887,17 @@ function renderSummary(el) {
   const li = (r, sub, hl) => `<li><b>${esc(r.item)}</b>${sub ? `<span class="${hl ? "hl" : ""}">${esc(sub)}</span>` : ""}</li>`;
   const col = (cls, title, list, fn) => list.length ? `<div class="sum-col ${cls}"><h3>${title} (${list.length})</h3><ul class="fit" data-fit=",dense,tight">${list.map(fn).join("")}</ul></div>` : "";
   const left = Math.max(0, SUMMARY_MS - (Date.now() - m.at));
-  const anyOffline = [...m.outs, ...m.ins].some((r) => r.offline);
+  const anyOffline = [...m.outs, ...m.ins].some((r) => r.offline) || (m.reported || []).some((r) => r.offline);
+  const rep = m.reported || [];
   el.innerHTML = `
-    <div class="summary">
+    <div class="summary ${m.good ? "good" : ""}">
       <div class="sum-head"><div class="sum-check" aria-hidden="true">✓</div>
-        <div><h2>All set, ${esc(first)}</h2>
+        <div><h2>${m.ins.length && !m.outs.length ? "Checked in" : "All set"}, ${esc(first)}</h2>
         <p>${anyOffline ? "Saved on this station. It syncs when the connection is back." : "Recorded under your name."}</p></div></div>
       <div class="sum-cols">
         ${col("outs", "Checked out", m.outs, (r) => li(r, r.dueText))}
         ${col("ins", "Returned", m.ins, (r) => li(r, r.forName ? `For ${r.forName}` : r.found ? "Was lost, now found" : "Back in the room", !!r.forName || r.found))}
+        ${col("reported", "Problems reported", rep, (r) => li(r, r.ok ? r.label + (r.offline ? " · sends when back online" : "") : "Didn't send. Tell a supervisor.", true))}
         ${col("refused", "Not done", m.refused, (r) => li(r, r.detail, true))}
       </div>
       <div class="sum-foot"><span>You have ${m.have || "no"} item${m.have === 1 ? "" : "s"} checked out</span>
@@ -1838,7 +1913,7 @@ async function tapItem(uid) {
   const prevHolder = item?.current_employee_id || null;
   const ev = { p_device_key: S.saved.deviceKey, p_client_txn_id: uuid(), p_badge_uid: s.emp.badge_uid,
                p_equipment_uid: uid, p_occurred_at: new Date(clock.now()).toISOString() };
-  const pending = { tone: "wait", title: "Checking", item: item?.name || fmtUid(uid), lines: [] };
+  const pending = { tone: "wait", title: "Checking", item: item?.name || fmtUid(uid), lines: [], uid };
   addResult(pending);
   let r = null;
   if (!S.saved.queue.length) { try { r = await call("station_tap", ev); } catch { r = null; } }
@@ -1859,11 +1934,13 @@ async function tapItem(uid) {
                                             : { current_employee_id: null, checked_out_at: null, due_at: null, status: ["checked_out", "lost"].includes(item.status) ? "available" : item.status });
   persist(); renderTop(); renderStatus(); beep(action === "checkout" ? "ok" : "ret");
   const lines = [{ text: "Saved on this station. It syncs when the connection is back." }];
+  const flagged = action === "checkout" && item.problem;
+  if (flagged) lines.unshift({ text: `Reported: ${item.problem.reason}. Look it over before you use it.`, note: true });
   if (lost) lines.unshift({ text: "It was listed as lost. Thanks for bringing it back.", note: true });
   else if (other) lines.unshift({ text: `Returned for ${empName(prevHolder)}.${item.problem?.blocks_checkout ? "" : " Tap it again to check it out."}`, note: true });
   if (action === "checkin" && item.problem?.blocks_checkout) lines.push({ text: `Reported ${item.problem.reason.toLowerCase()}, so it stays in the room until a supervisor clears it.` });
   const forName = action === "checkin" && other && !lost ? empName(prevHolder) : null;
-  replaceResult(pending, { tone: action === "checkout" ? "ok" : lost || other ? "warn" : "ret", title: action === "checkout" ? "Checked out" : lost ? "Found" : "Returned", item: item.name, lines,
+  replaceResult(pending, { tone: action === "checkout" ? (flagged ? "warn" : "ok") : lost || other ? "warn" : "ret", title: action === "checkout" ? "Checked out" : lost ? "Found" : "Returned", item: item.name, lines,
     kind: action === "checkout" ? "out" : "in", offline: true, forName, found: lost,
     dueText: action === "checkout" ? "Due time shows once synced" : "", detail: forName ? "for " + forName : lost ? "found" : "saved offline" });
 }
@@ -1900,6 +1977,8 @@ function onlineResult(r, item, prevHolder, uid) {
     if (f.has("no_active_shift")) lines.push({ text: "You're not on a scheduled shift, so the standard time limit applies." });
     if (f.has("conflict_already_held")) { tone = "warn"; lines.unshift({ text: `Was still checked out to ${empName(prevHolder)}. It's yours now.`, note: true }); }
     if ([...f].some((x) => x.startsWith("item_"))) { tone = "warn"; lines.unshift({ text: "This item is marked for maintenance. Let a supervisor know.", note: true }); }
+    const pb = r.problem || (f.has("reported_problem") ? cached?.problem : null);
+    if (pb) { tone = "warn"; lines.unshift({ text: `Reported: ${pb.reason}. Look it over before you use it.`, note: true }); }
     beep(tone === "warn" ? "bad" : "ok");
   } else {
     tone = "ret"; lines.push({ text: "Thanks, it's back in the room." });
@@ -1918,6 +1997,7 @@ function onlineResult(r, item, prevHolder, uid) {
 function addResult(res) { S.session.results.unshift(res); renderMain(); }
 function replaceResult(old, res) {
   if (!S.session) return; const i = S.session.results.indexOf(old);
+  if (old.uid && !res.uid) res.uid = old.uid;
   if (i >= 0) S.session.results[i] = res; else addResult(res);
   S.session.last = Date.now(); renderMain();
 }
@@ -2512,6 +2592,10 @@ setInterval(() => {               // clock + sign-out timer
   if (S.summary) {
     const left = SUMMARY_MS - (Date.now() - S.summary.at);
     if (left <= 0) endSummary(); else { const b = $("#sumBar"); if (b) b.style.width = (left / SUMMARY_MS) * 100 + "%"; }
+  }
+  if (S.check && S.screen === "check" && !S.check.busy) {
+    const left = CHECK_MS - (Date.now() - S.check.at);
+    if (left <= 0) finishCheck(); else { const b = $("#ckBar"); if (b) b.style.width = (left / CHECK_MS) * 100 + "%"; }
   }
   if (S.lookup) {
     const left = LOOKUP_MS - (Date.now() - S.lookup.at);

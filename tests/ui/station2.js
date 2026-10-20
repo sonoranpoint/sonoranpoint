@@ -27,8 +27,10 @@ const tap = async (uid, ms = 450) => { E(`handleTag('${uid}')`); await sleep(ms)
   check(/This visit: 6 checked out · 2 returned · 1 not done/.test(text()), "running tally of the visit");
   check(/for Jordan Lee/.test(text()), "row shows the return was for Jordan");
   E("document.querySelector('#doneBtn').click()"); await sleep(50);
+  check(/Any problems with what you returned\?/.test(text()) && /Radio 01, Van Keys 02/.test(text()), "Done after returns -> asks if anything's wrong with them");
+  E("document.querySelector('#ckNo').click()"); await sleep(50);
   const t = text();
-  check(/All set, Alex/.test(t), "Done -> confirmation screen");
+  check(/All set, Alex/.test(t) && doc.querySelector("#screen .summary.good"), "No -> green confirmation screen");
   check(/Checked out \(6\)/.test(t) && /Vacuum 01/.test(t) && /Due back by 5:00 PM/.test(t), "lists the 6 items checked out with due times");
   check(/Returned \(2\)/.test(t) && /For Jordan Lee/.test(t), "lists returns, including Radio 01 returned for Jordan");
   check(/Not done \(1\)/.test(t) && /Blower 02/.test(t) && /in maintenance/.test(t), "lists what didn't go through and why");
