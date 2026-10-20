@@ -200,6 +200,38 @@ button.row:hover { background: var(--surface-2); }
 .switch span::after { content: ""; position: absolute; left: 3px; top: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; transition: transform .15s; box-shadow: 0 1px 2px rgba(0,0,0,.3); }
 .switch input:checked + span { background: var(--ok); } .switch input:checked + span::after { transform: translateX(18px); }
 .switch input:focus-visible + span { outline: 3px solid var(--focus); outline-offset: 2px; }
+.btn > svg { width: 17px; height: 17px; flex: none; } .btn { white-space: nowrap; } a.btn { text-decoration: none; } a.btn:not(.primary) { color: var(--ink); }
+/* Get set up (new companies) */
+.setup .panel-h h2 { font-size: 17px; letter-spacing: 0; text-transform: none; color: var(--ink); }
+.setup .panel-h h2 small { display: block; font-family: var(--body); font-weight: 400; font-size: 13.5px; color: var(--muted); margin-top: 2px; }
+.link.quiet { color: var(--muted); text-decoration: none; font-size: 13.5px; }
+.setup-bar { height: 6px; margin: 0 20px 6px; border-radius: 99px; background: var(--surface-2); overflow: hidden; } .setup-bar i { display: block; height: 100%; background: var(--ok); border-radius: 99px; }
+.setup-steps { list-style: none; margin: 0; padding: 6px 0 8px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.setup-steps li { display: grid; grid-template-columns: 32px minmax(0, 1fr); grid-template-rows: auto auto; gap: 6px 12px; padding: 12px 20px; align-content: start; }
+.setup-steps li .btn { grid-column: 2; justify-self: start; }
+.setup-steps .num { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: var(--brand-soft); color: var(--brand-text); font-weight: 800; font-family: var(--head); }
+.setup-steps .num svg { width: 17px; height: 17px; } .setup-steps li.done .num { background: var(--ok-bg); color: var(--ok); }
+.setup-steps b { display: block; } .setup-steps .sub { display: block; color: var(--muted); font-size: 13.5px; }
+@media (max-width: 1180px) { .setup-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .setup-steps { grid-template-columns: minmax(0, 1fr); } }
+/* Activity by day */
+.dayrow td { background: var(--surface-2); font-family: var(--head); font-weight: 700; font-size: 14px; padding: 9px 14px; }
+.dayrow td span { margin-left: 10px; font-family: var(--body); font-weight: 400; color: var(--muted); font-size: 13px; }
+.daypick { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; font-size: 13.5px; color: var(--muted); } .daypick .field { width: auto; }
+.more-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 18px; border-top: 1px solid var(--line); }
+/* Tables become cards on phones: the first cell is the title, the status sits top right, the rest are label: value lines. */
+@media (max-width: 640px) {
+  .tablewrap table.cardify { min-width: 0; }
+  table.cardify thead { display: none; }
+  table.cardify tbody tr:not(.dayrow) { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+  table.cardify tbody tr:last-child { border-bottom: 0; }
+  table.cardify td { display: block; padding: 0; border: 0; white-space: normal !important; grid-column: 1 / -1; font-size: 14px; }
+  table.cardify td.lead { grid-column: 1; } table.cardify td.pin { grid-column: 2; grid-row: 1; justify-self: end; text-align: right; }
+  table.cardify td[data-label]::before { content: attr(data-label) ": "; color: var(--muted); }
+  table.cardify td.empty-sm { display: none; }
+  table.cardify tr.dayrow { display: block; } table.cardify tr.dayrow td { display: block; }
+  table.acttable td.lead { grid-row: 1; } table.acttable td[data-label="When"] { grid-column: 1 / -1; }
+}
 .logo-row { display: flex; flex-wrap: wrap; gap: 12px 16px; align-items: center; }
 .logo-prev { width: 220px; height: 96px; border: 1px solid var(--line); border-radius: 12px; background: #1f4e79; display: grid; place-items: center; padding: 10px; position: relative; overflow: hidden; }
 .logo-prev img { position: absolute; inset: 8px; width: calc(100% - 16px); height: calc(100% - 16px); object-fit: contain; }
@@ -496,6 +528,19 @@ function applyTheme(t) {
 applyTheme(getTheme());
 const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const fmtUid = (u) => (u || "").match(/.{1,2}/g)?.join(":") || "";
+// In lists, a badge or tag is "on file" plus its last two bytes (enough to tell two apart); the full code is in the detail panel.
+const shortUid = (u) => { const p = fmtUid(u).split(":"); return p.length > 2 ? "…" + p.slice(-2).join(":") : fmtUid(u); };
+// Spreadsheet download (opens in Excel, Numbers or Google Sheets).
+function downloadCsv(name, header, rows) {
+  const cell = (v) => { const t = v == null ? "" : String(v); return /[",\n\r]/.test(t) || /^[=+\-@]/.test(t) ? `"${(/^[=+\-@]/.test(t) ? "'" : "") + t.replace(/"/g, '""')}"` : t; };
+  const csv = "\ufeff" + [header, ...rows].map((r) => r.map(cell).join(",")).join("\r\n");
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  a.download = `${(DB.org.name || "export").replace(/[^\w-]+/g, "-")}-${name}-${dayKey(localDay(Date.now(), tz()))}.csv`;
+  document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  return csv;
+}
+const csvWhen = (ms) => (ms ? new Intl.DateTimeFormat("en-US", { timeZone: tz(), year: "numeric", month: "2-digit", day: "2-digit", hour: "numeric", minute: "2-digit" }).format(new Date(ms)) : "");
+function statusText(q) { return q.status === "lost" ? "Lost" : q.status === "maintenance" ? "Maintenance" : q.status === "retired" ? "Retired" : q.is_overdue ? "Overdue" : q.is_extended ? "Out too long" : q.holder ? "Checked out" : "Available"; }
 const HOUR = 3600000, MIN = 60000;
 
 /* ---- Time zone helpers (company time zone) ---- */
@@ -678,11 +723,11 @@ const api = {
   activity() {
     return DB.txns.map((t) => {
       const q = eqOf(t.eq), by = empOf(t.emp), prev = t.prev ? empOf(t.prev) : null;
-      const forOther = prev && prev.id !== by.id;
+      const forOther = prev && by && prev.id !== by.id;
       const description = t.action === "checkout" ? (forOther ? `Checked out (was still with ${prev.name})` : "Checked out")
         : t.flags.includes("found_lost_item") ? "Returned as found" : forOther ? `Returned for ${prev.name}` : "Returned";
       const place = t.source === "dashboard" ? "Dashboard" : DB.stations.find((s) => s.id === t.station)?.name;
-      return { ...t, equipment: q.name, category: catOf(q.cat).name, by: by.name, byId: by.id, previous: prev?.name, description, place, forOther };
+      return { ...t, equipment: q?.name || "Removed item", category: (q && catOf(q.cat)?.name) || "", by: by?.name || "Removed person", byId: by?.id, previous: prev?.name, description, place, forOther };
     }).sort((a, b) => b.at - a.at);
   },
   /* equipment_alerts table */
@@ -910,7 +955,7 @@ const ICON = {
   wifiOff: '<path d="M12 20h.01M8.5 16.43a5 5 0 0 1 7 0M2 8.82a15 15 0 0 1 4.17-2.65M10.66 5c4.01-.36 8.14.9 11.34 3.76M16.85 11.25a10 10 0 0 1 2.22 1.68M5 13a10 10 0 0 1 5.24-2.76"/><path d="m2 2 20 20"/>',
   help: '<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01"/>',
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>',
-  moon: '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>', monitor: '<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>', check: '<path d="M20 6 9 17l-5-5"/>',
+  moon: '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>', monitor: '<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>', check: '<path d="M20 6 9 17l-5-5"/>', download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>',
   user: '<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>', logout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>',
 };
 const ic = (k, cls = "") => `<svg ${cls ? `class="${cls}" ` : ""}viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[k]}</svg>`;
@@ -1027,7 +1072,7 @@ function vOverview() {
   const lastOut = {}; for (const x of act) if (x.action === "checkout" && !(x.eq in lastOut)) lastOut[x.eq] = x.place;
   const stStats = (s) => ({ taps: act.filter((x) => x.place === s.name && x.at >= today0).length, out: out.filter((q) => lastOut[q.id] === s.name).length });
   const offline = live.filter((s) => !s.online && !s.pending).length;
-  return head(`${greet}, ${esc(firstName(DB.me.name))}`, `Here's what's happening at your stations today.`) + `
+  return head(`${greet}, ${esc(firstName(DB.me.name))}`, `Here's what's happening at your stations today.`) + gettingStarted() + `
     <div class="stats">
       <a class="stat" href="#equipment" data-filter="all"><span class="ic">${ic("box")}</span><div><span>Equipment</span><b>${eq.filter((q) => q.status !== "retired").length}</b>
         <small>${eq.filter((q) => q.status === "available" && !q.holder).length} in the room now</small></div></a>
@@ -1061,6 +1106,25 @@ function vOverview() {
       </div>
     </div>`;
 }
+// Shown to admins on the home screen until the company is set up (or they hide it).
+function gettingStarted() {
+  if (!can("admin")) return "";
+  const key = "sp.setupHidden." + (DB.org.id || "demo");
+  try { if (localStorage.getItem(key)) return ""; } catch {}
+  const st = api.stations(), team = api.members();
+  const steps = [
+    ["station", "Connect your station", "Type its activation code on the station's setup screen.", st.some((s) => !s.pending && !s.revoked), "#stations", "Stations"],
+    ["equipment", "Add your equipment", "Here, or at the station with a manager or admin fob: tap a tag, give it a name.", DB.equipment.length > 0, "#equipment", "Equipment"],
+    ["people", "Add your employees", "Give each person a badge so the station knows who's checking out.", DB.employees.some((e) => e.role === "employee"), "#employees", "Employees"],
+    ["team", "Invite your supervisors", "They get their own sign-in to this dashboard.", team.members.length + team.invites.length > 1, "#team", "Team access"],
+  ];
+  const done = steps.filter((x) => x[3]).length;
+  if (done === steps.length) return "";
+  return `<section class="panel setup"><div class="panel-h"><h2>Get set up<small>${done} of ${steps.length} done</small></h2><button class="link quiet" data-act="hideSetup">Hide</button></div>
+    <div class="setup-bar" role="progressbar" aria-valuemin="0" aria-valuemax="${steps.length}" aria-valuenow="${done}"><i style="width:${(done / steps.length) * 100}%"></i></div>
+    <ol class="setup-steps">${steps.map(([k, t, d, ok, href, btn], i) => `<li class="${ok ? "done" : ""}"><span class="num" aria-hidden="true">${ok ? ic("check") : i + 1}</span>
+      <span><b>${t}</b><span class="sub">${ok ? "Done" : d}</span></span>${ok ? "" : `<a class="btn sm" href="${href}">${btn}</a>`}</li>`).join("")}</ol></section>`;
+}
 function agoShort(ms) { const m = (Date.now() - ms) / MIN; if (m < 1) return "now"; if (m < 60) return Math.round(m) + "m ago"; if (m < 48 * 60) return Math.round(m / 60) + "h ago"; return Math.round(m / 1440) + "d ago"; }
 function feedRow(a) {
   return `<div class="row"><time>${esc(fmtWhen(a.at).replace(/^Yesterday /, "Yest. "))}</time><span><b>${esc(a.by)}</b> ${esc(a.description.charAt(0).toLowerCase() + a.description.slice(1))} <b>${esc(a.equipment)}</b>
@@ -1077,20 +1141,21 @@ function vEquipment() {
     && (!q || `${x.name} ${x.asset} ${x.holderName || ""} ${x.tag}`.toLowerCase().includes(q)))
     .sort((a, b) => (b.is_overdue - a.is_overdue) || (b.is_extended - a.is_extended) || a.name.localeCompare(b.name, undefined, { numeric: true }));
   const seg = [["all", "All"], ["out", "Out"], ["overdue", "Overdue"], ["extended", "Out too long"], ["available", "Available"], ["lost", "Lost"], ["maintenance", "Maintenance"]];
-  return head("Equipment", `${all.length} items · also addable at a station with a manager or admin fob`, can("admin") ? `<button class="btn primary" data-act="newEq">Add equipment</button>` : "") + `
+  S.eqRows = rows;
+  return head("Equipment", `${all.length} items · also addable at a station with a manager or admin fob`, `<span class="actions"><button class="btn" data-act="csvEquipment">${ic("download")}Download CSV</button>${can("admin") ? `<button class="btn primary" data-act="newEq">Add equipment</button>` : ""}</span>`) + `
     <div class="filters">
       <input class="field" id="eqSearch" type="search" aria-label="Search equipment" placeholder="Search name, asset tag or person" value="${esc(f.eqSearch)}" data-f="eqSearch">
       <select class="field" id="eqCat" aria-label="Category" data-f="eqCat"><option value="">All categories</option>${DB.categories.map((c) => `<option value="${c.id}" ${f.eqCat === c.id ? "selected" : ""}>${esc(c.name)}</option>`).join("")}</select>
       <div class="seg" role="group" aria-label="Status">${seg.map(([k, l]) => `<button class="${f.eqStatus === k ? "on" : ""}" data-seg="eqStatus:${k}">${l}</button>`).join("")}</div>
     </div>
-    <section class="panel"><div class="tablewrap"><table>
+    <section class="panel"><div class="tablewrap"><table class="cardify">
       <thead><tr><th>Item</th><th>Category</th><th>Status</th><th>With</th><th>Out since</th><th>Due</th><th>Time limit</th></tr></thead>
       <tbody>${rows.map((x) => `<tr class="click" data-open="equipment:${x.id}" tabindex="0">
-        <td><b>${esc(x.name)}</b><span class="sub mono">${esc(x.asset)}</span></td><td>${esc(x.category)}</td><td>${statusChip(x)}</td>
-        <td>${x.holderName ? esc(x.holderName) : `<span class="muted">In the room</span>`}</td>
-        <td class="num">${x.holder ? esc(fmtWhen(x.out_at)) : ""}</td>
-        <td class="num ${x.is_overdue ? "late" : ""}">${x.due_at && x.holder ? esc(fmtWhen(x.due_at)) : ""}</td>
-        <td>${esc(limitText(x.limit))}${x.mode !== "category" ? ` <span class="chip brand">item</span>` : ""}</td></tr>`).join("")}</tbody></table>
+        <td class="lead"><b>${esc(x.name)}</b><span class="sub mono">${esc(x.asset)}</span></td><td data-label="Category">${esc(x.category)}</td><td class="pin">${statusChip(x)}</td>
+        <td data-label="With">${x.holderName ? esc(x.holderName) : `<span class="muted">In the room</span>`}</td>
+        <td class="num ${x.holder ? "" : "empty-sm"}" data-label="Out since">${x.holder ? esc(fmtWhen(x.out_at)) : ""}</td>
+        <td class="num ${x.is_overdue ? "late" : ""} ${x.due_at && x.holder ? "" : "empty-sm"}" data-label="Due">${x.due_at && x.holder ? esc(fmtWhen(x.due_at)) : ""}</td>
+        <td data-label="Time limit">${esc(limitText(x.limit))}${x.mode !== "category" ? ` <span class="chip brand">item</span>` : ""}</td></tr>`).join("")}</tbody></table>
       ${rows.length ? "" : `<div class="empty">No equipment matches these filters.</div>`}</div></section>`;
 }
 
@@ -1101,40 +1166,71 @@ function vEmployees() {
     .sort((a, b) => (b.active - a.active) || (b.out - a.out) || a.name.localeCompare(b.name));
   return head("Employees", `${rows.filter((e) => e.active).length} active · also addable at a station with a manager or admin fob`, can("supervisor") ? `<button class="btn primary" data-act="newEmp">Add employee</button>` : "") + `
     <div class="filters"><input class="field" type="search" id="empSearch" aria-label="Search employees" placeholder="Search name or employee #" value="${esc(S.f.empSearch)}" data-f="empSearch"></div>
-    <section class="panel"><div class="tablewrap"><table>
+    <section class="panel"><div class="tablewrap"><table class="cardify">
       <thead><tr><th>Name</th><th>Role</th><th>Shift</th><th>Badge</th><th>Has out</th><th>Last tap</th></tr></thead>
       <tbody>${rows.map((e) => `<tr class="click" data-open="employee:${e.id}" tabindex="0" ${e.active ? "" : 'style="opacity:.55"'}>
-        <td><b>${esc(e.name)}</b><span class="sub">${esc(e.number || "")}${e.active ? "" : " · Inactive"}</span></td>
-        <td>${e.role === "employee" ? `<span class="muted">Employee</span>` : `<span class="chip brand">${ROLE[e.role]} fob</span>`}</td>
-        <td>${esc(e.shiftNames.join(", ") || "—")}</td><td class="mono">${e.badge ? esc(fmtUid(e.badge)) : `<span class="muted" style="font-family:var(--body)">No badge</span>`}</td>
-        <td class="num">${e.out ? `<b>${e.out}</b>` : `<span class="muted">0</span>`}</td><td class="num">${e.last ? esc(fmtWhen(e.last)) : ""}</td></tr>`).join("")}</tbody></table></div></section>`;
+        <td class="lead"><b>${esc(e.name)}</b><span class="sub">${esc(e.number || "")}${e.active ? "" : " · Inactive"}</span></td>
+        <td class="pin">${e.role === "employee" ? `<span class="muted">Employee</span>` : `<span class="chip brand">${ROLE[e.role]} fob</span>`}</td>
+        <td data-label="Shift">${esc(e.shiftNames.join(", ") || "—")}</td><td data-label="Badge">${e.badge ? `On file <span class="muted mono" title="${esc(fmtUid(e.badge))}">${esc(shortUid(e.badge))}</span>` : `<span class="muted">No badge</span>`}</td>
+        <td class="num" data-label="Has out">${e.out ? `<b>${e.out}</b>` : `<span class="muted">0</span>`}</td><td class="num ${e.last ? "" : "empty-sm"}" data-label="Last tap">${e.last ? esc(fmtWhen(e.last)) : ""}</td></tr>`).join("")}</tbody></table></div></section>`;
 }
 
 /* ---------------- Activity ---------------- */
-function vActivity() {
+function activityRows() {
   const f = S.f; const q = f.actSearch.trim().toLowerCase();
-  const since = f.actRange === "today" ? zoned(localDay(Date.now(), tz()), "00:00", tz()) : f.actRange === "24h" ? Date.now() - 24 * HOUR : 0;
-  const rows = api.activity().filter((a) => a.at >= since
+  let since = 0, until = Infinity;
+  if (f.actDay) { const [y, m, d] = f.actDay.split("-").map(Number); since = zoned({ y, m, d }, "00:00", tz()); until = zoned(addDays({ y, m, d }, 1), "00:00", tz()); }
+  else since = f.actRange === "today" ? zoned(localDay(Date.now(), tz()), "00:00", tz()) : f.actRange === "24h" ? Date.now() - 24 * HOUR : 0;
+  return api.activity().filter((a) => a.at >= since && a.at < until
     && (f.actType === "all" || (f.actType === "out" && a.action === "checkout") || (f.actType === "in" && a.action === "checkin")
         || (f.actType === "for" && a.forOther) || (f.actType === "late" && a.flags.includes("returned_after_extended")))
     && (!q || `${a.by} ${a.equipment} ${a.previous || ""}`.toLowerCase().includes(q)));
+}
+function vActivity() {
+  const f = S.f; const rows = activityRows(); const show = f.actShow || 150;
   const seg = [["all", "All"], ["out", "Checkouts"], ["in", "Returns"], ["for", "Returned for someone"], ["late", "Returned late"]];
   const rng = [["today", "Today"], ["24h", "24 hours"], ["7d", "7 days"]];
-  return head("Activity", "Every tap, who made it, and for whom. History can't be edited or deleted.") + `
+  const today = dayKey(localDay(Date.now(), tz()));
+  // One table, a heading row per day (newest first).
+  let html = "", lastDay = "";
+  for (const a of rows.slice(0, show)) {
+    const d = localDay(a.at, tz()), k = dayKey(d);
+    if (k !== lastDay) { lastDay = k; const n = rows.filter((x) => dayKey(localDay(x.at, tz())) === k).length;
+      html += `<tr class="dayrow"><td colspan="5">${esc(k === today ? "Today" : fmtDay(d))}<span>${n} tap${n === 1 ? "" : "s"}</span></td></tr>`; }
+    html += `<tr><td class="num" data-label="When">${esc(fmtTime(a.at))}</td><td class="lead"><button class="link" data-open="employee:${a.byId}">${esc(a.by)}</button></td>
+      <td class="pin">${a.action === "checkout" ? `<span class="chip info">Out</span>` : `<span class="chip ok">In</span>`} ${esc(a.description)}${a.flags.includes("returned_after_extended") ? ` <span class="chip warn">late</span>` : ""}</td>
+      <td data-label="Item"><button class="link" data-open="equipment:${a.eq}">${esc(a.equipment)}</button></td><td class="muted" data-label="Where">${esc(a.place || "")}</td></tr>`;
+  }
+  return head("Activity", "Every tap, who made it, and for whom. History can't be edited or deleted.", `<button class="btn" data-act="csvActivity">${ic("download")}Download CSV</button>`) + `
     <div class="filters">
       <input class="field" type="search" aria-label="Search activity" placeholder="Search person or item" value="${esc(f.actSearch)}" data-f="actSearch">
       <div class="seg" role="group" aria-label="Type">${seg.map(([k, l]) => `<button class="${f.actType === k ? "on" : ""}" data-seg="actType:${k}">${l}</button>`).join("")}</div>
-      <div class="seg" role="group" aria-label="Time range">${rng.map(([k, l]) => `<button class="${f.actRange === k ? "on" : ""}" data-seg="actRange:${k}">${l}</button>`).join("")}</div>
+      <div class="seg" role="group" aria-label="Time range">${rng.map(([k, l]) => `<button class="${!f.actDay && f.actRange === k ? "on" : ""}" data-seg="actRange:${k}">${l}</button>`).join("")}</div>
+      <label class="daypick"><span>Day</span><input class="field" type="date" id="actDay" value="${esc(f.actDay || "")}" max="${today}" aria-label="Show one day"></label>
+      ${f.actDay ? `<button class="btn sm" data-act="clearDay">Clear day</button>` : ""}
     </div>
-    <section class="panel"><div class="tablewrap"><table>
-      <thead><tr><th>When</th><th>Who</th><th>What</th><th>Item</th><th>Where</th></tr></thead>
-      <tbody>${rows.slice(0, 250).map((a) => `<tr>
-        <td class="num">${esc(fmtWhen(a.at))}</td><td><button class="link" data-open="employee:${a.byId}">${esc(a.by)}</button></td>
-        <td>${a.action === "checkout" ? `<span class="chip info">Out</span>` : `<span class="chip ok">In</span>`} ${esc(a.description)}
-          ${a.flags.includes("returned_after_extended") ? ` <span class="chip warn">late</span>` : ""}</td>
-        <td><button class="link" data-open="equipment:${a.eq}">${esc(a.equipment)}</button></td><td class="muted">${esc(a.place)}</td></tr>`).join("")}</tbody></table>
-      ${rows.length ? "" : `<div class="empty">No activity matches these filters.</div>`}</div></section>
-    ${rows.length > 250 ? `<p class="muted">Showing the latest 250 of ${rows.length}. Narrow the filters to see older entries.</p>` : ""}`;
+    <section class="panel"><div class="tablewrap"><table class="cardify acttable">
+      <thead><tr><th>Time</th><th>Who</th><th>What</th><th>Item</th><th>Where</th></tr></thead>
+      <tbody>${html}</tbody></table>
+      ${rows.length ? "" : `<div class="empty">${S.dayLoading ? "Loading that day…" : f.actDay ? "No taps that day." : "No activity matches these filters."}</div>`}</div>
+      ${rows.length > show ? `<div class="more-row"><span class="muted">Showing ${show} of ${rows.length}</span><button class="btn" data-act="actMore">Show more</button></div>` : ""}</section>`;
+}
+function csvActivity() {
+  const rows = activityRows();
+  downloadCsv("activity", ["When", "Who", "What", "Item", "Category", "Where", "For"], rows.map((a) => [csvWhen(a.at), a.by, a.description, a.equipment, a.category, a.place || "", a.previous || ""]));
+  toast(`Downloaded ${rows.length} row${rows.length === 1 ? "" : "s"}`);
+}
+function csvEquipment() {
+  const rows = S.eqRows || api.equipment();
+  downloadCsv("equipment", ["Item", "Asset tag", "Category", "Status", "With", "Out since", "Due", "Time limit"],
+    rows.map((x) => [x.name, x.asset, x.category, statusText(x), x.holderName || "", x.holder ? csvWhen(x.out_at) : "", x.holder && x.due_at ? csvWhen(x.due_at) : "", limitText(x.limit)]));
+  toast(`Downloaded ${rows.length} item${rows.length === 1 ? "" : "s"}`);
+}
+function csvReports() {
+  const reps = api.shiftReports().filter((r) => !r.inProgress);
+  downloadCsv("shift-reports", ["Date", "Shift", "Start", "End", "Not back on time", "Still out", "Signed off by"],
+    reps.map((r) => [dayKey(r.day), r.shift.name, csvWhen(r.start), csvWhen(r.end), r.outstanding || 0, r.stillOut || 0, r.ack?.by || ""]));
+  toast(`Downloaded ${reps.length} report${reps.length === 1 ? "" : "s"}`);
 }
 
 /* ---------------- Alerts ---------------- */
@@ -1163,7 +1259,7 @@ function vShifts() {
   const reps = api.shiftReports(); const byDay = {};
   reps.forEach((r) => { (byDay[dayKey(r.day)] = byDay[dayKey(r.day)] || []).push(r); });
   const crewN = (id) => DB.employees.filter((e) => e.active && e.shifts.includes(id)).length;
-  return head("Shifts", "Who works when, and what each crew hadn't returned by the end of their shift.", can("admin") ? `<button class="btn primary" data-open="shiftForm:">Add a shift</button>` : "") +
+  return head("Shifts", "Who works when, and what each crew hadn't returned by the end of their shift.", `<span class="actions"><button class="btn" data-act="csvReports">${ic("download")}Download reports</button>${can("admin") ? `<button class="btn primary" data-open="shiftForm:">Add a shift</button>` : ""}</span>`) +
     `<section class="panel"><div class="panel-h"><h2>Shifts</h2>${can("supervisor") ? "" : `<span class="muted" style="font-size:13px">View only</span>`}</div><div class="tablewrap"><table class="tbl">
       <thead><tr><th>Shift</th><th>Time</th><th>Days</th><th>Grace</th><th>Crew</th><th></th></tr></thead><tbody>
       ${DB.shifts.map((x) => `<tr ${x.active ? "" : 'style="opacity:.6"'}><td><b>${esc(x.name)}</b>${x.active ? "" : ` <span class="chip quiet">Not in use</span>`}</td>
@@ -1449,12 +1545,18 @@ document.addEventListener("click", async (e) => {
   const op = e.target.closest("[data-open]");
   if (op) { const [kind, ...rest] = op.dataset.open.split(":"); return openDrawer(kind, rest.join(":")); }
   const seg = e.target.closest("[data-seg]");
-  if (seg) { const [k, v] = seg.dataset.seg.split(":"); S.f[k] = v; return render(); }
+  if (seg) { const [k, v] = seg.dataset.seg.split(":"); S.f[k] = v; if (k === "actRange") S.f.actDay = ""; if (k.startsWith("act")) S.f.actShow = 150; return render(); }
   const t = e.target.closest("[data-act]"); if (!t) return;
   const a = t.dataset.act, D = S.drawer;
   if (a === "acctMenu" || a === "orgMenu") { const k = a === "acctMenu" ? "acct" : "org"; S.pop = S.pop === k ? null : k; const pop = t.nextElementSibling; pop.hidden = S.pop !== k;
     t.setAttribute("aria-expanded", String(S.pop === k)); if (S.pop) pop.querySelector("button, a, select")?.focus(); return; }
   if (a === "rmLogo") { api.saveSettings({ logo_url: null }); toast("Logo removed. Stations show Sonoran Point's."); return render(); }
+  if (a === "clearDay") { S.f.actDay = ""; return render(); }
+  if (a === "hideSetup") { try { localStorage.setItem("sp.setupHidden." + (DB.org.id || "demo"), "1"); } catch {} toast("Hidden. Everything is still under the menu on the left."); return render(); }
+  if (a === "csvActivity") return csvActivity();
+  if (a === "csvEquipment") return csvEquipment();
+  if (a === "csvReports") return csvReports();
+  if (a === "actMore") { S.f.actShow = (S.f.actShow || 150) + 150; return render(); }
   if (a === "theme") { applyTheme(t.dataset.v); return render(); }
   if (a === "navOpen") { S.navOpen = true; render(); $(".snav a.on")?.focus(); return; }
   if (a === "navClose") { S.navOpen = false; return render(); }
@@ -1505,6 +1607,9 @@ document.addEventListener("input", (e) => {
 document.addEventListener("change", (e) => {
   const t = e.target;
   if (t.id === "switchOrg") { S.drawer = null; return openCompany(t.value); }
+  if (t.id === "actDay") { S.f.actDay = t.value; S.f.actShow = 150;
+    if (LIVE && t.value && live.loadDay) { S.dayLoading = true; render(); live.loadDay(t.value).catch((err) => toast(niceErr(err))).finally(() => { S.dayLoading = false; render(); }); return; }
+    return render(); }
   if (t.id === "logoFile" && t.files?.[0]) { const file = t.files[0]; S.logoBusy = true; render();
     uploadLogo(file).then((url) => { api.saveSettings({ logo_url: url }); toast("Logo updated. Stations show it within a minute."); })
       .catch((err) => toast(err.message)).finally(() => { S.logoBusy = false; render(); }); return; }
@@ -1605,6 +1710,17 @@ async function sendInviteEmail(email, token, name) {
 
 const L = { org: null, companies: [], user: null, names: {}, timer: null, queue: Promise.resolve(), pending: 0, idMap: {} };
 const live = {
+  // Activity for a day older than what's loaded (the last 8 days come in on sign-in).
+  async loadDay(day) {
+    const [y, m, d] = day.split("-").map(Number);
+    const from = zoned({ y, m, d }, "00:00", tz()), to = zoned(addDays({ y, m, d }, 1), "00:00", tz());
+    if (from >= Date.now() - 8 * 86400000 + HOUR) return;
+    const rows = await all("transactions", "id,occurred_at,equipment_id,employee_id,previous_employee_id,action,station_id,source,flags,notes",
+      (x) => x.eq("org_id", L.org).gte("occurred_at", new Date(from).toISOString()).lt("occurred_at", new Date(to).toISOString()).order("occurred_at"));
+    const have = new Set(DB.txns.map((t) => t.id));
+    for (const t of rows) if (!have.has(t.id)) DB.txns.push({ id: t.id, at: ms(t.occurred_at), eq: t.equipment_id, emp: t.employee_id, prev: t.previous_employee_id, action: t.action,
+      station: t.station_id, source: t.source, flags: t.flags || [], notes: t.notes });
+  },
   async load() {
     const org = L.org, since = new Date(Date.now() - 8 * 86400000).toISOString();
     const [o, cats, eq, emps, shifts, assigns, stations, txns, alerts, reports, pins] = await Promise.all([

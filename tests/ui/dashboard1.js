@@ -92,7 +92,26 @@ const go = async (r) => { dom.window.location.hash = r; await sleep(30); };
   check(/^[A-Z2-9]{4}-[A-Z2-9]{4}$/.test(doc.querySelector(".codebox").textContent.trim()), "add a station -> one-time activation code");
   await go("activity");
   doc.querySelector('[data-seg="actType:for"]').click(); await sleep(10);
-  check([...doc.querySelectorAll("tbody tr")].every((tr) => /Returned for/.test(tr.textContent)) && doc.querySelectorAll("tbody tr").length > 0, "activity filter: returned for someone");
+  check([...doc.querySelectorAll("tbody tr:not(.dayrow)")].every((tr) => /Returned for/.test(tr.textContent)) && doc.querySelectorAll("tbody tr:not(.dayrow)").length > 0, "activity filter: returned for someone");
+  doc.querySelector('[data-seg="actType:all"]').click(); doc.querySelector('[data-seg="actRange:7d"]').click(); await sleep(10);
+  check(doc.querySelectorAll("tr.dayrow").length >= 2 && /Today/.test(doc.querySelector("tr.dayrow").textContent), "activity is grouped by day, newest first");
+  { const dp = doc.querySelector("#actDay"); const y = E("dayKey(addDays(localDay(Date.now(), tz()), -1))"); dp.value = y; dp.dispatchEvent(new dom.window.Event("change", { bubbles: true })); await sleep(10);
+    check(doc.querySelectorAll("tr.dayrow").length === 1 && !/Today/.test(doc.querySelector("tr.dayrow")?.textContent || "Today") && doc.querySelector("[data-act=clearDay]"), "picking a day shows just that day");
+    doc.querySelector("[data-act=clearDay]").click(); await sleep(10); }
+  { let csv = "";
+    dom.window.URL.createObjectURL = () => "blob:x"; dom.window.URL.revokeObjectURL = () => {};
+    csv = E("downloadCsv('t', ['A','B'], [['x, y', '=1+1'], ['say \"hi\"', 2]])");
+    check(csv.includes('"x, y"') && csv.includes(`"'=1+1"`) && csv.includes('"say ""hi"""'), "CSV quotes commas and quotes, and defuses formulas");
+    doc.querySelector("[data-act=csvActivity]").click(); await sleep(10);
+    check(/Downloaded \d+ row/.test(doc.body.textContent), "activity downloads as CSV"); }
+  await go("equipment"); check(doc.querySelector("[data-act=csvEquipment]") && doc.querySelector("table.cardify td[data-label=With]"), "equipment has CSV download and phone card labels");
+  await go("employees"); check(/On file/.test(doc.querySelector("table.cardify tbody").textContent) && !/([0-9A-F]{2}:){3}/.test(doc.querySelector("table.cardify tbody").textContent), "badges show as 'On file' with a short code, not the raw number");
+  await go("overview"); check(!doc.querySelector(".setup"), "the set-up checklist is hidden once the demo company is set up");
+  E("window._st = api.stations; api.stations = () => []; render()"); await sleep(10);
+  check(/1 of 4|2 of 4|3 of 4/.test(doc.querySelector(".setup")?.textContent || "") && doc.querySelector('.setup a[href="#stations"]'), "a company still setting up sees the checklist with a link to each step");
+  doc.querySelector("[data-act=hideSetup]").click(); await sleep(10);
+  check(!doc.querySelector(".setup"), "the checklist can be hidden");
+  E("api.stations = window._st; localStorage.clear(); render()");
   // logo in Settings
   await go("settings");
   check(doc.querySelector("#logoFile") && /No logo yet: stations show your name/.test(doc.querySelector(".logo-row").textContent), "settings offers a logo upload, their name shown until then");

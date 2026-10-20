@@ -167,6 +167,15 @@ const ORG = "00000000-0000-0000-0000-00000000d3e0";
   check(await P.until(() => one(`select notes from equipment_alerts where id='${aid}'`) === "Called them"), "sign off an alert saves");
   await P.settled();
 
+  // activity: a day older than the 8 days loaded at sign-in is fetched when picked
+  one(`insert into transactions (org_id, equipment_id, employee_id, action, source, occurred_at, flags)
+       select '${ORG}', (select id from equipment where org_id='${ORG}' order by name limit 1), (select id from employees where org_id='${ORG}' order by id limit 1),
+              'checkin', 'dashboard', (date_trunc('day', now() at time zone 'America/Phoenix') - interval '20 days' + interval '10 hours') at time zone 'America/Phoenix', '{history_test}'`);
+  P.go("activity"); await P.until(() => P.doc.querySelector("#actDay"));
+  { const day = await P.E("dayKey(addDays(localDay(Date.now(), tz()), -20))"); const dp = P.doc.querySelector("#actDay"); dp.value = day;
+    dp.dispatchEvent(new P.dom.window.Event("change", { bubbles: true }));
+    check(await P.until(() => P.doc.querySelectorAll("tbody tr:not(.dayrow)").length === 1), "picking an older day loads it from the database", P.doc.querySelector(".panel")?.textContent.slice(0, 200)); }
+  P.click("[data-act=clearDay]");
   // a failed save is reported and the screen goes back to the database's version
   one(`update equipment set nfc_uid = '04DEADBEEF01' where name = 'Radio 09'`);
   P.go("equipment"); await P.E("live.reload()"); await P.until(() => /Radio/.test(P.text()));
