@@ -185,6 +185,14 @@ html.kiosk .screen { border-radius: 0; }
 .results.tight .rrow .dot { width: 1.8cqw; height: 1.8cqw; font-size: 1.1cqw; }
 .results.tight .result { padding: .5cqw 1.2cqw; } .results.tight .result .ico { width: 3cqw; height: 3cqw; font-size: 1.6cqw; }
 .results.tight .result .t { font-size: 2.3cqw; } .results.tight .result .l { font-size: 1.5cqw; }
+/* Report a problem */
+.mine li.pick { cursor: pointer; border: .25cqw solid var(--brand); }
+.rgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.2cqw; align-content: start; flex: 1; min-height: 0; margin-bottom: 2.2cqw; }
+.rbtn { border: .25cqw solid var(--screen-line); background: var(--screen); color: var(--screen-ink); border-radius: 1.4cqw; padding: 2cqw 1.6cqw; text-align: left; display: flex; flex-direction: column; gap: .4cqw; }
+.rbtn b { font-family: var(--display); font-size: 2.6cqw; } .rbtn small { font-size: 1.6cqw; color: var(--bad, #c0392b); font-weight: 700; }
+.rbtn.stop { border-color: color-mix(in srgb, var(--bad, #c0392b) 55%, var(--screen-line)); }
+.rgrid.dense .rbtn { padding: 1.2cqw 1.4cqw; } .rgrid.dense .rbtn b { font-size: 2.1cqw; }
+.lk-prob { margin: 1cqw 0 0; font-size: 2cqw; color: var(--warn, #b26a00); } .lk-prob.stop { color: var(--bad, #c0392b); }
 .feed.compact { gap: .8cqw; padding-top: 1.6cqw; } .feed.compact .prompt { font-size: 2.6cqw; } .feed.compact .prompt small { display: none; }
 .results.cols2 { display: grid; grid-template-columns: 1fr 1fr; align-content: start; }
 .results.cols3 { grid-template-columns: 1fr 1fr 1fr; } .results.cols3 .rrow .det { display: none; }
@@ -624,12 +632,19 @@ function demoSeed() {
     stations: [{ id: "st1", name: "Equipment Room 01", location: "Terminal 3", code: "DEMO0001", key_hash: null, activated: false, revoked: false, last_seen: null }],
     txns: [],
     audit: [],   // staff actions (what the audit log records)
+    reasons: demoReasons(),
+    problems: [],
   };
 }
+function demoReasons() { return [["Damaged", true], ["Not charging", false], ["Missing part", false], ["Other", false]].map(([label, blocks_checkout], i) => ({ id: "r" + (i + 1), label, blocks_checkout, sort: i + 1 })); }
 
 const demo = {
   db: null, wifi: true, listeners: [],
-  load() { this.db = store.get("demoServer.v2") || demoSeed(); },
+  load() { this.db = store.get("demoServer.v2") || demoSeed(); this.db.reasons ||= demoReasons(); this.db.problems ||= []; },
+  openProblem(eqId) {
+    const p = (this.db.problems || []).filter((x) => x.equipment_id === eqId && !x.cleared_at).sort((a, b) => (b.blocks_checkout - a.blocks_checkout) || (b.reported_at - a.reported_at))[0];
+    return p ? { id: p.id, reason: p.reason, blocks_checkout: p.blocks_checkout, reported_at: new Date(p.reported_at).toISOString() } : null;
+  },
   save() { store.set("demoServer.v2", this.db); this.listeners.forEach((f) => f()); },
   reset() { this.db = demoSeed(); this.save(); },
   station(key) { return key ? this.db.stations.find((s) => s.key_hash === key && s.activated && !s.revoked) : null; },
@@ -664,7 +679,8 @@ const demo = {
       station: { id: st.id, name: st.name, location: st.location },
       organization: { name: o.name, logo_url: o.logo_url, primary_color: o.primary_color, accent_color: o.accent_color,
         timezone: o.timezone, terminology: o.terminology, settings: o.settings, enabled_modules: o.enabled_modules },
-      categories: [...this.db.categories].sort((a, b) => a.sort - b.sort).map((c) => ({ id: c.id, name: c.name, icon: null })) };
+      categories: [...this.db.categories].sort((a, b) => a.sort - b.sort).map((c) => ({ id: c.id, name: c.name, icon: null })),
+      problem_reasons: this.db.reasons.filter((r) => !r.archived).sort((a, b) => a.sort - b.sort).map((r) => ({ id: r.id, label: r.label, blocks_checkout: r.blocks_checkout })) };
   },
   fns: {
     activate_station({ p_activation_code, p_software_version }) {
@@ -687,7 +703,7 @@ const demo = {
         equipment: demo.db.equipment.filter((q) => q.nfc_uid && q.status !== "retired").map((q) => ({
           id: q.id, nfc_uid: q.nfc_uid, name: q.name, category_id: q.category_id, status: q.status,
           current_employee_id: q.current_employee_id, checked_out_at: q.checked_out_at, due_at: q.due_at,
-          extended_alert_hours: demo.extendedHours(q) })) };
+          extended_alert_hours: demo.extendedHours(q), problem: demo.openProblem(q.id) })) };
     },
     station_heartbeat({ p_device_key }) {
       const st = demo.station(p_device_key); if (!st) return { ok: false, error: "station_not_authorized" };
@@ -700,7 +716,31 @@ const demo = {
       const h = eq.current_employee_id && demo.emp(eq.current_employee_id);
       return { ok: true, equipment: { id: eq.id, name: eq.name, status: eq.status, category: demo.cat(eq.category_id)?.name },
         holder: h ? { id: h.id, name: h.name } : null, checked_out_at: eq.checked_out_at, due_at: eq.due_at,
-        is_overdue: !!(eq.due_at && eq.due_at < clock.now()) };
+        is_overdue: !!(eq.due_at && eq.due_at < clock.now()), problem: demo.openProblem(eq.id) };
+    },
+    /* ---- Reported problems (same as station_report_problem / station_clear_problem) ---- */
+    station_report_problem(a) {
+      const st = demo.station(a.p_device_key); if (!st) return { ok: false, error: "station_not_authorized" };
+      if (!a.p_client_report_id) return { ok: false, error: "missing_client_report_id" };
+      st.last_seen = clock.now();
+      const dup = demo.db.problems.find((p) => p.station_id === st.id && p.client_report_id === a.p_client_report_id);
+      if (dup) return { ok: true, duplicate: true, id: dup.id, reason: dup.reason, blocks_checkout: dup.blocks_checkout };
+      const emp = demo.db.employees.find((e) => e.active && e.badge_uid === normUid(a.p_badge_uid)); if (!emp) return { ok: false, error: "unknown_badge" };
+      const eq = demo.db.equipment.find((q) => q.nfc_uid === normUid(a.p_equipment_uid)); if (!eq) return { ok: false, error: "unknown_equipment" };
+      const r = demo.db.reasons.find((x) => x.id === a.p_reason); if (!r) return { ok: false, error: "unknown_reason" };
+      const open = demo.db.problems.find((p) => p.equipment_id === eq.id && !p.cleared_at && p.reason_id === r.id);
+      if (open) return { ok: true, already_reported: true, id: open.id, equipment: { id: eq.id, name: eq.name }, reason: r.label, blocks_checkout: r.blocks_checkout };
+      const p = { id: "p" + randHex(4), equipment_id: eq.id, reason_id: r.id, reason: r.label, blocks_checkout: r.blocks_checkout, reported_by_employee: emp.id,
+        station_id: st.id, client_report_id: a.p_client_report_id, reported_at: Math.min(a.p_occurred_at ? Date.parse(a.p_occurred_at) : clock.now(), clock.now()), cleared_at: null };
+      demo.db.problems.push(p);
+      return { ok: true, id: p.id, equipment: { id: eq.id, name: eq.name }, reason: r.label, blocks_checkout: r.blocks_checkout, held_by_reporter: eq.current_employee_id === emp.id };
+    },
+    station_clear_problem(a) {
+      const ss = demo.staffSession(a, "manager"); if (!ss.ok) return ss;
+      const q = demo.db.equipment.find((x) => x.nfc_uid === normUid(a.p_equipment_uid)); if (!q) return { ok: false, error: "unknown_equipment" };
+      let n = 0; for (const p of demo.db.problems) if (p.equipment_id === q.id && !p.cleared_at) { Object.assign(p, { cleared_at: clock.now(), cleared_by_employee: ss.e.id }); n++; }
+      if (n) demo.log(ss.e, `cleared the reported problem on ${q.name}`);
+      return { ok: true, cleared: n, equipment: { id: q.id, name: q.name } };
     },
     /* ---- Staff fobs (same checks as the database's station_staff_* functions) ---- */
     station_staff_login(a) {
@@ -818,11 +858,12 @@ const demo = {
     if (enforce && latest) {
       let block = null;
       if (action === "checkout") block = ["maintenance", "retired"].includes(eq.status) ? "item_unavailable"
-        : eq.status === "lost" ? "item_lost" : heldByOther && !set.allow_checkout_while_held ? "checked_out_to_other" : null;
+        : eq.status === "lost" ? "item_lost" : this.openProblem(eq.id)?.blocks_checkout ? "item_has_problem"
+        : heldByOther && !set.allow_checkout_while_held ? "checked_out_to_other" : null;
       else if (heldByOther && !set.allow_return_by_other && eq.status !== "lost") block = "not_your_item";
       if (block) { const h = eq.current_employee_id && this.emp(eq.current_employee_id);
         return { ok: false, error: block, equipment: { id: eq.id, name: eq.name, status: eq.status }, holder: h ? { id: h.id, name: h.name } : null,
-          checked_out_at: eq.checked_out_at ? new Date(eq.checked_out_at).toISOString() : null, due_at: eq.due_at ? new Date(eq.due_at).toISOString() : null }; }
+          checked_out_at: eq.checked_out_at ? new Date(eq.checked_out_at).toISOString() : null, due_at: eq.due_at ? new Date(eq.due_at).toISOString() : null, problem: this.openProblem(eq.id) }; }
     }
     let due = null, rule = null;
     if (!latest) flags.push("late_sync");
@@ -1117,6 +1158,7 @@ const BADGE_SVG = `<svg class="badge-ico" viewBox="0 0 64 64" fill="none" aria-h
 
 const LOOKUP_MS = 15000;
 const settings = () => S.saved.config?.organization?.settings || { allow_return_by_other: true, allow_checkout_while_held: false };
+const reasons = () => S.saved.config?.problem_reasons || [];
 function renderLookup(el) {
   const L = S.lookup; const i = L.info; const st = i.equipment.status;
   const holder = i.holder?.name; const first = holder ? holder.split(" ")[0] : "";
@@ -1129,6 +1171,9 @@ function renderLookup(el) {
   } else if (["maintenance", "retired"].includes(st)) {
     who = st === "retired" ? "This item has been taken out of service." : "Being repaired or checked.";
     nextTitle = "Can't be checked out"; nextText = "Ask a supervisor if you need it."; wantBadge = false;
+  } else if (i.problem?.blocks_checkout && !holder) {
+    who = "In the room, but it can't be used right now.";
+    nextTitle = "Can't be checked out"; nextText = "A supervisor has to clear the problem first. Take a different one."; wantBadge = false;
   } else if (holder) {
     who = `<b>${esc(holder)}</b> has it`;
     const late = i.due_at && Date.parse(i.due_at) < clock.now();
@@ -1148,6 +1193,7 @@ function renderLookup(el) {
         <span class="pill ${pill[0]}">${pill[1]}</span>
         <p class="lk-who">${who}</p>
         ${meta ? `<p class="lk-meta">${meta}</p>` : ""}
+        ${i.problem ? `<p class="lk-prob ${i.problem.blocks_checkout ? "stop" : ""}">Reported: <b>${esc(i.problem.reason)}</b></p>` : ""}
         ${L.cached ? `<p class="lk-meta">Offline: showing the last synced status.</p>` : ""}
       </div>
       <div class="lk-next">
@@ -1341,7 +1387,7 @@ async function activate() {
       : r.error === "bad_response" || /^\d+$/.test(String(r.error)) ? `${S.saved.url} isn't answering like a station server. Check the address, or use the hosted server.`
       : "Activation failed: " + r.error;
     else {
-      Object.assign(S.saved, { deviceKey: r.device_key, config: { station: r.station, organization: r.organization, categories: r.categories }, queue: [], syncIssues: [],
+      Object.assign(S.saved, { deviceKey: r.device_key, config: { station: r.station, organization: r.organization, categories: r.categories, problem_reasons: r.problem_reasons || [] }, queue: [], syncIssues: [],
                                everActivated: true, setupDone: false, setupHasAdmin: !!r.has_admin_fob });
       applyBrand(); renderTop();
       await refreshData();
@@ -1474,8 +1520,10 @@ function renderSession(el) {
     if (overdue) chip = `<span class="chip over">OVERDUE</span>`;
     else if (ext) chip = `<span class="chip ext">OUT ${Math.floor(hoursOut(q.checked_out_at))} H</span>`;
     sub = q.due_at ? (overdue ? "Was due " : "Due ") + fmtTime(q.due_at) : q.checked_out_at ? "Out since " + fmtTime(q.checked_out_at) : "Saved offline";
+    if (s.report?.step === "item") return `<li class="pick" data-rep="${esc(q.id)}" role="button" tabindex="0"><b>${esc(q.name)}</b><small>Report this one</small></li>`;
     return `<li><b>${esc(q.name)}</b>${chip}<small>${esc(sub)}</small></li>`;
   }).join("");
+  const rep = s.report;
   const left = Math.max(0, SESSION_MS - (Date.now() - s.last));
   el.innerHTML = `
     <div class="session-wrap">
@@ -1485,22 +1533,64 @@ function renderSession(el) {
           <h3>${mine.length ? `${mine.length} item${mine.length > 1 ? "s" : ""} checked out` : "Nothing checked out"}</h3>
           ${mine.length ? `<ul class="fit" data-fit=",dense,tight,tight cols2">${items}</ul>` : `<div class="empty">Tap an item to check it out.</div>`}
         </div>
-        <div class="feed ${shown.length > 2 ? "compact" : ""}">
+        ${rep ? reportHtml(rep, mine.length) : `<div class="feed ${shown.length > 2 ? "compact" : ""}">
           <p class="prompt">Tap ${esc(term().equipment.toLowerCase())} now<small>New items are checked out to you. Items you have are returned.</small></p>
           ${tallyHtml(shown)}
           ${shown.length ? `<div class="results fit" data-fit=",dense,dense tight,dense tight cols2,dense tight cols2 cols3">${shown.map((r, i) => (i === 0 ? resultHtml(r) : rowHtml(r))).join("")}</div>`
             : `<div class="tapcard">${TAP_SVG}<b>Hold a tag to the reader</b><span>Everything you tap shows up here.</span></div>`}
-        </div>
+        </div>`}
       </div>
       <div class="sessbar">
         <div class="timer" aria-hidden="true"><i id="timerBar" style="width:${(left / SESSION_MS) * 100}%"></i></div>
         <span id="timerTxt">Signs out in ${Math.ceil(left / 1000)}s</span>
+        ${rep ? `<button class="sbtn" id="repCancel">Cancel report</button>` : reasons().length ? `<button class="sbtn" id="reportBtn">Report a problem</button>` : ""}
         ${s.emp.role === "manager" || s.emp.role === "admin" ? `<button class="sbtn" id="staffBtn">Admin menu</button>` : ""}
         <button class="done" id="doneBtn">Done</button>
       </div>
     </div>`;
   $("#doneBtn").addEventListener("click", () => endSession());
+  $("#reportBtn")?.addEventListener("click", () => { s.report = { step: "item" }; s.last = Date.now(); renderMain(); });
+  $("#repCancel")?.addEventListener("click", () => { s.report = null; s.last = Date.now(); renderMain(); });
+  el.querySelectorAll("[data-rep]").forEach((li) => li.addEventListener("click", () => { const q = S.saved.cache.equipment.find((x) => x.id === li.dataset.rep); if (q) chooseReportItem(q.nfc_uid); }));
+  el.querySelectorAll("[data-reason]").forEach((b) => b.addEventListener("click", () => submitReport(b.dataset.reason)));
   $("#staffBtn")?.addEventListener("click", () => beginStaff(s.emp));   // manager/admin fobs only, PIN next
+}
+/* ---------- Report a problem: pick the item (tap it, or touch one you have), then what's wrong ---------- */
+function reportHtml(rep, nMine) {
+  if (rep.step === "item") return `<div class="feed report">
+      <p class="prompt">Report a problem<small>Tap the ${esc(term().equipment.toLowerCase())} that has the problem${nMine ? ", or touch one of yours on the left" : ""}.</small></p>
+      <div class="tapcard">${TAP_SVG}<b>Tap the item now</b><span>Then pick what's wrong.</span></div></div>`;
+  return `<div class="feed report">
+      <p class="prompt">What's wrong with ${esc(rep.item.name)}?<small>A supervisor sees this right away.</small></p>
+      <div class="rgrid fit" data-fit=",dense">${reasons().map((r) => `<button class="rbtn ${r.blocks_checkout ? "stop" : ""}" data-reason="${esc(r.id)}"><b>${esc(r.label)}</b>${r.blocks_checkout ? "<small>Stops checkout until fixed</small>" : ""}</button>`).join("")}</div></div>`;
+}
+function chooseReportItem(uid) {
+  const s = S.session; const item = S.saved.cache.equipment.find((q) => q.nfc_uid === uid);
+  if (!item) { beep("bad"); return toast("Tag not registered", "That tag isn't linked to any equipment. Give it to a supervisor."); }
+  s.report = { step: "reason", item }; s.last = Date.now(); beep("ok"); renderMain();
+}
+async function submitReport(reasonId) {
+  const s = S.session; if (!s?.report?.item) return;
+  const item = s.report.item; s.report = null; s.last = Date.now();
+  const r0 = reasons().find((x) => x.id === reasonId) || { label: "Problem", blocks_checkout: false };
+  const args = { p_device_key: S.saved.deviceKey, p_client_report_id: uuid(), p_badge_uid: s.emp.badge_uid, p_equipment_uid: item.nfc_uid,
+                 p_reason: reasonId, p_occurred_at: new Date(clock.now()).toISOString() };
+  const pending = { tone: "wait", title: "Reporting", item: item.name, lines: [] };
+  addResult(pending);
+  let r = null;
+  if (!S.saved.queue.length) { try { r = await call("station_report_problem", args); } catch { r = null; } }
+  if (r && !r.ok && r.error === "station_not_authorized") return lockedOut();
+  if (r && !r.ok) { beep("bad"); return replaceResult(pending, { tone: "bad", kind: "refused", title: "Not reported", item: item.name, detail: "try again", lines: [{ text: "Try again, or tell a supervisor. Error: " + r.error }] }); }
+  if (!r) S.saved.queue.push({ fn: "station_report_problem", args });
+  const label = r?.reason || r0.label, blocks = r ? !!r.blocks_checkout : !!r0.blocks_checkout;
+  const cached = S.saved.cache.equipment.find((q) => q.id === item.id);
+  if (cached && (!cached.problem || blocks)) cached.problem = { reason: label, blocks_checkout: blocks };
+  persist(); renderTop(); renderStatus(); beep("ok");
+  const mine = cached?.current_employee_id === s.emp.id;
+  const lines = [{ text: r?.already_reported ? `${label} was already reported. Thanks for letting us know.` : `${label}. A supervisor will take a look.`, note: true }];
+  if (blocks) lines.push({ text: mine ? "Nobody can check it out until it's fixed. Tap it again to return it." : "Nobody can check it out until it's fixed." });
+  if (!r) lines.push({ text: "Saved on this station. It's sent when the connection is back." });
+  replaceResult(pending, { tone: "warn", kind: "report", title: "Problem reported", item: item.name, detail: label.toLowerCase(), lines });
 }
 function rowHtml(r) {
   const ico = { ok: "✓", ret: "↩", warn: "!", bad: "×", wait: "…" }[r.tone];
@@ -1509,7 +1599,7 @@ function rowHtml(r) {
 }
 function tallyHtml(results) {
   const n = (k) => results.filter((r) => r.kind === k).length;
-  const parts = [[n("out"), "checked out"], [n("in"), "returned"], [n("refused"), "not done"]].filter(([c]) => c).map(([c, w]) => `${c} ${w}`);
+  const parts = [[n("out"), "checked out"], [n("in"), "returned"], [n("report"), "reported"], [n("refused"), "not done"]].filter(([c]) => c).map(([c, w]) => `${c} ${w}`);
   return parts.length ? `<div class="tally">This visit: ${parts.join(" · ")}</div>` : "";
 }
 function resultHtml(r) {
@@ -1608,7 +1698,7 @@ async function refreshData(withConfig) {
   try {
     if (withConfig) {
       const c = await call("station_config", { p_device_key: S.saved.deviceKey });
-      if (c.ok) { S.saved.config = { station: c.station, organization: c.organization, categories: c.categories }; applyBrand(); renderTop(); }
+      if (c.ok) { S.saved.config = { station: c.station, organization: c.organization, categories: c.categories, problem_reasons: c.problem_reasons || [] }; applyBrand(); renderTop(); }
       else if (c.error === "station_not_authorized") return lockedOut();
     }
     const r = await call("station_sync_cache", { p_device_key: S.saved.deviceKey });
@@ -1624,11 +1714,13 @@ async function flush() {
   try {
     while (S.saved.queue.length) {
       const ev = S.saved.queue[0];
+      const fn = ev.fn || "station_tap", args = ev.fn ? ev.args : ev;   // saved taps, and problem reports made offline
       let r;
-      try { r = await call("station_tap", ev); } catch { break; }
+      try { r = await call(fn, args); } catch { break; }
       if (!r.ok && r.error === "station_not_authorized") { S.flushing = false; return lockedOut(); }
       if (!r.ok && r.error === "account_paused") break;      // keep the saved taps until the account is back on
-      if (!r.ok) S.saved.syncIssues.push(`${r.error === "unknown_badge" ? "Badge" : "Tag"} ${fmtUid(normUid(r.error === "unknown_badge" ? ev.p_badge_uid : ev.p_equipment_uid))} not registered`);
+      if (!r.ok) S.saved.syncIssues.push(fn !== "station_tap" ? `Problem report for tag ${fmtUid(normUid(args.p_equipment_uid))} not saved (${r.error})`
+        : `${r.error === "unknown_badge" ? "Badge" : "Tag"} ${fmtUid(normUid(r.error === "unknown_badge" ? ev.p_badge_uid : ev.p_equipment_uid))} not registered`);
       S.saved.queue.shift(); sent++; persist(); renderTop(); renderStatus();
     }
   } finally { S.flushing = false; }
@@ -1670,6 +1762,8 @@ function handleTag(raw) {
   }
   if (!S.session) return lookupItem(uid);
   S.session.last = Date.now();
+  if (S.session.report?.step === "item") return chooseReportItem(uid);
+  if (S.session.report) { S.session.report = null; }
   tapItem(uid);
 }
 async function lookupItem(uid) {
@@ -1684,7 +1778,7 @@ async function lookupItem(uid) {
     const h = item.current_employee_id;
     info = { equipment: { id: item.id, name: item.name, status: item.status,
              category: S.saved.config?.categories?.find((c) => c.id === item.category_id)?.name },
-             holder: h ? { id: h, name: empName(h) } : null, checked_out_at: item.checked_out_at, due_at: item.due_at };
+             holder: h ? { id: h, name: empName(h) } : null, checked_out_at: item.checked_out_at, due_at: item.due_at, problem: item.problem || null };
     cached = true;
   }
   if (!info) { beep("bad"); return toast("Not recognized", `ID ${fmtUid(uid)} isn't a registered badge or ${term().equipment.toLowerCase()} tag. Ask a supervisor to add it.`); }
@@ -1755,9 +1849,10 @@ async function tapItem(uid) {
   const set = settings(); const other = prevHolder && prevHolder !== s.emp.id; const lost = item.status === "lost";
   const action = lost || prevHolder === s.emp.id || (other && set.allow_return_by_other) ? "checkin" : "checkout";
   const block = action === "checkout" && ["maintenance", "retired"].includes(item.status) ? "item_unavailable"
+              : action === "checkout" && item.problem?.blocks_checkout ? "item_has_problem"
               : action === "checkout" && other && !set.allow_checkout_while_held ? "checked_out_to_other" : null;
   if (block) return replaceResult(pending, onlineResult({ ok: false, error: block, equipment: { id: item.id, name: item.name, status: item.status },
-                                  holder: other ? { id: prevHolder, name: empName(prevHolder) } : null }, item, prevHolder, uid));
+                                  holder: other ? { id: prevHolder, name: empName(prevHolder) } : null, problem: item.problem }, item, prevHolder, uid));
   Object.assign(ev, { p_action: action, p_queued: true });
   S.saved.queue.push(ev);
   Object.assign(item, action === "checkout" ? { current_employee_id: s.emp.id, checked_out_at: ev.p_occurred_at, due_at: null, status: "checked_out" }
@@ -1765,7 +1860,8 @@ async function tapItem(uid) {
   persist(); renderTop(); renderStatus(); beep(action === "checkout" ? "ok" : "ret");
   const lines = [{ text: "Saved on this station. It syncs when the connection is back." }];
   if (lost) lines.unshift({ text: "It was listed as lost. Thanks for bringing it back.", note: true });
-  else if (other) lines.unshift({ text: `Returned for ${empName(prevHolder)}. Tap it again to check it out.`, note: true });
+  else if (other) lines.unshift({ text: `Returned for ${empName(prevHolder)}.${item.problem?.blocks_checkout ? "" : " Tap it again to check it out."}`, note: true });
+  if (action === "checkin" && item.problem?.blocks_checkout) lines.push({ text: `Reported ${item.problem.reason.toLowerCase()}, so it stays in the room until a supervisor clears it.` });
   const forName = action === "checkin" && other && !lost ? empName(prevHolder) : null;
   replaceResult(pending, { tone: action === "checkout" ? "ok" : lost || other ? "warn" : "ret", title: action === "checkout" ? "Checked out" : lost ? "Found" : "Returned", item: item.name, lines,
     kind: action === "checkout" ? "out" : "in", offline: true, forName, found: lost,
@@ -1781,6 +1877,8 @@ function onlineResult(r, item, prevHolder, uid) {
       lines: [{ text: `Checked out to ${r.holder?.name || "someone else"}.`, note: true }, { text: "It has to be returned before anyone else can take it." }] };
     if (r.error === "not_your_item") return { tone: "bad", kind: "refused", detail: `${r.holder?.name || "someone else"} has it`, title: "Can't return", item: nm,
       lines: [{ text: `Checked out to ${r.holder?.name || "someone else"}.`, note: true }, { text: "Only they can return it. Ask a supervisor if they're not here." }] };
+    if (r.error === "item_has_problem") return { tone: "bad", kind: "refused", detail: (r.problem?.reason || "reported problem").toLowerCase(), title: "Can't check out", item: nm,
+      lines: [{ text: `Reported: ${r.problem?.reason || "a problem"}.`, note: true }, { text: "A supervisor has to clear it first. Take a different one." }] };
     if (r.error === "item_lost") return { tone: "bad", kind: "refused", detail: "listed as lost", title: "Listed as lost", item: nm, lines: [{ text: "Tap it again to return it as found." }] };
     if (r.error === "item_unavailable") return { tone: "bad", kind: "refused", detail: r.equipment?.status === "retired" ? "out of service" : "in maintenance", title: "Can't check out", item: nm,
       lines: [{ text: r.equipment?.status === "retired" ? "It's been taken out of service." : "It's in maintenance.", note: true }, { text: "Ask a supervisor if you need it." }] };
@@ -1808,6 +1906,9 @@ function onlineResult(r, item, prevHolder, uid) {
     if (f.has("found_lost_item")) { tone = "ok"; detail = "found"; lines.splice(0, lines.length, { text: "It was listed as lost. Thanks for bringing it back!", note: true }, { text: "It's back in the room and available." }); }
     if (forName) { tone = "warn"; detail = "for " + forName; lines.splice(0, lines.length, { text: `Returned for ${forName}.`, note: true }, { text: "Tap it again if you want to check it out." }); }
     if (f.has("returned_after_extended")) { tone = "warn"; lines.unshift({ text: "It was out longer than allowed. Your supervisor can see this.", note: true }); }
+    const pr = cached?.problem;
+    if (pr?.blocks_checkout) { const i = lines.findIndex((l) => /Tap it again/.test(l.text)); if (i >= 0) lines.splice(i, 1);
+      lines.push({ text: `Reported ${pr.reason.toLowerCase()}, so it stays in the room until a supervisor clears it.` }); }
     beep("ret");
   }
   if (r.action === "checkout" && f.has("conflict_already_held")) detail = "was with " + empName(prevHolder);
@@ -2092,8 +2193,10 @@ function itemHtml() {
       <div class="lk-cat">${esc(i.equipment.category || "")}</div><h3>${esc(i.equipment.name)}</h3>
       <span class="pill ${pill}">${esc(label.toUpperCase())}</span>
       ${i.holder ? `<p>${st === "lost" ? "Last with" : "With"} <b>${esc(i.holder.name)}</b> since ${esc(fmtTime(i.checked_out_at))}</p>` : ""}
+      ${i.problem ? `<p class="lk-prob ${i.problem.blocks_checkout ? "stop" : ""}">Reported: <b>${esc(i.problem.reason)}</b>${i.problem.blocks_checkout ? " · can't be checked out" : ""}</p>` : ""}
       <p class="muted">Tag ${esc(fmtUid(T.itemUid))}</p></div>
     <div class="btncol">
+      ${i.problem ? `<button class="sbtn primary" data-act="clearProblem">Problem fixed: clear it</button>` : ""}
       ${st !== "lost" ? `<button class="sbtn danger" data-status="lost" data-act="setStatus">Mark lost</button>` : ""}
       ${st !== "maintenance" ? `<button class="sbtn" data-status="maintenance" data-act="setStatus">Send to maintenance</button>` : ""}
       ${["lost", "maintenance", "retired"].includes(st) ? `<button class="sbtn primary" data-status="available" data-act="setStatus">Back in service</button>` : ""}
@@ -2246,6 +2349,15 @@ document.addEventListener("click", async (e) => {
   if (a === "replaceBadge") { T.capture = { kind: "replaceBadge" }; setMsg(); return renderMain(); }
   if (a === "setPin") { T.view = "setPin"; T.form = { pin: "" }; T.field = "pin"; setMsg(); return renderMain(); }
   if (a === "toggleActive") return updatePerson({ p_active: !T.person.active }, T.person.active ? `${T.person.name} is deactivated. Their badge no longer works.` : `${T.person.name} is active again.`);
+  if (a === "clearProblem") {
+    const r = await staffCall("station_clear_problem", { p_equipment_uid: T.itemUid });
+    if (!S.staff) return;
+    if (r.ok) {
+      try { const i = await call("station_item_status", { p_device_key: S.saved.deviceKey, p_equipment_uid: T.itemUid }); if (i.ok) T.item = i; } catch {}
+      setMsg("ok", `${r.equipment.name} is cleared and can be checked out again.`); beep("ok"); refreshData();
+    } else { beep("bad"); setMsg("bad", staffError(r)); }
+    return renderMain();
+  }
   if (a === "setStatus") {
     const status = t.dataset.status;
     const r = await staffCall("station_set_item_status", { p_equipment_uid: T.itemUid, p_status: status });

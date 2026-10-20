@@ -201,6 +201,22 @@ button.row:hover { background: var(--surface-2); }
 .switch input:checked + span { background: var(--ok); } .switch input:checked + span::after { transform: translateX(18px); }
 .switch input:focus-visible + span { outline: 3px solid var(--focus); outline-offset: 2px; }
 .btn > svg { width: 17px; height: 17px; flex: none; } .btn { white-space: nowrap; } a.btn { text-decoration: none; } a.btn:not(.primary) { color: var(--ink); }
+/* Problems */
+.chip svg { width: 13px; height: 13px; margin-right: 4px; vertical-align: -2px; }
+.row.prob .sub.note { color: var(--ink); font-style: italic; }
+.list.flat .row { padding-left: 0; padding-right: 0; }
+.report-form { display: flex; flex-direction: column; gap: 12px; padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); }
+.reasons { border: 0; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.reasons legend { font-weight: 700; margin-bottom: 8px; padding: 0; }
+.reasons label { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); cursor: pointer; font-weight: 700; }
+.reasons label:has(input:checked) { border-color: var(--brand); box-shadow: 0 0 0 2px var(--brand-soft); }
+.reasons input { margin-top: 3px; } .reasons small { display: block; font-weight: 400; color: var(--bad); font-size: 12.5px; }
+.report-form .stack { display: flex; flex-direction: column; gap: 6px; font-weight: 700; } .report-form textarea { width: 100%; font: inherit; resize: vertical; }
+details.past { margin-top: 10px; } details.past summary { cursor: pointer; color: var(--muted); font-size: 13.5px; }
+.email-t td input[type=checkbox] { width: 18px; height: 18px; } .email-t th { white-space: nowrap; }
+.panel-h h2 svg { width: 16px; height: 16px; vertical-align: -3px; margin-right: 6px; }
+@media (max-width: 640px) { .reasons { grid-template-columns: minmax(0, 1fr); }
+  table.email-t td[data-label] { display: flex; justify-content: space-between; align-items: center; } table.email-t.cardify td[data-label]::before { content: attr(data-label); } }
 /* Get set up (new companies) */
 .setup .panel-h h2 { font-size: 17px; letter-spacing: 0; text-transform: none; color: var(--ink); }
 .setup .panel-h h2 small { display: block; font-family: var(--body); font-weight: 400; font-size: 13.5px; color: var(--muted); margin-top: 2px; }
@@ -540,7 +556,8 @@ function downloadCsv(name, header, rows) {
   return csv;
 }
 const csvWhen = (ms) => (ms ? new Intl.DateTimeFormat("en-US", { timeZone: tz(), year: "numeric", month: "2-digit", day: "2-digit", hour: "numeric", minute: "2-digit" }).format(new Date(ms)) : "");
-function statusText(q) { return q.status === "lost" ? "Lost" : q.status === "maintenance" ? "Maintenance" : q.status === "retired" ? "Retired" : q.is_overdue ? "Overdue" : q.is_extended ? "Out too long" : q.holder ? "Checked out" : "Available"; }
+function statusText(q) { return statusText0(q) + (q.problem ? ` (${q.problem.reason})` : ""); }
+function statusText0(q) { return q.status === "lost" ? "Lost" : q.status === "maintenance" ? "Maintenance" : q.status === "retired" ? "Retired" : q.is_overdue ? "Overdue" : q.is_extended ? "Out too long" : q.holder ? "Checked out" : "Available"; }
 const HOUR = 3600000, MIN = 60000;
 
 /* ---- Time zone helpers (company time zone) ---- */
@@ -686,8 +703,19 @@ function buildDemo() {
     { id: "u4", name: "Ops Office", email: "ops-office@demoair.example", role: "viewer", joined: now - 9 * 86400000, last: now - 3 * 86400000 },
   ];
   const invites = [{ id: "i1", email: "station-lead@demoair.example", role: "viewer", created: now - 1 * 86400000, expires: now + 13 * 86400000 }];
-  return { now, org, categories, equipment, employees, shifts, stations, txns, alerts, audit, reportAcks, occs, members, invites,
-           me: { id: "u1", name: "Morgan Reyes", role: "owner" } };
+  // Reported problems: reasons are the company's own list (Settings).
+  const reasons = [["Damaged", true], ["Not charging", false], ["Missing part", false], ["Other", false]]
+    .map(([label, blocks], i) => ({ id: "r" + (i + 1), label, blocks, sort: i + 1 }));
+  const byName = (n) => equipment.find((q) => q.name === n);
+  const problems = [
+    { id: "p1", eq: byName("Battery 05").id, reason_id: "r1", reason: "Damaged", blocks: true, notes: "Case is cracked near the plug", at: now - 3.5 * HOUR, by: "Luis Ortega", place: "Equipment Room 01" },
+    { id: "p2", eq: byName("Radio 06").id, reason_id: "r2", reason: "Not charging", blocks: false, notes: null, at: now - 50 * MIN, by: "Priya Shah", place: "Equipment Room 01" },
+    { id: "p3", eq: byName("Vacuum 02").id, reason_id: "r3", reason: "Missing part", blocks: false, notes: "No hose attachment", at: now - 2 * 86400000, by: "Sam Patel", place: "Bag Room",
+      cleared_at: now - 30 * HOUR, cleared_by: "Dana Brooks", clear_notes: "Found it in the van" },
+  ];
+  const emailPrefs = { u1: ["problem"], u2: ["problem", "overdue"], u3: ["overdue", "shift_report"], u4: [] };
+  return { now, org, categories, equipment, employees, shifts, stations, txns, alerts, audit, reportAcks, occs, members, invites, reasons, problems, emailPrefs,
+           me: { id: "u1", name: "Morgan Reyes", role: "owner", email: "morgan.reyes@demoair.example" } };
 }
 const DB = buildDemo();
 /* Dashboard roles (org_members.role). Mirrors the database's row-level security. */
@@ -706,6 +734,10 @@ const eqOf = (id) => DB.equipment.find((q) => q.id === id);
 function limitOf(q) { const c = catOf(q.cat); const rule = q.mode === "category" ? c.rule : q.mode;
   return { rule, hours: rule === "none" ? null : rule === "hours" ? (q.mode === "hours" ? q.hours : c.hours) : (q.hours ?? c.hours) }; }
 const extOf = (q) => q.extended ?? catOf(q.cat).extended ?? DB.org.extended_hours;
+// The open problem that matters most on an item: one that blocks checkout first, then the newest.
+const problemOf = (id) => (DB.problems || []).filter((p) => p.eq === id && !p.cleared_at).sort((a, b) => (b.blocks - a.blocks) || (b.at - a.at))[0] || null;
+const EMAIL_KINDS = [["problem", "Problem reported", "Someone reports damage or another problem with an item"], ["overdue", "Overdue", "An item isn't back by its due time"],
+  ["extended", "Out too long", "An item passes the out-too-long limit"], ["shift_report", "Shift report", "A shift ends with items not back on time"]];
 
 const api = {
   /* equipment_overview view */
@@ -716,7 +748,7 @@ const api = {
       const hoursOut = q.holder ? (now - q.out_at) / HOUR : null;
       return { ...q, category: c.name, holderName: q.holder ? empOf(q.holder)?.name : null, limit: lim, extended_hours: ext,
         hours_out: hoursOut, is_overdue: !!(q.due_at && q.due_at < now && q.status !== "lost"),
-        is_extended: !!(q.holder && ext != null && hoursOut > ext && q.status !== "lost") };
+        is_extended: !!(q.holder && ext != null && hoursOut > ext && q.status !== "lost"), problem: problemOf(q.id) };
     });
   },
   /* activity_log view */
@@ -869,6 +901,43 @@ const api = {
     DB.members = DB.members.filter((x) => x.id !== id); return { ok: true };
   },
   cancelInvite(id) { DB.invites = DB.invites.filter((i) => i.id !== id); },
+  /* problem_reasons (the company's list) */
+  reasons() { return (DB.reasons || []).filter((r) => !r.archived).sort((a, b) => a.sort - b.sort || a.label.localeCompare(b.label)); },
+  /* equipment_problems: open ones first, newest first */
+  problems() { return (DB.problems || []).map((p) => ({ ...p, equipment: eqOf(p.eq)?.name || "Removed item" })).sort((a, b) => (!!a.cleared_at - !!b.cleared_at) || (b.at - a.at)); },
+  /* rpc report_problem */
+  reportProblem(eqId, reasonId, notes) {
+    if (!can("supervisor")) return { ok: false, error: "Your role can't report problems here. Report it at a station instead." };
+    const r = DB.reasons.find((x) => x.id === reasonId && !x.archived); if (!r) return { ok: false, error: "Pick what's wrong." };
+    notes = (notes || "").trim().slice(0, 500);
+    const open = DB.problems.find((p) => p.eq === eqId && !p.cleared_at && p.reason_id === r.id);
+    if (open) { if (notes) open.notes = [open.notes, notes].filter(Boolean).join("\n"); return { ok: true, id: open.id, already: true, blocks: r.blocks }; }
+    const id = "p" + Date.now();
+    DB.problems.push({ id, eq: eqId, reason_id: r.id, reason: r.label, blocks: r.blocks, notes: notes || null, at: Date.now(), by: DB.me.name, place: "Dashboard" });
+    return { ok: true, id, blocks: r.blocks };
+  },
+  /* rpc clear_problem */
+  clearProblem(id, notes) {
+    const p = DB.problems.find((x) => x.id === id); if (!p || p.cleared_at) return { ok: true };
+    Object.assign(p, { cleared_at: Date.now(), cleared_by: DB.me.name, clear_notes: (notes || "").trim().slice(0, 500) || null }); return { ok: true };
+  },
+  /* rpc save_problem_reason / remove_problem_reason (admins) */
+  saveReason(id, d) {
+    const label = (d.label || "").trim();
+    if (!label) return { ok: false, error: "Enter a reason." };
+    if (label.length > 40) return { ok: false, error: "Keep it under 40 characters." };
+    if (DB.reasons.some((r) => !r.archived && r.id !== id && r.label.toLowerCase() === label.toLowerCase())) return { ok: false, error: "That reason is already on the list." };
+    if (id) { Object.assign(DB.reasons.find((r) => r.id === id), { label, blocks: !!d.blocks }); return { ok: true, id }; }
+    const nid = "r" + Date.now(); DB.reasons.push({ id: nid, label, blocks: !!d.blocks, sort: Math.max(0, ...DB.reasons.map((r) => r.sort)) + 1 });
+    return { ok: true, id: nid };
+  },
+  removeReason(id) { const r = DB.reasons.find((x) => x.id === id); if (r) r.archived = true; return { ok: true }; },
+  /* notification_prefs: what each person gets emailed about */
+  emailPrefs(userId) { return (DB.emailPrefs || {})[userId] || []; },
+  setEmailPrefs(userId, kinds) {
+    if (userId !== DB.me.id && !can("admin")) return { ok: false, error: "Only admins can change someone else's emails." };
+    DB.emailPrefs[userId] = kinds; return { ok: true };
+  },
 };
 const normUid = (u) => String(u || "").replace(/[^0-9a-f]/gi, "").toUpperCase();
 function uidOwner(uid, exceptId) {
@@ -908,6 +977,10 @@ function dur(h) { if (h == null) return ""; if (h < 1) return Math.max(1, Math.r
 function ago(ms) { const m = (Date.now() - ms) / MIN; if (m < 1) return "just now"; if (m < 60) return Math.round(m) + " min ago"; return dur(m / 60) + " ago"; }
 function limitText(l) { return l.rule === "none" ? "No limit" : l.rule === "shift_end" ? `End of shift${l.hours ? ` (else ${l.hours} h)` : ""}` : `${l.hours} h`; }
 function statusChip(q) {
+  const base = statusChip0(q);
+  return q.problem ? `${base} <span class="chip ${q.problem.blocks ? "bad" : "warn"}" title="Reported problem">${ic("wrench")}${esc(q.problem.reason)}</span>` : base;
+}
+function statusChip0(q) {
   if (q.status === "lost") return `<span class="chip bad">Lost</span>`;
   if (q.status === "maintenance") return `<span class="chip quiet">Maintenance</span>`;
   if (q.status === "retired") return `<span class="chip quiet">Retired</span>`;
@@ -955,7 +1028,7 @@ const ICON = {
   wifiOff: '<path d="M12 20h.01M8.5 16.43a5 5 0 0 1 7 0M2 8.82a15 15 0 0 1 4.17-2.65M10.66 5c4.01-.36 8.14.9 11.34 3.76M16.85 11.25a10 10 0 0 1 2.22 1.68M5 13a10 10 0 0 1 5.24-2.76"/><path d="m2 2 20 20"/>',
   help: '<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01"/>',
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>',
-  moon: '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>', monitor: '<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>', check: '<path d="M20 6 9 17l-5-5"/>', download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>',
+  moon: '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>', monitor: '<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>', check: '<path d="M20 6 9 17l-5-5"/>', wrench: '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>', mail: '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/>', download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>',
   user: '<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>', logout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>',
 };
 const ic = (k, cls = "") => `<svg ${cls ? `class="${cls}" ` : ""}viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[k]}</svg>`;
@@ -964,7 +1037,7 @@ const firstName = (n) => (String(n || "").includes("@") ? n.split("@")[0] : Stri
 
 function render() {
   if (LIVE && !S.ready) return renderAuth();
-  const open = api.alerts().filter((a) => !a.resolved_at && !a.ack_at).length;
+  const open = api.alerts().filter((a) => !a.resolved_at && !a.ack_at).length + api.problems().filter((p) => !p.cleared_at).length;
   const nav = [["overview", "Dashboard", "home"], ["equipment", "Equipment", "box"], ["activity", "Activity", "list"], ["employees", "Employees", "users"],
     ["stations", "Stations", "station"], ["shifts", "Shifts", "calendar"], ["alerts", "Alerts", "bell", open], "-", ["settings", "Settings", "sliders"], ...(can("admin") ? [["team", "Team access", "shield"]] : [])];
   if (S.route === "team" && !can("admin")) S.route = "overview";
@@ -1058,6 +1131,9 @@ function vOverview() {
         sub: `With ${a.employee} since ${fmtWhen(a.out_at)} (${dur((Date.now() - a.out_at) / HOUR)})${ack ? ` · Seen by ${ack.ack_by}${ack.notes ? ": " + ack.notes : ""}` : ""}`,
         open: ["equipment", a.eq], acked: list.every((x) => x.ack_at) };
     }),
+    ...api.problems().filter((p) => !p.cleared_at).map((p) => ({ sev: p.blocks ? "bad" : "warn", at: p.at, icon: "wrench", title: `${p.equipment}: ${p.reason}`,
+      sub: `Reported by ${p.by}${p.place ? " at " + p.place : ""}, ${ago(p.at)}.${p.blocks ? " Can't be checked out until it's cleared." : ""}${p.notes ? ` “${p.notes}”` : ""}`,
+      open: ["equipment", p.eq] })),
     ...lost.map((q) => ({ sev: "bad", at: q.lost_at, title: `${q.name} is lost`, sub: `Last with ${q.holderName || "unknown"}. Whoever finds it can tap it at a station.`, open: ["equipment", q.id] })),
     ...st.filter((s) => !s.online && !s.revoked && !s.pending).map((s) => ({ sev: "warn", at: s.last_seen, title: `${s.name} is offline`, sub: `Last seen ${ago(s.last_seen)}. Taps are saved on the station and sync when it reconnects.`, open: ["station", s.id] })),
   ].sort((a, b) => (!!a.acked - !!b.acked) || (b.at - a.at));
@@ -1085,7 +1161,7 @@ function vOverview() {
     </div>
     ${attention.length ? `<section class="panel attn"><div class="panel-h"><h2>${ic("alert")}Needs attention</h2><a class="more" href="#alerts">All alerts</a></div>
       <div class="list">${attention.slice(0, 6).map((x) => `<button class="ev" data-open="${x.open[0]}:${x.open[1]}">
-        <span class="tile ${x.acked ? "" : x.sev}">${ic(x.open[0] === "station" ? "wifiOff" : x.sev === "bad" ? "alert" : "clock")}</span><span><b>${esc(x.title)}</b><span class="sub">${esc(x.sub)}</span></span><span class="when">${x.acked ? "Seen" : ""}</span></button>`).join("")}</div></section>` : ""}
+        <span class="tile ${x.acked ? "" : x.sev}">${ic(x.icon || (x.open[0] === "station" ? "wifiOff" : x.sev === "bad" ? "alert" : "clock"))}</span><span><b>${esc(x.title)}</b><span class="sub">${esc(x.sub)}</span></span><span class="when">${x.acked ? "Seen" : ""}</span></button>`).join("")}</div></section>` : ""}
     <div class="home2">
       <div><section class="panel"><div class="panel-h"><h2>Recent activity</h2><a class="more" href="#activity">View all</a></div>
         <div class="list">${act.slice(0, 7).map((x) => `<button class="ev" data-open="equipment:${x.eq}">
@@ -1137,10 +1213,10 @@ function vEquipment() {
   const q = f.eqSearch.trim().toLowerCase();
   const rows = all.filter((x) => (!f.eqCat || x.cat === f.eqCat)
     && (f.eqStatus === "all" || (f.eqStatus === "out" && x.holder && x.status !== "lost") || (f.eqStatus === "available" && x.status === "available")
-        || (f.eqStatus === "overdue" && x.is_overdue) || (f.eqStatus === "extended" && x.is_extended) || (f.eqStatus === x.status && ["lost", "maintenance"].includes(x.status)))
+        || (f.eqStatus === "overdue" && x.is_overdue) || (f.eqStatus === "extended" && x.is_extended) || (f.eqStatus === x.status && ["lost", "maintenance"].includes(x.status)) || (f.eqStatus === "problem" && x.problem))
     && (!q || `${x.name} ${x.asset} ${x.holderName || ""} ${x.tag}`.toLowerCase().includes(q)))
     .sort((a, b) => (b.is_overdue - a.is_overdue) || (b.is_extended - a.is_extended) || a.name.localeCompare(b.name, undefined, { numeric: true }));
-  const seg = [["all", "All"], ["out", "Out"], ["overdue", "Overdue"], ["extended", "Out too long"], ["available", "Available"], ["lost", "Lost"], ["maintenance", "Maintenance"]];
+  const seg = [["all", "All"], ["out", "Out"], ["overdue", "Overdue"], ["extended", "Out too long"], ["available", "Available"], ["lost", "Lost"], ["maintenance", "Maintenance"], ["problem", "Problems"]];
   S.eqRows = rows;
   return head("Equipment", `${all.length} items · also addable at a station with a manager or admin fob`, `<span class="actions"><button class="btn" data-act="csvEquipment">${ic("download")}Download CSV</button>${can("admin") ? `<button class="btn primary" data-act="newEq">Add equipment</button>` : ""}</span>`) + `
     <div class="filters">
@@ -1234,15 +1310,37 @@ function csvReports() {
 }
 
 /* ---------------- Alerts ---------------- */
+function problemRow(p, withItem = true) {
+  const clearing = S.f.clearing === p.id;
+  return `<div class="row prob" style="grid-template-columns:auto minmax(0,1fr) auto">
+    <span class="chip ${p.cleared_at ? "quiet" : p.blocks ? "bad" : "warn"}">${esc(p.reason)}</span>
+    <span>${withItem ? `<b><button class="link" data-open="equipment:${p.eq}">${esc(p.equipment)}</button></b>` : ""}
+      <span class="sub">Reported by ${esc(p.by || "someone")}${p.place ? " at " + esc(p.place) : ""} · ${esc(fmtWhen(p.at))}${!p.cleared_at && p.blocks ? " · can't be checked out" : ""}</span>
+      ${p.notes ? `<span class="sub note">“${esc(p.notes)}”</span>` : ""}
+      ${p.cleared_at ? `<span class="sub">Cleared by ${esc(p.cleared_by || "a supervisor")} · ${esc(fmtWhen(p.cleared_at))}${p.clear_notes ? `: “${esc(p.clear_notes)}”` : ""}</span>` : ""}</span>
+    ${p.cleared_at ? `<span class="chip quiet">Cleared</span>` : !can("supervisor") ? "" : clearing
+      ? `<form class="inline-form" data-form="clear:${p.id}"><input class="field" name="note" aria-label="What was done" placeholder="What was done (optional)" maxlength="200"><button class="btn primary sm">Clear</button><button type="button" class="btn sm" data-act="clearCancel">Cancel</button></form>`
+      : `<button class="btn sm" data-act="clearStart" data-id="${p.id}">Clear</button>`}
+  </div>`;
+}
+function vProblems() {
+  const all = api.problems(); const open = all.filter((p) => !p.cleared_at), done = all.filter((p) => p.cleared_at).slice(0, 60);
+  return `<section class="panel"><div class="panel-h"><h2>Open (${open.length})</h2></div><div class="list">${open.map((p) => problemRow(p)).join("")
+      || `<div class="empty">Nothing reported. Crews can report a problem at the station: badge in, tap Report a problem, then tap the item.</div>`}</div></section>
+    ${done.length ? `<section class="panel"><div class="panel-h"><h2>Cleared</h2></div><div class="list">${done.map((p) => problemRow(p)).join("")}</div></section>` : ""}`;
+}
 function vAlerts() {
   const tab = S.f.alertTab; const all = api.alerts();
+  const probs = api.problems().filter((p) => !p.cleared_at).length;
   const rows = all.filter((a) => (tab === "open" ? !a.resolved_at : !!a.resolved_at));
   const label = (a) => a.kind === "overdue" ? `<span class="chip bad">Overdue</span>` : `<span class="chip warn">Out too long</span>`;
-  return head("Alerts", "Raised automatically every few minutes. They close themselves when the item comes back.") + `
+  return head("Alerts", tab === "problems" ? "Damage and other problems reported at a station or here. Some reasons stop the item being checked out until it's cleared."
+    : "Raised automatically every few minutes. They close themselves when the item comes back.") + `
     <div class="filters"><div class="seg" role="group" aria-label="Which alerts">
       <button class="${tab === "open" ? "on" : ""}" data-seg="alertTab:open">Open (${all.filter((a) => !a.resolved_at).length})</button>
-      <button class="${tab === "closed" ? "on" : ""}" data-seg="alertTab:closed">Closed (${all.filter((a) => a.resolved_at).length})</button></div></div>
-    <section class="panel"><div class="list">${rows.slice(0, 120).map((a) => `
+      <button class="${tab === "closed" ? "on" : ""}" data-seg="alertTab:closed">Closed (${all.filter((a) => a.resolved_at).length})</button>
+      <button class="${tab === "problems" ? "on" : ""}" data-seg="alertTab:problems">Reported problems (${probs})</button></div></div>
+    ${tab === "problems" ? vProblems() : `<section class="panel"><div class="list">${rows.slice(0, 120).map((a) => `
       <div class="row" style="grid-template-columns:auto minmax(0,1fr) auto">
         ${label(a)}<span><b><button class="link" data-open="equipment:${a.eq}">${esc(a.equipment)}</button></b> with ${esc(a.employee)}
           <span class="sub">Out since ${esc(fmtWhen(a.out_at))} · ${a.kind === "overdue" ? "was due " + esc(fmtWhen(a.threshold_at)) : "passed the limit " + esc(fmtWhen(a.threshold_at))}
@@ -1251,7 +1349,7 @@ function vAlerts() {
         ${a.ack_at ? `<span class="chip quiet">Seen</span>` : !can("supervisor") ? `<span class="chip warn">Not seen</span>` : S.f.acking === a.id
           ? `<form class="inline-form" data-form="ack:${a.id}"><input class="field" name="note" aria-label="Note" placeholder="Note (optional)" maxlength="200"><button class="btn primary sm">Save</button></form>`
           : `<button class="btn sm" data-act="ackStart" data-id="${a.id}">Mark seen</button>`}
-      </div>`).join("") || `<div class="empty">${tab === "open" ? "No open alerts. Everything is back or within its time limit." : "No closed alerts yet."}</div>`}</div></section>`;
+      </div>`).join("") || `<div class="empty">${tab === "open" ? "No open alerts. Everything is back or within its time limit." : "No closed alerts yet."}</div>`}</div></section>`}`;
 }
 
 /* ---------------- Shift reports ---------------- */
@@ -1346,8 +1444,37 @@ function vSettings() {
         <input class="field" name="hours" type="number" min="0.5" max="72" step="0.5" aria-label="Hours" placeholder="Hours" style="max-width:100px">
         <button class="btn primary">Add category</button><span class="err" id="catErr" role="alert"></span></form>
       <div class="panel-b muted" style="border-top:1px solid var(--line);font-size:13.5px">Changes save as you go. A new limit applies from the next checkout. Individual items can override this from Equipment. Categories with equipment can't be deleted.</div></section>
+    <section class="panel"><div class="panel-h"><h2>Problem reasons</h2></div>
+      <div class="panel-b muted" style="font-size:13.5px;padding-bottom:0">What crews pick from when they report a problem at a station. Turn on <b>Stops checkout</b> for anything that isn't safe to use: nobody can check the item out until a supervisor clears it.</div>
+      <div class="tablewrap"><table class="reasons-t">
+      <thead><tr><th>Reason</th><th>Stops checkout</th><th></th></tr></thead>
+      <tbody>${api.reasons().map((r) => `<tr>
+        <td><input class="field" style="width:220px;font-weight:700" aria-label="Reason" data-reason="${r.id}" data-k="label" value="${esc(r.label)}" maxlength="40"></td>
+        <td><span class="switch"><input type="checkbox" aria-label="${esc(r.label)} stops checkout" data-reason="${r.id}" data-k="blocks" ${r.blocks ? "checked" : ""}><span></span></span></td>
+        <td style="font-size:13px">${S.confirm === "rmreason:" + r.id ? `<span class="confirm" style="padding:4px 8px">Remove ${esc(r.label)}? <button class="btn sm danger" type="button" data-act="doRmReason" data-id="${r.id}">Remove</button><button class="btn sm" type="button" data-act="noConfirm">Cancel</button></span>`
+          : `<button class="btn sm danger" type="button" data-act="askRmReason" data-id="${r.id}">Remove</button>`}</td></tr>`).join("")
+        || `<tr><td colspan="3" class="muted">No reasons. Add one so crews can report problems at the station.</td></tr>`}</tbody></table></div>
+      <form class="panel-b inline-form" data-form="newReason" style="border-top:1px solid var(--line)">
+        <input class="field" name="label" aria-label="New reason" placeholder="New reason, like Battery swollen" maxlength="40" style="max-width:260px">
+        <label class="checks"><input type="checkbox" name="blocks"> Stops checkout</label>
+        <button class="btn primary">Add reason</button><span class="err" id="reasonErr" role="alert"></span></form>
+      <div class="panel-b muted" style="border-top:1px solid var(--line);font-size:13.5px">Removing a reason takes it off the station. Problems already reported keep their wording.</div></section>
     <section class="panel"><div class="panel-h"><h2>Plan and modules</h2></div><div class="panel-b" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">
-      <span class="chip ok">Shifts and shift reports: on</span><span class="muted">To add modules, contact support.</span></div></section></fieldset>`;
+      <span class="chip ok">Shifts and shift reports: on</span><span class="muted">To add modules, contact support.</span></div></section></fieldset>
+    ${vEmailAlerts()}`;
+}
+// Who gets emailed about what. Everyone can set their own; admins can set anyone's.
+function vEmailAlerts() {
+  const people = can("admin") ? api.members().members : [{ id: DB.me.id, name: DB.me.name, email: DB.me.email || "" }];
+  return `<section class="panel" id="email"><div class="panel-h"><h2>${ic("mail")}Email alerts</h2></div>
+    <div class="panel-b muted" style="font-size:13.5px;padding-bottom:0">${can("admin") ? "Choose who gets an email, and about what. People can change their own." : "Choose what you get an email about."}
+      Several alerts at once arrive as one email. Emails go to the address each person signs in with.</div>
+    <div class="tablewrap"><table class="email-t cardify">
+      <thead><tr><th>Person</th>${EMAIL_KINDS.map(([k, l, d]) => `<th title="${esc(d)}">${l}</th>`).join("")}</tr></thead>
+      <tbody>${people.map((m) => { const on = api.emailPrefs(m.id); return `<tr data-email-row="${m.id}">
+        <td class="lead"><b>${esc(m.name)}</b>${m.id === DB.me.id ? ` <span class="chip quiet">You</span>` : ""}<span class="sub">${esc(m.email)}</span></td>
+        ${EMAIL_KINDS.map(([k, l]) => `<td data-label="${l}"><input type="checkbox" aria-label="Email ${esc(m.name)}: ${l}" data-email="${m.id}" value="${k}" ${on.includes(k) ? "checked" : ""}></td>`).join("")}</tr>`; }).join("")}</tbody></table></div>
+    <div class="panel-b muted" style="border-top:1px solid var(--line);font-size:13.5px">${EMAIL_KINDS.map(([, l, d]) => `<b>${l}:</b> ${d.charAt(0).toLowerCase() + d.slice(1)}.`).join(" ")}</div></section>`;
 }
 function vTeam() {
   const { members, invites } = api.members();
@@ -1398,6 +1525,7 @@ function dEquipment(id) {
       <dt>Out-too-long alert</dt><dd>${x.extended_hours != null ? x.extended_hours + " h" : "Off"}</dd>
       <dt>Tag</dt><dd class="mono">${x.tag ? esc(fmtUid(x.tag)) : `<span class="muted" style="font-family:var(--body)">Not tagged yet</span>`}</dd>${x.notes ? `<dt>Notes</dt><dd>${esc(x.notes)}</dd>` : ""}</dl></div>
     ${can("admin") ? `<div class="actions"><button class="btn" data-act="editEq">Edit details</button></div>` : ""}
+    ${problemsSect(x)}
     ${can("supervisor") ? `<div class="sect"><h3>Status</h3>
       ${c === "lost" ? `<div class="confirm">Mark ${esc(x.name)} lost? Its alerts close, and whoever finds it can tap it at a station to return it.
           <button class="btn sm danger" data-act="doStatus" data-s="lost">Mark lost</button><button class="btn sm" data-act="noConfirm">Cancel</button></div>`
@@ -1419,6 +1547,21 @@ function dEquipment(id) {
     <div class="sect"><h3>History</h3>${hist.length ? `<div class="hist">${hist.map((a) => `<div class="${a.action === "checkin" ? "in" : ""} ${a.flags.length ? "flag" : ""}">
         <time>${esc(fmtWhen(a.at))} · ${esc(a.place)}</time><b>${esc(a.by)}</b> ${esc(a.description.charAt(0).toLowerCase() + a.description.slice(1))}${a.flags.includes("returned_after_extended") ? " (late)" : ""}</div>`).join("")}</div>` : `<p class="muted">No checkouts yet.</p>`}</div>
   </div>`;
+}
+function problemsSect(x) {
+  const mine = api.problems().filter((p) => p.eq === x.id); const open = mine.filter((p) => !p.cleared_at), past = mine.filter((p) => p.cleared_at).slice(0, 5);
+  const reasons = api.reasons();
+  const form = S.f.reporting === x.id ? `<form class="report-form" data-form="problem:${x.id}">
+      <fieldset class="reasons"><legend>What's wrong?</legend>${reasons.map((r, i) => `<label><input type="radio" name="reason" value="${r.id}" ${i === 0 ? "required" : ""}>
+        <span>${esc(r.label)}${r.blocks ? `<small>Stops checkout until cleared</small>` : ""}</span></label>`).join("")}</fieldset>
+      <label class="stack">Details (optional)<textarea class="field" name="notes" rows="2" maxlength="500" placeholder="Like: cracked screen, cord frayed"></textarea></label>
+      <span class="err" role="alert">${esc(S.formErr || "")}</span>
+      <div class="actions"><button class="btn primary">Report problem</button><button type="button" class="btn" data-act="reportCancel">Cancel</button></div></form>` : "";
+  if (!open.length && !past.length && !can("supervisor")) return "";
+  return `<div class="sect"><h3>Problems</h3>
+    ${open.length ? `<div class="list flat">${open.map((p) => problemRow(p, false)).join("")}</div>` : form ? "" : `<p class="muted" style="margin:0 0 8px">Nothing reported.</p>`}
+    ${form || (can("supervisor") && reasons.length ? `<div class="actions"><button class="btn" data-act="reportStart">${ic("wrench")}Report a problem</button></div>` : "")}
+    ${past.length ? `<details class="past"><summary>Cleared before (${past.length})</summary><div class="list flat">${past.map((p) => problemRow(p, false)).join("")}</div></details>` : ""}</div>`;
 }
 function dEmployee(id) {
   const e = api.employees().find((x) => x.id === id); if (!e) return drawerHead("Not found");
@@ -1552,6 +1695,12 @@ document.addEventListener("click", async (e) => {
     t.setAttribute("aria-expanded", String(S.pop === k)); if (S.pop) pop.querySelector("button, a, select")?.focus(); return; }
   if (a === "rmLogo") { api.saveSettings({ logo_url: null }); toast("Logo removed. Stations show Sonoran Point's."); return render(); }
   if (a === "clearDay") { S.f.actDay = ""; return render(); }
+  if (a === "reportStart") { S.f.reporting = D.id; S.formErr = null; renderLayer(); $('.report-form input[type=radio]')?.focus(); return; }
+  if (a === "reportCancel") { S.f.reporting = null; S.formErr = null; return renderLayer(); }
+  if (a === "clearStart") { S.f.clearing = t.dataset.id; render(); $(`[data-form="clear:${t.dataset.id}"] input`)?.focus(); return; }
+  if (a === "clearCancel") { S.f.clearing = null; return render(); }
+  if (a === "askRmReason") { S.confirm = "rmreason:" + t.dataset.id; return render(); }
+  if (a === "doRmReason") { api.removeReason(t.dataset.id); S.confirm = null; toast("Reason removed"); return render(); }
   if (a === "hideSetup") { try { localStorage.setItem("sp.setupHidden." + (DB.org.id || "demo"), "1"); } catch {} toast("Hidden. Everything is still under the menu on the left."); return render(); }
   if (a === "csvActivity") return csvActivity();
   if (a === "csvEquipment") return csvEquipment();
@@ -1618,6 +1767,15 @@ document.addEventListener("change", (e) => {
   if (t.dataset.actChange === "formRole") { const form = t.form; const keep = Object.fromEntries(new FormData(form)); S.formRole = t.value; renderLayer();
     const f2 = $(".drawer form"); for (const [k, v] of Object.entries(keep)) if (f2.elements[k] && k !== "shifts" && k !== "role") f2.elements[k].value = v; return; }
   if (t.dataset.f === "eqCat") { S.f.eqCat = t.value; return render(); }
+  if (t.dataset.email) {
+    const uid = t.dataset.email; const kinds = [...document.querySelectorAll(`input[data-email="${cssq(uid)}"]:checked`)].map((x) => x.value);
+    const r = api.setEmailPrefs(uid, kinds); toast(r.ok ? "Email alerts saved" : r.error); return render();
+  }
+  if (t.dataset.reason) {
+    const r0 = DB.reasons.find((x) => x.id === t.dataset.reason); if (!r0) return;
+    const r = api.saveReason(r0.id, t.dataset.k === "label" ? { label: t.value, blocks: r0.blocks } : { label: r0.label, blocks: t.checked });
+    toast(r.ok ? (t.dataset.k === "blocks" ? (t.checked ? `${r0.label}: stops checkout` : `${r0.label}: doesn't stop checkout`) : "Renamed") : r.error); return render();
+  }
   if (t.dataset.rule) { api.saveSettings({ settings: { ...DB.org.settings, [t.dataset.rule]: t.checked } }); return toast("Saved"); }
   if (t.dataset.cat) {
     const v = t.value; const k = t.dataset.k;
@@ -1633,6 +1791,18 @@ document.addEventListener("submit", async (e) => {
   e.preventDefault();
   const f = e.target, kind = f.dataset.form || "", data = Object.fromEntries(new FormData(f));
   if (kind === "signin" || kind === "newpass" || kind === "profile") return authAction(kind, f);
+  if (kind.startsWith("problem:")) {
+    const r = api.reportProblem(kind.slice(8), data.reason, data.notes);
+    if (!r.ok) { S.formErr = r.error; renderLayer(); return; }
+    S.formErr = null; S.f.reporting = null;
+    toast(r.already ? "Already reported. Your details were added." : r.blocks ? "Reported. Nobody can check it out until it's cleared." : "Reported"); return render();
+  }
+  if (kind.startsWith("clear:")) { api.clearProblem(kind.slice(6), data.note); S.f.clearing = null; toast("Cleared. It can be checked out again."); return render(); }
+  if (kind === "newReason") {
+    const r = api.saveReason(null, { label: data.label, blocks: data.blocks === "on" });
+    if (!r.ok) { $("#reasonErr").textContent = r.error; return; }
+    toast("Reason added. Stations show it within a minute."); return render();
+  }
   if (kind.startsWith("ack:")) { api.ackAlert(kind.slice(4), data.note.trim()); S.f.acking = null; toast("Marked seen"); return render(); }
   if (kind.startsWith("report:")) { api.ackReport(kind.slice(7), data.note.trim()); toast("Report signed off"); return render(); }
   if (kind.startsWith("limits:")) {
@@ -1736,6 +1906,13 @@ const live = {
       q(sb.from("shift_reports").select("*").eq("org_id", org).gte("shift_date", since.slice(0, 10)).order("shift_start", { ascending: false })),
       rpc("dashboard_pin_holders", { p_org: org }).catch(() => []),
     ]);
+    // Added in database update 11; the dashboard still works before it's run.
+    const since30 = new Date(Date.now() - 30 * 86400000).toISOString();
+    const [reasons, problems, prefs] = await Promise.all([
+      q(sb.from("problem_reasons").select("*").eq("org_id", org).is("archived_at", null).order("sort_order")).catch(() => []),
+      all("equipment_problems", "*", (x) => x.eq("org_id", org).or(`cleared_at.is.null,reported_at.gte.${since30}`).order("reported_at")).catch(() => []),
+      q(sb.from("notification_prefs").select("user_id,kinds").eq("org_id", org)).catch(() => []),
+    ]);
     const role = L.companies.find((c) => c.org_id === org)?.role || "viewer";
     let team = { members: [], invites: [] };
     if (RANK[role] >= RANK.admin) team = await rpc("list_members", { p_org: org }).catch(() => team);
@@ -1763,8 +1940,14 @@ const live = {
         resolved_at: ms(a.resolved_at), ack_by: who(a.acknowledged_by), ack_at: ms(a.acknowledged_at), notes: a.notes })),
       reports, members: (team.members || []).map((m) => ({ id: m.user_id, name: m.name || m.email.split("@")[0], email: m.email, role: m.role, joined: ms(m.joined_at), last: ms(m.last_sign_in_at) })),
       invites: (team.invites || []).map((i) => ({ id: i.id, email: i.email, role: i.role, created: ms(i.created_at), expires: ms(i.expires_at) })),
-      me: { id: L.user.id, name: L.names[L.user.id], role }, audit: [], reportAcks: {}, occs: [],
+      me: { id: L.user.id, name: L.names[L.user.id], role, email: L.user.email }, audit: [], reportAcks: {}, occs: [],
+      reasons: reasons.map((r) => ({ id: r.id, label: r.label, blocks: r.blocks_checkout, sort: r.sort_order })),
+      emailPrefs: Object.fromEntries(prefs.map((p) => [p.user_id, p.kinds || []])),
     });
+    const empName = (id) => { const e = DB.employees.find((x) => x.id === id); return e ? e.name : null; };
+    DB.problems = problems.map((p) => ({ id: p.id, eq: p.equipment_id, reason_id: p.reason_id, reason: p.reason, blocks: p.blocks_checkout, notes: p.notes, at: ms(p.reported_at),
+      by: empName(p.reported_by_employee) || who(p.reported_by_user) || "someone", place: p.station_id ? DB.stations.find((s) => s.id === p.station_id)?.name || "a station" : "Dashboard",
+      cleared_at: ms(p.cleared_at), cleared_by: empName(p.cleared_by_employee) || who(p.cleared_by_user), clear_notes: p.clear_notes }));
     // Live previews for shifts still in progress (today's and last night's), like the demo.
     DB.previews = [];
     if ((DB.org.modules || []).includes("shifts")) {
@@ -1862,6 +2045,12 @@ const REMOTE = {
   setMemberRole: ([id, role]) => okRpc("set_member_role", { p_org: ORG(), p_user: id, p_role: role }),
   removeMember: ([id]) => okRpc("remove_member", { p_org: ORG(), p_user: id }),
   cancelInvite: ([id]) => rpc("cancel_invite", { p_invite: id }),
+  reportProblem: async ([eq, reason, notes], r) => { const x = await okRpc("report_problem", { p_equipment: eq, p_reason: reason, p_notes: notes || null }); if (r?.id && !r.already) L.idMap[r.id] = x.id; },
+  clearProblem: ([id, notes]) => okRpc("clear_problem", { p_problem: id, p_notes: (notes || "").trim() || null }),
+  saveReason: async ([id], r) => { const x = DB.reasons.find((y) => y.id === r.id); if (!x) return;
+    const res = await okRpc("save_problem_reason", { p_org: ORG(), p: { id: id || null, label: x.label, blocks_checkout: x.blocks } }); if (!id) L.idMap[r.id] = res.id; },
+  removeReason: ([id]) => okRpc("remove_problem_reason", { p_reason: id }),
+  setEmailPrefs: ([uid, kinds]) => okRpc("set_email_alerts", { p_org: ORG(), p_user: uid, p_kinds: kinds }),
 };
 function goLive() {
   for (const [name, remote] of Object.entries(REMOTE)) {

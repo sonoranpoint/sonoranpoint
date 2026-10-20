@@ -806,6 +806,107 @@ select pg_temp.ok((select u->'station' = 'null'::jsonb and u->>'customer' = 'Dem
 select pg_temp.ok(platform_delete_hardware((select (u->>'id')::uuid from jsonb_array_elements(platform_hardware()) u where u->>'serial' = 'SP-0003'))->>'ok' = 'true', 'owner deletes a mistake');
 reset role;
 
+\echo '--- Reporting a problem with equipment'
+create function pg_temp.raises(q text) returns boolean language plpgsql as $f$
+begin execute q; return false; exception when insufficient_privilege then return true; end $f$;
+update equipment set current_employee_id = null, checked_out_at = null, due_at = null, status = 'available' where nfc_uid = '04DE000402';
+update equipment_alerts set resolved_at = now() where equipment_id = (select id from equipment where nfc_uid = '04DE000402');
+select pg_temp.ok((select string_agg(label || case when blocks_checkout then '*' else '' end, ',' order by sort_order) from problem_reasons
+                   where org_id = '00000000-0000-0000-0000-00000000d3e0') = 'Damaged*,Not charging,Missing part,Other', 'every company starts with four reasons; Damaged blocks checkout');
+select (select id from problem_reasons where label = 'Damaged' and org_id = '00000000-0000-0000-0000-00000000d3e0') as damaged,
+       (select id from problem_reasons where label = 'Not charging' and org_id = '00000000-0000-0000-0000-00000000d3e0') as notcharging \gset
+set role anon;
+select pg_temp.ok(jsonb_array_length(station_config(:'key4')->'problem_reasons') = 4, 'the station gets the reasons');
+select station_tap(:'key4', gen_random_uuid(), '04BA00000002', '04DE000402') as r \gset
+select pg_temp.ok(:'r'::jsonb->>'action' = 'checkout', 'Jordan checks out PDA 02');
+select station_report_problem(:'key4', '22222222-0000-0000-0000-000000000001', '04BA00000002', '04DE000402', :'damaged', null, 'Cracked screen') as r \gset
+select pg_temp.ok((:'r'::jsonb->>'ok')::boolean and (:'r'::jsonb->>'blocks_checkout')::boolean and (:'r'::jsonb->>'held_by_reporter')::boolean,
+                  'Jordan reports it damaged at the station (and still has it)');
+select pg_temp.ok((station_report_problem(:'key4', '22222222-0000-0000-0000-000000000001', '04BA00000002', '04DE000402', :'damaged')->>'duplicate')::boolean,
+                  'sending the same report again (offline upload) is harmless');
+select pg_temp.ok((station_report_problem(:'key4', gen_random_uuid(), '04BA00000001', '04DE000402', :'damaged', null, 'Also the strap')->>'already_reported')::boolean,
+                  'a second person reporting the same thing adds to the first report');
+select pg_temp.ok(station_report_problem(:'key4', gen_random_uuid(), '04BA0000FFFF', '04DE000402', :'damaged')->>'error' = 'unknown_badge', 'needs a real badge');
+select pg_temp.ok(station_tap(:'key4', gen_random_uuid(), '04BA00000002', '04DE000402')->>'action' = 'checkin', 'a damaged item can still be returned');
+select station_tap(:'key4', gen_random_uuid(), '04BA00000001', '04DE000402') as r \gset
+select pg_temp.ok(:'r'::jsonb->>'error' = 'item_has_problem' and :'r'::jsonb->'problem'->>'reason' = 'Damaged', 'a damaged item can''t be checked out, and the station is told why');
+select pg_temp.ok((select x->'problem'->>'reason' from jsonb_array_elements(station_sync_cache(:'key4')->'equipment') x where x->>'nfc_uid' = '04DE000402') = 'Damaged',
+                  'the offline list carries the problem, so the station blocks it offline too');
+select pg_temp.ok(station_item_status(:'key4', '04DE000402')->'problem'->>'reason' = 'Damaged', 'tapping it without a badge shows the problem');
+select station_tap(:'key4', gen_random_uuid(), '04BA00000001', '04DE000402', null, 'checkout', true) as r \gset
+select pg_temp.ok(:'r'::jsonb->'flags' ? 'reported_problem', 'a tap saved offline is still recorded, flagged for the supervisor');
+select station_tap(:'key4', gen_random_uuid(), '04BA00000001', '04DE000402') \g /dev/null
+select pg_temp.ok(station_clear_problem(:'key4', '04BA00000001', null, '04DE000402')->>'error' = 'not_staff', 'a regular badge can''t clear it');
+select pg_temp.ok((station_clear_problem(:'key4', '04BA0000000A', '2468', '04DE000402', 'Screen replaced')->>'cleared')::int = 1, 'a manager fob clears it at the station');
+select pg_temp.ok(station_tap(:'key4', gen_random_uuid(), '04BA00000001', '04DE000402')->>'action' = 'checkout', 'cleared -> it can be checked out again');
+select station_tap(:'key4', gen_random_uuid(), '04BA00000001', '04DE000402') \g /dev/null
+select pg_temp.ok((station_report_problem(:'key4', gen_random_uuid(), '04BA00000001', '04DE000402', :'notcharging')->>'blocks_checkout')::boolean = false
+                  and station_tap(:'key4', gen_random_uuid(), '04BA00000001', '04DE000402')->>'action' = 'checkout', '"Not charging" is reported but doesn''t block checkout');
+select station_tap(:'key4', gen_random_uuid(), '04BA00000001', '04DE000402') \g /dev/null
+reset role;
+
+set role authenticated;
+select set_config('request.jwt.claim.sub', 'cccccccc-0000-0000-0000-000000000003', false) \g /dev/null
+select pg_temp.ok((select count(*) from equipment_problems) = 2, 'dashboard users see reported problems');
+select pg_temp.ok(pg_temp.raises($$select report_problem((select id from equipment where nfc_uid = '04DE000402'), (select id from problem_reasons where label = 'Damaged' limit 1))$$),
+                  'a viewer can''t report from the dashboard');
+select set_config('request.jwt.claim.sub', 'aaaaaaaa-0000-0000-0000-000000000001', false) \g /dev/null
+select report_problem((select id from equipment where nfc_uid = '04DE000402'), :'damaged', 'Dropped off the belt loader') as r \gset
+select pg_temp.ok((:'r'::jsonb->>'ok')::boolean, 'owner reports it damaged from the dashboard');
+select pg_temp.ok((clear_problem((:'r'::jsonb->>'id')::uuid, 'Checked, it''s fine')->>'ok')::boolean, 'supervisor clears it');
+select pg_temp.ok((select cleared_by_user = 'aaaaaaaa-0000-0000-0000-000000000001' and clear_notes = 'Checked, it''s fine' from equipment_problems where id = (:'r'::jsonb->>'id')::uuid),
+                  'and clears it with a note');
+select pg_temp.ok((save_problem_reason('00000000-0000-0000-0000-00000000d3e0', '{"label":"Battery swollen","blocks_checkout":true}')->>'ok')::boolean, 'admin adds a reason that blocks checkout');
+select pg_temp.ok(save_problem_reason('00000000-0000-0000-0000-00000000d3e0', '{"label":"battery SWOLLEN"}')->>'error' = 'duplicate_label', 'no two reasons with the same name');
+select pg_temp.ok((save_problem_reason('00000000-0000-0000-0000-00000000d3e0', jsonb_build_object('id', :'notcharging', 'label', 'Won''t charge'))->>'ok')::boolean, 'admin renames one');
+select remove_problem_reason(:'notcharging') \g /dev/null
+select pg_temp.ok((select archived_at is not null from problem_reasons where id = :'notcharging') and (select reason from equipment_problems where reason_id = :'notcharging') = 'Not charging',
+                  'admin removes one; earlier reports keep the words they were made with');
+reset role;
+set role anon;
+select pg_temp.ok((select string_agg(x->>'label', ',') from jsonb_array_elements(station_config(:'key4')->'problem_reasons') x) = 'Damaged,Missing part,Other,Battery swollen',
+                  'the station list follows');
+reset role;
+set role authenticated;
+select set_config('request.jwt.claim.sub', 'cccccccc-0000-0000-0000-000000000003', false) \g /dev/null
+select pg_temp.ok(pg_temp.raises($$select save_problem_reason('00000000-0000-0000-0000-00000000d3e0', '{"label":"Nope"}')$$), 'a viewer can''t change the list');
+reset role;
+
+\echo '--- Email alerts'
+select pg_temp.ok((select kinds from notification_prefs where user_id = 'aaaaaaaa-0000-0000-0000-000000000001') = array['problem']
+                  and (select kinds from notification_prefs where user_id = 'cccccccc-0000-0000-0000-000000000003') = '{}', 'owners start with problem emails on; others start with none');
+select pg_temp.ok((select count(*) from private.email_queue where to_email = 'owner-a@example.com' and kind = 'problem') = 3
+                  and (select count(*) from private.email_queue where to_email = 'viewer@example.com') = 0, 'each new problem queued an email for the owner only');
+select pg_temp.ok((select title from private.email_queue where kind = 'problem' order by id limit 1) = 'PDA 02: Damaged'
+                  and (select detail from private.email_queue where kind = 'problem' order by id limit 1) like 'Reported by Jordan Lee at Equipment Room 02. It can''t be checked out%',
+                  'the email says what, who and where');
+set role authenticated;
+select set_config('request.jwt.claim.sub', 'cccccccc-0000-0000-0000-000000000003', false) \g /dev/null
+select pg_temp.ok((set_email_alerts('00000000-0000-0000-0000-00000000d3e0', 'cccccccc-0000-0000-0000-000000000003', array['overdue', 'problem'])->>'ok')::boolean, 'anyone can choose their own emails');
+select pg_temp.ok(pg_temp.raises($$select set_email_alerts('00000000-0000-0000-0000-00000000d3e0', 'aaaaaaaa-0000-0000-0000-000000000001', '{}')$$), 'but not someone else''s');
+select pg_temp.ok((select count(*) from notification_prefs) = 1, 'and only sees their own settings');
+select set_config('request.jwt.claim.sub', 'aaaaaaaa-0000-0000-0000-000000000001', false) \g /dev/null
+select pg_temp.ok((select count(*) from notification_prefs where org_id = '00000000-0000-0000-0000-00000000d3e0') = 2, 'an admin sees everyone''s');
+select pg_temp.ok(set_email_alerts('00000000-0000-0000-0000-00000000d3e0', 'cccccccc-0000-0000-0000-000000000003', array['spam'])->>'error' = 'unknown_kind', 'only known alert types');
+select pg_temp.ok((set_email_alerts('00000000-0000-0000-0000-00000000d3e0', 'aaaaaaaa-0000-0000-0000-000000000001', array['problem', 'shift_report'])->>'ok')::boolean, 'owner adds shift reports');
+reset role;
+insert into equipment_alerts (org_id, equipment_id, employee_id, kind, checked_out_at, threshold_at)
+select org_id, id, (select id from employees where employee_number = 'E1001'), 'overdue', now() - interval '9 hours', now() - interval '1 hour'
+from equipment where nfc_uid = '04DE000402';
+select pg_temp.ok((select count(*) from private.email_queue where kind = 'overdue' and to_email = 'viewer@example.com' and title = 'PDA 02 is overdue' and detail like 'With Alex Rivera since%') = 1
+                  and (select count(*) from private.email_queue where kind = 'overdue' and to_email = 'owner-a@example.com') = 0, 'overdue emails go only to people who asked for them');
+select pg_temp.ok(private.send_emails() = 0, 'without a Resend key nothing is sent, and nothing breaks');
+select pg_temp.ok((select count(*) from private.email_batches where to_email = 'owner-a@example.com') = 1
+                  and (select subject from private.email_batches where to_email = 'owner-a@example.com') = '3 equipment alerts at Demo Air Services'
+                  and (select subject from private.email_batches where to_email = 'viewer@example.com') = 'PDA 02 is overdue',
+                  'waiting alerts are grouped into one email per person');
+select pg_temp.ok((select html like '%Cracked screen%' and html like '%https://app.sonoranpoint.com/#equipment%' and body_text like '%Settings, Email alerts%'
+                   from private.email_batches where to_email = 'owner-a@example.com'), 'the email has the details, a link and how to change settings');
+select pg_temp.ok((select count(*) from private.email_queue where batch_id is null) = 0 and private.build_email_batches() = 0, 'nothing is sent twice');
+delete from org_members where user_id = 'cccccccc-0000-0000-0000-000000000003';
+select pg_temp.ok(not exists (select 1 from notification_prefs where user_id = 'cccccccc-0000-0000-0000-000000000003'), 'removing someone removes their email settings');
+insert into org_members (org_id, user_id, role) values ('00000000-0000-0000-0000-00000000d3e0', 'cccccccc-0000-0000-0000-000000000003', 'viewer');
+
 \echo '--- Deleting a company removes all its data'
 delete from organizations where slug = 'demo';
 select pg_temp.ok((select count(*) from equipment) = 0 and (select count(*) from transactions) = 0, 'company delete cascades cleanly');

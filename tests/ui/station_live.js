@@ -33,6 +33,18 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   psql("update organizations set status='active' where slug='demo'");
   await E("call('station_heartbeat', { p_device_key: S.saved.deviceKey })").catch(() => {});
   check(await until(() => !/paused/i.test(text())), "and it comes back on its own");
+  // Report a problem against the real database; a blocking one stops the next checkout
+  check(E("reasons().length") === 4, "the station gets the company's problem reasons");
+  E("endSession()"); await sleep(100);
+  E(`handleTag('${badge}')`); await sleep(400); E("$('#reportBtn').click()"); await sleep(100); E(`handleTag('${tag}')`); await sleep(200);
+  E("$('.rbtn.stop').click()");
+  check(await until(() => psql(`select count(*) from equipment_problems p join equipment q on q.id = p.equipment_id where q.nfc_uid='${tag}' and p.reason='Damaged' and p.cleared_at is null`) === "1"),
+    "reporting it damaged at the station is saved in the database");
+  check(await until(() => /Problem reported/.test(text())), "station confirms the report");
+  E(`handleTag('${tag}')`); await until(() => /Returned/.test(text()));
+  const jordan = psql("select badge_uid from employees where first_name='Jordan'");
+  E("endSession()"); await sleep(100); E(`handleTag('${jordan}')`); await sleep(400); E(`handleTag('${tag}')`);
+  check(await until(() => /Can't check out/.test(text()) && /Reported: Damaged/.test(text())), "the database refuses the next checkout and the station says why", text());
   check(errors.length === 0, "no script errors " + errors.join(";"));
   b.pg.kill(); b.server.close(); process.exit();
 })().catch((e) => { console.log("CRASH", e.stack); process.exit(1); });

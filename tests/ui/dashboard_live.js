@@ -176,6 +176,27 @@ const ORG = "00000000-0000-0000-0000-00000000d3e0";
     dp.dispatchEvent(new P.dom.window.Event("change", { bubbles: true }));
     check(await P.until(() => P.doc.querySelectorAll("tbody tr:not(.dayrow)").length === 1), "picking an older day loads it from the database", P.doc.querySelector(".panel")?.textContent.slice(0, 200)); }
   P.click("[data-act=clearDay]");
+  // problems: report from the dashboard, clear it, change the reasons, email alerts
+  P.go("equipment"); await P.E("live.reload()"); await P.until(() => /Radio/.test(P.text()));
+  { const eid = one(`select id from equipment where org_id='${ORG}' and name='Radio 02'`);
+    P.E(`openDrawer('equipment', '${eid}')`); await P.until(() => P.doc.querySelector("[data-act=reportStart]"));
+    P.click("[data-act=reportStart]"); await P.until(() => P.doc.querySelector(".reasons input"));
+    P.doc.querySelector(".reasons input").checked = true; P.set('[data-form^="problem:"] [name=notes]', "Antenna snapped"); P.submit('[data-form^="problem:"]');
+    check(await P.until(() => one(`select reason || '|' || notes from equipment_problems where equipment_id='${eid}' and cleared_at is null`) === "Damaged|Antenna snapped"), "report a problem from the dashboard");
+    await P.settled(); await P.until(() => P.doc.querySelector(".drawer [data-act=clearStart]"));
+    P.click(".drawer [data-act=clearStart]"); await P.until(() => P.doc.querySelector('[data-form^="clear:"]'));
+    P.set('[data-form^="clear:"] [name=note]', "Replaced"); P.submit('[data-form^="clear:"]');
+    check(await P.until(() => one(`select clear_notes from equipment_problems where equipment_id='${eid}'`) === "Replaced"), "and clear it with a note");
+    await P.settled(); P.click('[data-act="close"]'); }
+  P.go("settings"); await P.until(() => P.doc.querySelector('[data-form="newReason"]'));
+  P.set('[data-form="newReason"] [name=label]', "Battery swollen"); P.submit('[data-form="newReason"]');
+  check(await P.until(() => one(`select count(*) from problem_reasons where org_id='${ORG}' and label='Battery swollen' and archived_at is null`) === "1"), "admin adds a problem reason");
+  await P.settled();
+  { const me = one(`select id from auth.users where email='morgan@demoair.example'`);
+    await P.until(() => P.doc.querySelector(`input[data-email="${me}"][value="overdue"]`));
+    const cb = P.doc.querySelector(`input[data-email="${me}"][value="overdue"]`); cb.checked = true; cb.dispatchEvent(new P.dom.window.Event("change", { bubbles: true }));
+    check(await P.until(() => one(`select array_to_string(kinds, ',') from notification_prefs where user_id='${me}' and org_id='${ORG}'`) === "problem,overdue"), "turning on overdue emails is saved");
+    await P.settled(); }
   // a failed save is reported and the screen goes back to the database's version
   one(`update equipment set nfc_uid = '04DEADBEEF01' where name = 'Radio 09'`);
   P.go("equipment"); await P.E("live.reload()"); await P.until(() => /Radio/.test(P.text()));

@@ -43,7 +43,7 @@ const go = async (r) => { dom.window.location.hash = r; await sleep(30); };
   doc.querySelector('[data-act=theme][data-v=light]').click(); await sleep(10);
   doc.querySelector(".wrap").click(); await sleep(10);
   check(doc.querySelector("[data-act=acctMenu]").nextElementSibling.hidden, "clicking elsewhere closes it");
-  check(doc.querySelector(".iconbtn .badge")?.textContent === String(st.open - E("api.alerts().filter(a => !a.resolved_at && a.ack_at).length")), "bell shows open alerts not yet seen");
+  check(doc.querySelector(".iconbtn .badge")?.textContent === String(st.open - E("api.alerts().filter(a => !a.resolved_at && a.ack_at).length") + E("api.problems().filter(p => !p.cleared_at).length")), "bell shows open alerts not yet seen, plus reported problems");
   doc.querySelector('a.stat[data-filter="out"]').click(); await go("equipment");
   check(E("S.f.eqStatus") === "out", "Checked out card opens equipment filtered to what's out");
   await go("overview");
