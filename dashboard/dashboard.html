@@ -1,4 +1,4 @@
-<title>Equipment Dashboard</title>
+<title>Sonoran Point</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -201,6 +201,15 @@ button.row:hover { background: var(--surface-2); }
 .switch input:checked + span { background: var(--ok); } .switch input:checked + span::after { transform: translateX(18px); }
 .switch input:focus-visible + span { outline: 3px solid var(--focus); outline-offset: 2px; }
 .btn > svg { width: 17px; height: 17px; flex: none; } .btn { white-space: nowrap; } a.btn { text-decoration: none; } a.btn:not(.primary) { color: var(--ink); }
+/* Small polish */
+.iconbtn.xclose { width: 38px; height: 38px; box-shadow: none; } .iconbtn.xclose svg { width: 18px; height: 18px; }
+.minis { display: flex; gap: 18px; } .minis span { display: flex; flex-direction: column; font-size: 12.5px; color: var(--muted); }
+.minis b { font-family: var(--head); font-size: 22px; color: var(--ink); line-height: 1.1; }
+.more-row.center { justify-content: center; border: 0; }
+.colorpick { display: inline-flex; align-items: center; gap: 10px; }
+.colorpick input[type=color] { width: 44px; height: 36px; padding: 3px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); cursor: pointer; }
+.colorpick input[type=color]::-webkit-color-swatch-wrapper { padding: 0; } .colorpick input[type=color]::-webkit-color-swatch { border: 0; border-radius: 6px; }
+.colorpick input[type=color]::-moz-color-swatch { border: 0; border-radius: 6px; }
 /* Problems */
 .chip svg { width: 13px; height: 13px; margin-right: 4px; vertical-align: -2px; }
 .row.prob .sub.note { color: var(--ink); font-style: italic; }
@@ -810,6 +819,13 @@ const api = {
     DB.stations.push({ id: "st" + (DB.stations.length + 1), name, location, version: null, last_seen: 0, revoked: false, added: Date.now(), pending: true, code, expires: Date.now() + 7 * 86400000 });
     return code;
   },
+  /* stations update (name, location) — admins */
+  saveStation(id, d) {
+    const name = (d.name || "").trim(), location = (d.location || "").trim();
+    if (!name) return { ok: false, error: "Enter a name." };
+    if (DB.stations.some((x) => x.id !== id && !x.revoked && x.name.toLowerCase() === name.toLowerCase())) return { ok: false, error: "Another station already has that name." };
+    Object.assign(DB.stations.find((x) => x.id === id), { name, location }); return { ok: true };
+  },
   /* rpc revoke_station */
   revokeStation(id) { Object.assign(DB.stations.find((s) => s.id === id), { revoked: true }); },
   /* rpc reset_station_activation */
@@ -1059,7 +1075,7 @@ const ICON = {
   wifiOff: '<path d="M12 20h.01M8.5 16.43a5 5 0 0 1 7 0M2 8.82a15 15 0 0 1 4.17-2.65M10.66 5c4.01-.36 8.14.9 11.34 3.76M16.85 11.25a10 10 0 0 1 2.22 1.68M5 13a10 10 0 0 1 5.24-2.76"/><path d="m2 2 20 20"/>',
   help: '<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01"/>',
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>',
-  moon: '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>', monitor: '<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>', check: '<path d="M20 6 9 17l-5-5"/>', wrench: '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>', mail: '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/>', download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>',
+  moon: '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>', monitor: '<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>', check: '<path d="M20 6 9 17l-5-5"/>', x: '<path d="M18 6 6 18M6 6l12 12"/>', wrench: '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>', mail: '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/>', download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>',
   user: '<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>', logout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>',
 };
 const ic = (k, cls = "") => `<svg ${cls ? `class="${cls}" ` : ""}viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[k]}</svg>`;
@@ -1067,6 +1083,7 @@ const initialsOf = (n) => String(n || "?").replace(/@.*/, "").split(/[\s._-]+/).
 const firstName = (n) => (String(n || "").includes("@") ? n.split("@")[0] : String(n || "")).split(" ")[0];
 
 function render() {
+  document.title = DB.org?.name && (!LIVE || S.ready) ? `${DB.org.name} · Sonoran Point` : "Sonoran Point";
   if (LIVE && !S.ready) return renderAuth();
   if (DEEP && applyDeep()) return;
   const open = api.alerts().filter((a) => !a.resolved_at && !a.ack_at).length + api.problems().filter((p) => !p.cleared_at).length;
@@ -1386,7 +1403,11 @@ function vAlerts() {
 
 /* ---------------- Shift reports ---------------- */
 function vShifts() {
-  const reps = api.shiftReports(); const byDay = {};
+  const days = S.f.repDays || 7, only = S.f.repShift || "all";
+  const all = api.shiftReports().filter((r) => only === "all" || r.shift.id === only);
+  const from = dayKey(addDays(localDay(Date.now(), tz()), -(days - 1)));
+  const reps = all.filter((r) => dayKey(r.day) >= from), older = all.length - reps.length;
+  const byDay = {};
   reps.forEach((r) => { (byDay[dayKey(r.day)] = byDay[dayKey(r.day)] || []).push(r); });
   const crewN = (id) => DB.employees.filter((e) => e.active && e.shifts.includes(id)).length;
   return head("Shifts", "Who works when, and what each crew hadn't returned by the end of their shift.", `<span class="actions"><button class="btn" data-act="csvReports">${ic("download")}Download reports</button>${can("admin") ? `<button class="btn primary" data-open="shiftForm:">Add a shift</button>` : ""}</span>`) +
@@ -1398,12 +1419,16 @@ function vShifts() {
         <td style="text-align:right"><button class="btn sm" data-open="shiftForm:${x.id}">${can("supervisor") ? "Edit" : "View"}</button></td></tr>`).join("")}
       </tbody></table></div></section>
     <h2 style="margin:6px 0 0;font-family:var(--display);font-size:22px">Shift reports</h2>
-    <p class="muted" style="margin:0 0 4px">Made automatically after every shift ends (plus its grace period).</p>` +
+    <p class="muted" style="margin:0 0 4px">Made automatically after every shift ends (plus its grace period).</p>
+    ${DB.shifts.length > 1 ? `<div class="filters"><div class="seg" role="group" aria-label="Which shift">${[["all", "All shifts"], ...DB.shifts.map((x) => [x.id, x.name])]
+      .map(([k, l]) => `<button class="${only === k ? "on" : ""}" data-seg="repShift:${k}">${esc(l)}</button>`).join("")}</div></div>` : ""}` +
     Object.entries(byDay).map(([k, list]) => `<section class="panel"><div class="panel-h"><h2>${esc(fmtDay(list[0].day))}</h2></div><div class="list">
       ${list.map((r) => `<button class="row" data-open="report:${r.key}" style="grid-template-columns:110px minmax(0,1fr) auto">
         <b>${esc(r.shift.name)}</b><span><span class="sub" style="margin:0">${fmtTime(r.start)} to ${fmtTime(r.end)}${r.inProgress ? " · in progress" : ""}${r.ack ? ` · Signed off by ${esc(r.ack.by)}` : ""}</span></span>
         ${r.inProgress ? `<span class="chip quiet">Live</span>` : r.outstanding ? `<span class="chip ${r.stillOut ? "bad" : "warn"}">${r.outstanding} not back${r.stillOut ? `, ${r.stillOut} still out` : ""}</span>` : `<span class="chip ok">All returned</span>`}
-      </button>`).join("")}</div></section>`).join("");
+      </button>`).join("")}</div></section>`).join("")
+    + (reps.length ? "" : `<section class="panel"><div class="empty">No reports in the last ${days} days${only === "all" ? "" : " for this shift"}.</div></section>`)
+    + (older ? `<div class="more-row center"><button class="btn" data-act="repOlder">Show older reports</button><span class="muted">${older} more</span></div>` : "");
 }
 
 const DOW = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -1416,8 +1441,15 @@ function daysText(days) {
 function fmtClock(hhmm) { const [h, m] = hhmm.split(":").map(Number); return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`; }
 
 /* ---------------- Stations ---------------- */
+// Per station: taps today, and items still out that were last checked out there.
+function stationStats() {
+  const act = api.activity(), today0 = zoned(localDay(Date.now(), tz()), "00:00", tz());
+  const lastOut = {}; for (const x of act) if (x.action === "checkout" && !(x.eq in lastOut)) lastOut[x.eq] = x.station;
+  const out = api.equipment().filter((q) => q.holder && q.status !== "lost");
+  return (id) => ({ taps: act.filter((x) => x.station === id && x.source === "station" && x.at >= today0).length, out: out.filter((q) => lastOut[q.id] === id).length });
+}
 function vStations() {
-  const ns = S.f.newStation;
+  const ns = S.f.newStation; const stat = stationStats();
   return head("Stations", "Each station needs a one-time activation code to connect.", can("admin") ? `<button class="btn primary" data-act="addStation">Add a station</button>` : "") +
     (ns ? `<section class="panel"><div class="panel-b" style="display:flex;flex-direction:column;gap:12px">${ns.code
       ? `<h2 style="margin:0;font-family:var(--display);font-size:26px">Activation code for ${esc(ns.name)}</h2>
@@ -1429,6 +1461,7 @@ function vStations() {
     `<div class="cards">${api.stations().map((s) => `<div class="card">
       <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start"><h3>${esc(s.name)}</h3>
         ${s.revoked ? `<span class="chip quiet">Disconnected</span>` : s.pending ? `<span class="chip info">Waiting for setup</span>` : s.online ? `<span class="chip ok">Online</span>` : `<span class="chip warn">Offline</span>`}</div>
+      ${s.pending || s.revoked ? "" : (() => { const k = stat(s.id); return `<div class="minis"><span><b>${k.taps}</b>Taps today</span><span><b>${k.out}</b>Items out</span></div>`; })()}
       <dl class="kv"><dt>Location</dt><dd>${esc(s.location || "—")}</dd>
         <dt>${s.pending ? "Code" : "Last seen"}</dt><dd>${s.pending ? (s.code ? `<span class="mono">${esc(s.code)}</span>` : `<span class="muted" style="font-weight:400">Sent with the station. Lost it? Details › New activation code</span>`) : s.revoked ? "—" : esc(ago(s.last_seen))}</dd>
         <dt>Software</dt><dd>${esc(s.version || "—")}</dd></dl>
@@ -1446,8 +1479,8 @@ function vSettings() {
       <span class="logo-row"><span class="logo-prev" style="background:${esc(o.primary)}">${o.logo_url ? `<img src="${esc(o.logo_url)}" alt="Your logo">` : `<b class="nm" style="color:${o.primary && parseInt(o.primary.slice(1), 16) > 0x999999 ? "#14181d" : "#fff"}">${esc(o.name)}</b><small>No logo yet: stations show your name</small>`}</span>
         <span class="actions"><label class="btn sm ${S.logoBusy ? "disabled" : ""}">${S.logoBusy ? "Uploading…" : o.logo_url ? "Replace logo" : "Upload logo"}<input type="file" id="logoFile" accept="image/png,image/jpeg,image/svg+xml,image/webp" hidden ${S.logoBusy ? "disabled" : ""}></label>
         ${o.logo_url ? `<button type="button" class="btn sm danger" data-act="rmLogo">Remove</button>` : ""}</span></span>
-      <label for="sPrimary">Main color<small>Station top bar and buttons</small></label><span><input type="color" id="sPrimary" name="primary" value="${esc(o.primary)}"> <span class="mono">${esc(o.primary)}</span></span>
-      <label for="sAccent">Accent color<small>Highlights on the station, like the manager badge</small></label><span><input type="color" id="sAccent" name="accent" value="${esc(o.accent)}"> <span class="mono">${esc(o.accent)}</span></span>
+      <label for="sPrimary">Main color<small>Station top bar and buttons</small></label><span class="colorpick"><input type="color" id="sPrimary" name="primary" value="${esc(o.primary)}"><span class="mono">${esc(o.primary.toUpperCase())}</span></span>
+      <label for="sAccent">Accent color<small>Highlights on the station, like the manager badge</small></label><span class="colorpick"><input type="color" id="sAccent" name="accent" value="${esc(o.accent)}"><span class="mono">${esc(o.accent.toUpperCase())}</span></span>
       <label for="sExt">Out-too-long alert<small>Hours, for any item. Categories and items can override.</small></label>
       <span><input class="field" id="sExt" name="ext" type="number" min="1" max="72" step="0.5" value="${o.extended_hours ?? ""}" style="width:100px"> hours (leave blank to turn off)</span>
       <span></span><span><button class="btn primary">Save company settings</button></span>
@@ -1459,23 +1492,23 @@ function vSettings() {
       <span class="switch"><input type="checkbox" id="rTake" data-rule="allow_checkout_while_held" ${o.settings.allow_checkout_while_held ? "checked" : ""}><span></span></span>
     </div></section>
     <section class="panel"><div class="panel-h"><h2>Categories and time limits</h2></div><div class="tablewrap"><table>
-      <thead><tr><th>Category</th><th>Time limit</th><th>Hours</th><th>Out-too-long</th><th></th></tr></thead>
+      <thead><tr><th>Category</th><th>Time limit</th><th>Hours</th><th>Out-too-long alert</th><th></th></tr></thead>
       <tbody>${DB.categories.map((c) => { const n = DB.equipment.filter((q) => q.cat === c.id).length; return `<tr>
         <td><input class="field" style="width:150px;font-weight:700" aria-label="Category name" data-cat="${c.id}" data-k="name" value="${esc(c.name)}" maxlength="40"><span class="sub">${n} item${n === 1 ? "" : "s"}</span></td>
         <td><select class="field" aria-label="${esc(c.name)} time limit" data-cat="${c.id}" data-k="rule">
           <option value="hours" ${c.rule === "hours" ? "selected" : ""}>Hours after checkout</option>
           <option value="shift_end" ${c.rule === "shift_end" ? "selected" : ""}>End of shift</option>
           <option value="none" ${c.rule === "none" ? "selected" : ""}>No limit</option></select></td>
-        <td><input class="field" type="number" min="0.5" max="72" step="0.5" style="width:90px" aria-label="${esc(c.name)} hours" data-cat="${c.id}" data-k="hours" value="${c.hours ?? ""}" placeholder="${c.rule === "shift_end" ? "fallback" : ""}"></td>
-        <td><input class="field" type="number" min="1" max="72" step="0.5" style="width:90px" aria-label="${esc(c.name)} out-too-long hours" data-cat="${c.id}" data-k="extended" value="${c.extended ?? ""}" placeholder="${o.extended_hours ?? "off"}"></td>
+        <td><input class="field" type="number" min="0.5" max="72" step="0.5" style="width:110px" aria-label="${esc(c.name)} hours" data-cat="${c.id}" data-k="hours" value="${c.hours ?? ""}" placeholder="${c.rule === "shift_end" ? "Off shift" : c.rule === "none" ? "—" : ""}" ${c.rule === "none" ? "disabled" : ""}></td>
+        <td><input class="field" type="number" min="1" max="72" step="0.5" style="width:150px" aria-label="${esc(c.name)} out-too-long hours" data-cat="${c.id}" data-k="extended" value="${c.extended ?? ""}" placeholder="${o.extended_hours != null ? `Company: ${o.extended_hours} h` : "Off"}"></td>
         <td style="font-size:13px">${S.confirm === "delcat:" + c.id ? `<span class="confirm" style="padding:4px 8px">Delete ${esc(c.name)}? <button class="btn sm danger" type="button" data-act="delCat" data-id="${c.id}">Delete</button><button class="btn sm" type="button" data-act="noConfirm">Cancel</button></span>`
-          : n ? `<span class="muted">${c.rule === "shift_end" ? "Hours = fallback off shift" : ""}</span>` : `<button class="btn sm danger" type="button" data-act="askDelCat" data-id="${c.id}">Delete</button>`}</td></tr>`; }).join("")}</tbody></table></div>
+          : n ? "" : `<button class="btn sm danger" type="button" data-act="askDelCat" data-id="${c.id}">Delete</button>`}</td></tr>`; }).join("")}</tbody></table></div>
       <form class="panel-b inline-form" data-form="newCat" style="border-top:1px solid var(--line)">
         <input class="field" name="name" aria-label="New category name" placeholder="New category, like Headsets" maxlength="40" style="max-width:240px">
         <select class="field" name="rule" aria-label="Time limit" style="max-width:200px"><option value="hours">Hours after checkout</option><option value="shift_end">End of shift</option><option value="none">No limit</option></select>
         <input class="field" name="hours" type="number" min="0.5" max="72" step="0.5" aria-label="Hours" placeholder="Hours" style="max-width:100px">
         <button class="btn primary">Add category</button><span class="err" id="catErr" role="alert"></span></form>
-      <div class="panel-b muted" style="border-top:1px solid var(--line);font-size:13.5px">Changes save as you go. A new limit applies from the next checkout. Individual items can override this from Equipment. Categories with equipment can't be deleted.</div></section>
+      <div class="panel-b muted" style="border-top:1px solid var(--line);font-size:13.5px">Changes save as you go and apply from the next checkout. <b>End of shift:</b> the hours are used when someone checks out while they're not on a shift. <b>Out-too-long:</b> leave blank to use the company setting. Single items can be changed from Equipment. Categories with equipment can't be deleted.</div></section>
     <section class="panel"><div class="panel-h"><h2>Problem reasons</h2></div>
       <div class="panel-b muted" style="font-size:13.5px;padding-bottom:0">What crews pick from when they report a problem at a station. Normally a reported item can still be checked out: the station tells the person what was reported, and the checkout is flagged here. Turn on <b>Stops checkout</b> for anything that isn't safe to use: nobody can check it out until a supervisor clears it.</div>
       <div class="tablewrap"><table class="reasons-t">
@@ -1542,7 +1575,7 @@ const VIEWS = { overview: vOverview, equipment: vEquipment, employees: vEmployee
    Detail panels
    ===================================================================== */
 function drawerHead(title, sub, extra = "") {
-  return `<div class="drawer-h"><div><h2 id="dh">${title}</h2>${sub ? `<p>${sub}</p>` : ""}${extra}</div><button class="btn" data-act="close" aria-label="Close">Close</button></div>`;
+  return `<div class="drawer-h"><div><h2 id="dh">${title}</h2>${sub ? `<p>${sub}</p>` : ""}${extra}</div><button class="iconbtn xclose" data-act="close" aria-label="Close" title="Close">${ic("x")}</button></div>`;
 }
 function dEquipment(id) {
   const x = api.equipment().find((q) => q.id === id); if (!x) return drawerHead("Not found");
@@ -1633,11 +1666,16 @@ function dReport(key) {
 function dStation(id) {
   const s = api.stations().find((x) => x.id === id); if (!s) return drawerHead("Not found");
   const taps = api.activity().filter((a) => a.station === id && a.source === "station");
-  const c = S.confirm;
+  const c = S.confirm; const k = stationStats()(id);
   return drawerHead(esc(s.name), esc(s.location || ""), `<div style="margin-top:8px">${s.revoked ? `<span class="chip quiet">Disconnected</span>` : s.pending ? `<span class="chip info">Waiting for setup</span>` : s.online ? `<span class="chip ok">Online</span>` : `<span class="chip warn">Offline</span>`}</div>`) + `<div class="drawer-b">
     <div class="sect"><dl class="kv"><dt>Last seen</dt><dd>${s.last_seen ? esc(ago(s.last_seen)) : "Never"}</dd><dt>Software</dt><dd>${esc(s.version || "—")}</dd>
-      <dt>Taps (7 days)</dt><dd>${taps.length}</dd><dt>Added</dt><dd>${esc(fmtWhen(s.added))}</dd>${s.pending ? `<dt>Activation code</dt><dd${s.code ? ` class="mono"` : ""}>${s.code ? esc(s.code) : "Not shown again after it's made. Use New activation code below if it's lost."}</dd>` : ""}</dl></div>
+      <dt>Taps today</dt><dd>${k.taps}</dd><dt>Items out</dt><dd>${k.out}</dd><dt>Taps (7 days)</dt><dd>${taps.length}</dd><dt>Added</dt><dd>${esc(fmtWhen(s.added))}</dd>${s.pending ? `<dt>Activation code</dt><dd${s.code ? ` class="mono"` : ""}>${s.code ? esc(s.code) : "Not shown again after it's made. Use New activation code below if it's lost."}</dd>` : ""}</dl></div>
     ${!s.online && !s.revoked && !s.pending ? `<div class="notice">Offline stations keep working: taps are saved on the station and sync when it reconnects. Check its power and Wi-Fi.</div>` : ""}
+    ${can("admin") && !s.revoked ? `<div class="sect"><h3>Name and location</h3><form class="inline-form" data-form="stationEdit:${s.id}">
+      <input class="field" name="name" aria-label="Station name" required maxlength="60" value="${esc(s.name)}">
+      <input class="field" name="location" aria-label="Location" placeholder="Location (optional)" maxlength="60" value="${esc(s.location || "")}">
+      <button class="btn primary">Save</button><span class="err" role="alert">${esc(S.formErr || "")}</span></form>
+      <p class="muted" style="margin:8px 0 0;font-size:13px">The station shows its new name within a minute.</p></div>` : ""}
     ${!can("admin") ? "" : `<div class="sect"><h3>Access</h3>${c === "revoke" ? `<div class="confirm">Disconnect ${esc(s.name)}? It stops working right away. Use this if a station is lost or stolen.
         <button class="btn sm danger" data-act="doRevoke">Disconnect</button><button class="btn sm" data-act="noConfirm">Cancel</button></div>`
       : `<div class="actions">${s.revoked ? "" : `<button class="btn danger" data-act="askRevoke">Disconnect station</button>`}<button class="btn" data-act="newCode">New activation code</button></div>
@@ -1720,7 +1758,7 @@ document.addEventListener("click", async (e) => {
   const op = e.target.closest("[data-open]");
   if (op) { const [kind, ...rest] = op.dataset.open.split(":"); return openDrawer(kind, rest.join(":")); }
   const seg = e.target.closest("[data-seg]");
-  if (seg) { const [k, v] = seg.dataset.seg.split(":"); S.f[k] = v; if (k === "actRange") S.f.actDay = ""; if (k.startsWith("act")) S.f.actShow = 150; return render(); }
+  if (seg) { const [k, v] = seg.dataset.seg.split(":"); S.f[k] = v; if (k === "actRange") S.f.actDay = ""; if (k === "repShift") S.f.repDays = 7; if (k.startsWith("act")) S.f.actShow = 150; return render(); }
   const t = e.target.closest("[data-act]"); if (!t) return;
   const a = t.dataset.act, D = S.drawer;
   if (a === "acctMenu" || a === "orgMenu") { const k = a === "acctMenu" ? "acct" : "org"; S.pop = S.pop === k ? null : k; const pop = t.nextElementSibling; pop.hidden = S.pop !== k;
@@ -1737,6 +1775,7 @@ document.addEventListener("click", async (e) => {
   if (a === "csvActivity") return csvActivity();
   if (a === "csvEquipment") return csvEquipment();
   if (a === "csvReports") return csvReports();
+  if (a === "repOlder") { S.f.repDays = (S.f.repDays || 7) + 7; return render(); }
   if (a === "actMore") { S.f.actShow = (S.f.actShow || 150) + 150; return render(); }
   if (a === "theme") { applyTheme(t.dataset.v); return render(); }
   if (a === "navOpen") { S.navOpen = true; render(); $(".snav a.on")?.focus(); return; }
@@ -1780,6 +1819,7 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && e.target.matches("tr[data-open]")) e.target.click();
 });
 document.addEventListener("input", (e) => {
+  if (e.target.type === "color" && e.target.closest(".colorpick")) { e.target.nextElementSibling.textContent = e.target.value.toUpperCase(); return; }
   if (e.target.id === "gsearch") { S.gq = e.target.value; const r = $("#gsResults"); r.innerHTML = searchResults(S.gq); r.hidden = !S.gq.trim(); return; }
   const k = e.target.dataset.f; if (!k) return;
   S.f[k] = e.target.value; const pos = e.target.selectionStart; render();
@@ -1870,6 +1910,11 @@ document.addEventListener("submit", async (e) => {
     if (!r.ok) { $("#invErr").textContent = r.error; return; }
     toast(`Invite sent to ${data.email.trim().toLowerCase()}`); return render();
   }
+  if (kind.startsWith("stationEdit:")) {
+    const r = api.saveStation(kind.slice(12), { name: data.name, location: data.location });
+    if (!r.ok) { S.formErr = r.error; renderLayer(); return; }
+    S.formErr = null; toast("Station saved"); return render();
+  }
   if (kind === "station") { if (!data.name.trim()) return; f.querySelectorAll("button").forEach((b) => (b.disabled = true));
     try { const code = await api.createStation(data.name.trim(), data.location.trim()); S.f.newStation = { name: data.name.trim(), code }; }
     catch (err) { toast(LIVE ? err.message : String(err)); f.querySelectorAll("button").forEach((b) => (b.disabled = false)); return; }
@@ -1935,7 +1980,7 @@ const live = {
       q(sb.from("station_overview").select("*").eq("org_id", org).order("created_at")),
       all("transactions", "id,occurred_at,equipment_id,employee_id,previous_employee_id,action,station_id,source,flags,notes", (x) => x.eq("org_id", org).gte("occurred_at", since).order("occurred_at")),
       all("equipment_alerts", "*", (x) => x.eq("org_id", org).or(`resolved_at.is.null,raised_at.gte.${since}`).order("raised_at")),
-      q(sb.from("shift_reports").select("*").eq("org_id", org).gte("shift_date", since.slice(0, 10)).order("shift_start", { ascending: false })),
+      q(sb.from("shift_reports").select("*").eq("org_id", org).gte("shift_date", new Date(Date.now() - 60 * 86400000).toISOString().slice(0, 10)).order("shift_start", { ascending: false })),
       rpc("dashboard_pin_holders", { p_org: org }).catch(() => []),
     ]);
     // Added in database update 11; the dashboard still works before it's run.
@@ -2039,6 +2084,10 @@ const REMOTE = {
   ackAlert: ([id, note]) => rpc("acknowledge_alert", { p_alert: id, p_notes: note || null }),
   ackReport: ([key, note]) => rpc("acknowledge_shift_report", { p_report: key, p_notes: note || null }),
   revokeStation: ([id]) => rpc("revoke_station", { p_station: id }),
+  saveStation: async ([id]) => { const st = DB.stations.find((x) => x.id === id); let loc = null;
+    if (st.location) { const found = await q(sb.from("locations").select("id").eq("org_id", ORG()).eq("name", st.location).limit(1));
+      loc = found[0]?.id || (await q(sb.from("locations").insert({ org_id: ORG(), name: st.location }).select("id").single())).id; }
+    await upd("stations", id, { name: st.name, location_id: loc }); },
   setActive: ([id, active]) => upd("employees", id, { active }),
   saveSettings: () => { const o = DB.org;
     return upd("organizations", o.id, { name: o.name, logo_url: o.logo_url || null, primary_color: o.primary.toUpperCase(), accent_color: o.accent.toUpperCase(), extended_checkout_hours: o.extended_hours, settings: o.settings }); },

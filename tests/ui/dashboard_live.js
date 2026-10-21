@@ -201,6 +201,12 @@ const ORG = "00000000-0000-0000-0000-00000000d3e0";
     P.dom.window.location.hash = `equipment?open=equipment:${eid}&org=${ORG}`;
     check(await P.until(() => P.E("S.drawer && S.drawer.id") === eid && /Radio 02/.test(P.doc.querySelector(".drawer")?.textContent || "")), "a link from an alert email opens the item");
     P.click('[data-act="close"]'); }
+  { const sid = one(`select id from stations where org_id='${ORG}' and revoked_at is null order by created_at limit 1`);
+    P.go("stations"); P.E(`openDrawer('station', '${sid}')`); await P.until(() => P.doc.querySelector(`[data-form="stationEdit:${sid}"]`));
+    P.set(`[data-form="stationEdit:${sid}"] [name=name]`, "Ramp Room"); P.set(`[data-form="stationEdit:${sid}"] [name=location]`, "Terminal 4");
+    P.submit(`[data-form="stationEdit:${sid}"]`);
+    check(await P.until(() => one(`select s.name || '|' || l.name from stations s join locations l on l.id = s.location_id where s.id='${sid}'`) === "Ramp Room|Terminal 4"), "rename a station and change its location");
+    await P.settled(); if (P.doc.querySelector('[data-act="close"]')) P.click('[data-act="close"]'); }
   // a failed save is reported and the screen goes back to the database's version
   one(`update equipment set nfc_uid = '04DEADBEEF01' where name = 'Radio 09'`);
   P.go("equipment"); await P.E("live.reload()"); await P.until(() => /Radio/.test(P.text()));
