@@ -16,7 +16,7 @@ See README.md for the full product description.
 - Push to `main` → GitHub Actions runs `tests/run.sh db` + `ui`, then deploys app + console to Cloudflare Pages
   (projects `sonoranpoint-app`, `sonoranpoint-console`).
 - Database changes are NOT automatic. Add a new migration file (never edit one already run on the live
-  project), then tell Dez to run it in the Supabase SQL editor. Migrations 1–14 have been run, 15 handed over (2026-10-21;
+  project), then tell Dez to run it in the Supabase SQL editor. Migrations 1–14 have been run, 15 and 16 handed over (2026-10-21;
   ask if unsure). Alert emails are live (Resend key in Vault, first send
   confirmed 2026-10-20).
 - Station changes reach the Pis by copying `deploy/dist/station` onto each Pi (not automatic yet).
@@ -26,6 +26,7 @@ See README.md for the full product description.
   Stations, employees, equipment and shifts have `contract_id` (null = whole company). Two contracts share when one
   is inside the other or the group they meet in has `share_children` (top level: `settings.share_contracts`).
   `station_tap` enforces it; the sync cache carries `reach` so stations enforce it offline too.
+- Loans (`equipment_loans`, migration 16): an item lent to another contract is usable there until tapped back at an owner station.
 - Stage 2 (not built yet): a contract switcher, supervisors scoped to their contracts, per-contract emails/reports, console.
 
 ## Email
