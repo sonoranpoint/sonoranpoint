@@ -274,6 +274,7 @@ body { background: var(--bg); color: var(--ink); }
   .rail::after { display: none; }
 }
 
+tr.grp td { background: var(--surface-2); font-weight: 700; font-size: 13px; padding: 8px 14px; }
 /* ---- Page type ---- */
 .head h1 { font-family: var(--display); font-weight: 600; font-size: 36px; letter-spacing: -.01em; line-height: 1.05; color: var(--ink); }
 .head p { color: var(--muted); }
@@ -580,14 +581,17 @@ function buildDemo() {
   const waiting = (name, location, daysAgo) => st(name, location, { activated_at: null, last_seen: null, version: null, admin_claimed_at: null,
     code: newCode(), code_expires: now - daysAgo * DAY + 7 * DAY, created: now - daysAgo * DAY });
   const C = (o) => ({ id: uid("org"), logo_url: "", timezone: "America/Phoenix", terms: { ...DEFAULT_TERMS }, modules: [], station_limit: null,
-    trial_ends: null, notes: "", invites: [], log: [], ...o });
+    trial_ends: null, notes: "", invites: [], log: [], contracts: [], ...o });
+  const demoContracts = [{ id: "bw", parent_id: null, name: "BW" }, { id: "aw", parent_id: null, name: "AW", share: true, move: true },
+    { id: "dbw", parent_id: "bw", name: "Delta BW" }, { id: "ubw", parent_id: "bw", name: "United BW" }, { id: "daw", parent_id: "aw", name: "Delta AW" }, { id: "uaw", parent_id: "aw", name: "United AW" }];
   const customers = [
     C({ name: "Demo Air Services", slug: "demo", status: "active", plan: "pilot", primary: "#1F4E79", accent: "#F2A900", modules: ["shifts"],
       contact_name: "Morgan Reyes", contact_email: "morgan@demoair.example", contact_phone: "(602) 555-0142", created: now - 34 * DAY,
       notes: "Pilot site, Terminal 3. First customer: use for reference calls.",
       usage: { employees: 13, equipment: 29, taps7d: 412, last_tap: now - 6 * MIN },
       members: [["morgan@demoair.example", "owner", 1 * HOUR], ["dana@demoair.example", "admin", 3 * HOUR], ["kelly@demoair.example", "supervisor", 26 * HOUR], ["ops@demoair.example", "viewer", 5 * DAY]],
-      stations: [st("Equipment Room 01", "Terminal 3"), st("Bag Room", "Terminal 4", { last_seen: now - 3.2 * HOUR, created: now - 12 * DAY, activated_at: now - 12 * DAY })] }),
+      contracts: demoContracts,
+      stations: [st("Equipment Room 01", "Terminal 3", { contract_id: "dbw" }), st("Bag Room", "Terminal 4", { last_seen: now - 3.2 * HOUR, created: now - 12 * DAY, activated_at: now - 12 * DAY, contract_id: "ubw" })] }),
     C({ name: "Copper State Cargo", slug: "copperstate", status: "active", plan: "standard", primary: "#8A3B12", accent: "#E8B04A", modules: ["shifts"], station_limit: 4,
       contact_name: "Rafael Montoya", contact_email: "rmontoya@copperstate.example", contact_phone: "(520) 555-0177", created: now - 26 * DAY,
       terms: { ...DEFAULT_TERMS, equipment: "Tool", equipment_plural: "Tools" },
@@ -889,7 +893,7 @@ const mapTeam = (t) => ({ operators: (t.operators || []).map((o) => ({ ...o, sin
   invites: (t.invites || []).map((i) => ({ ...i, name: i.name || "", expires: ms(i.expires_at) })) });
 const mapStation = (s) => ({ id: s.id, name: s.name, location: s.location || "", activated_at: ms(s.activated_at), last_seen: ms(s.last_seen_at),
   version: s.software_version, admin_claimed_at: ms(s.admin_claimed_at), code: null, code_expires: ms(s.code_expires_at),
-  revoked: !!s.revoked_at, created: ms(s.created_at) || Date.now() });
+  revoked: !!s.revoked_at, created: ms(s.created_at) || Date.now(), contract_id: s.contract_id || null });
 const live = {
   async load() {
     const [cs, fleet, lg, team, hw] = await Promise.all([rpc("platform_customers"), rpc("platform_fleet"), rpc("platform_log", { p_limit: 300 }),
@@ -915,7 +919,7 @@ const live = {
     const r = await rpc("platform_customer", { p_org: id }); const c = custOf(id); if (!r.ok || !c) return;
     const o = r.organization;
     Object.assign(c, { detail: true, terms: { ...DEFAULT_TERMS, ...(o.terminology || {}) }, timezone: o.timezone, contact_phone: o.contact_phone || "", notes: o.notes || "",
-      logo_url: o.logo_url || "", stations: r.stations.map(mapStation),
+      logo_url: o.logo_url || "", stations: r.stations.map(mapStation), contracts: r.contracts || [],
       members: r.members.map((m) => ({ email: m.email, name: m.name || "", role: m.role, last_sign_in: ms(m.last_sign_in_at) })),
       invites: r.invites.map((i) => ({ id: i.id, email: i.email, role: i.role, expires: ms(i.expires_at) })) });
     if (c.members.length) c.has_owner = c.members.some((m) => m.role === "owner");
@@ -1306,7 +1310,8 @@ function vPreview() {
       <dt>Plan</dt><dd>${planChip(c.plan)}</dd><dt>Status</dt><dd>${statusDot(c.status)}</dd>
       ${c.status === "trial" && c.trial_ends ? `<dt>Trial ends</dt><dd style="color:${d < 3 ? "var(--bad)" : "var(--t-orange)"}">${esc(fmtDate(c.trial_ends))} (${esc(untilText(c.trial_ends))})</dd>` : ""}
       <dt>Stations</dt><dd>${live.length}${c.station_limit != null ? ` of ${c.station_limit}` : ""}</dd></dl></div></section>
-    ${live.length ? `<section class="panel"><div class="panel-h"><h2>Stations</h2></div><div class="list">${live.map((s) => { const st = stationState(s, c); return `<div class="ev" style="grid-template-columns:minmax(0,1fr) auto"><span><b>${esc(s.name)}</b><span class="sub">${esc(s.location || s.version || "")}</span></span><span class="chip ${st.tone}">${esc(st.label)}</span></div>`; }).join("")}</div></section>` : ""}
+    ${live.length ? `<section class="panel"><div class="panel-h"><h2>Stations</h2></div><div class="list">${live.map((s) => { const st = stationState(s, c); return `<div class="ev" style="grid-template-columns:minmax(0,1fr) auto"><span><b>${esc(s.name)}</b><span class="sub">${esc(s.location || s.version || "")}</span></span><span class="chip ${st.tone}">${esc(st.label)}</span></div>`; }).join("")}</div></section>
+      ${contractsPanel(c)}` : ""}
     <section class="panel"><div class="panel-h"><h2>Quick actions</h2></div><div class="qa">
       <a class="btn primary" href="#customer/${c.id}" data-act="closePreview">${ic("ext")}Open customer</a>
       <a class="btn" href="#customer/${c.id}" data-act="closePreview">${ic("station")}Stations and activation codes</a>
@@ -1328,6 +1333,25 @@ function stationPreview(c, terms) {
     <div class="pv-foot"><span><b>Equipment Room 01</b> · Terminal 3</span><span class="pv-net">Online</span></div></div>`;
 }
 
+// A customer's stations, grouped under their contracts (when they use them), with the tree's sharing rules.
+function stationRows(c, list, row) {
+  const tree = contractTreeOf(c); if (!tree.length) return list.map(row).join("");
+  const groups = [...tree.map((k) => ({ k, items: list.filter((s) => s.contract_id === k.id) })), { k: null, items: list.filter((s) => !s.contract_id || !tree.some((t) => t.id === s.contract_id)) }];
+  return groups.filter((g) => g.items.length).map((g) => `<tr class="grp"><td colspan="4">${g.k ? `${"\u2003".repeat(g.k.depth)}${esc(g.k.name)}` : `<span class="muted">${esc(c.terms?.contract ? "No " + c.terms.contract.toLowerCase() : "No contract")}: serves everyone</span>`}</td></tr>${g.items.map(row).join("")}`).join("");
+}
+function contractTreeOf(c) {
+  const out = []; const all = c.contracts || [];
+  const walk = (pid, d) => all.filter((x) => (x.parent_id || null) === pid).forEach((x) => { out.push({ ...x, depth: d }); if (d < 20) walk(x.id, d + 1); });
+  walk(null, 0); return out;
+}
+function contractsPanel(c) {
+  const tree = contractTreeOf(c); if (!tree.length) return "";
+  const word = c.terms?.contract_plural || "Contracts";
+  return `<section class="panel"><div class="panel-h"><h2>${esc(word)}</h2><span class="muted" style="font-size:13px">They manage these in their dashboard, under Settings</span></div>
+    <div class="list">${tree.map((k) => `<div class="row" style="padding-left:${18 + k.depth * 24}px"><b>${esc(k.name)}</b>
+      <span class="sub">${[tree.some((x) => x.parent_id === k.id) ? (k.share ? "shares badges and gear across what's under it" : "what's under it never crosses") : "", k.move ? "items move to where they're returned" : ""].filter(Boolean).join(" · ")}</span>
+      <span class="muted">${(() => { const n = c.stations.filter((s) => s.contract_id === k.id && !s.revoked).length; return n ? `${n} station${n > 1 ? "s" : ""}` : ""; })()}</span></div>`).join("")}</div></section>`;
+}
 function vCustomer() {
   const c = api.customer(S.id); const cf = S.confirm; const now = Date.now();
   const live = c.stations.filter((s) => !s.revoked), gone = c.stations.filter((s) => s.revoked);
@@ -1344,13 +1368,13 @@ function vCustomer() {
 
       <section class="panel"><div class="panel-h"><h2>Stations</h2><span class="muted" style="font-size:13px">${live.length}${c.station_limit != null ? ` of ${c.station_limit} allowed` : ""}</span></div>
         ${live.length ? `<div class="tablewrap"><table><thead><tr><th>Station</th><th>Status</th><th>Admin tag</th><th></th></tr></thead><tbody>
-          ${live.map((s) => { const st = stationState(s, c); return `<tr><td><b>${esc(s.name)}</b><span class="sub">${esc([s.location, s.version].filter(Boolean).join(" · "))}</span></td>
+          ${stationRows(c, live, (s) => { const st = stationState(s, c); return `<tr><td><b>${esc(s.name)}</b><span class="sub">${esc([s.location, s.version].filter(Boolean).join(" · "))}</span></td>
             <td><span class="chip ${st.tone}">${esc(st.label)}</span>${st.key === "waiting" || st.key === "expired" ? `<span class="sub">${s.code ? `Code <span class="code">${esc(s.code)}</span> · ` : ""}${s.code_expires > now ? "expires " + esc(fmtDate(s.code_expires)) : "expired"}</span>` : s.last_seen && st.key === "online" ? "" : s.last_seen ? `<span class="sub">Last seen ${esc(ago(s.last_seen))}</span>` : ""}</td>
             <td>${s.admin_claimed_at ? `<span class="chip ok">Registered</span>` : `<span class="muted">Not yet</span>`}</td>
             <td style="text-align:right;white-space:nowrap">${cf === "code:" + s.id
               ? `<span class="confirm" style="padding:5px 8px">${s.activated_at ? "Disconnects the Pi now. " : ""}New code? <button class="btn sm danger" data-act="doCode" data-id="${s.id}">Yes</button><button class="btn sm" data-act="noConfirm">No</button></span>`
               : cf === "revoke:" + s.id ? `<span class="confirm" style="padding:5px 8px">Disconnect for good? <button class="btn sm danger" data-act="doRevoke" data-id="${s.id}">Disconnect</button><button class="btn sm" data-act="noConfirm">No</button></span>`
-              : `<button class="btn sm" data-act="askCode" data-id="${s.id}">New code</button> <button class="btn sm danger" data-act="askRevoke" data-id="${s.id}">Disconnect</button>`}</td></tr>`; }).join("")}
+              : `<button class="btn sm" data-act="askCode" data-id="${s.id}">New code</button> <button class="btn sm danger" data-act="askRevoke" data-id="${s.id}">Disconnect</button>`}</td></tr>`; })}
         </tbody></table></div>` : `<div class="empty">No stations yet.</div>`}
         ${S.lastCode ? `<div class="panel-b" style="border-top:1px solid var(--line);display:flex;flex-direction:column;gap:10px">
           <b>Activation code for ${esc(S.lastCode.name)}</b><div class="codebox" aria-label="Activation code">${esc(S.lastCode.code)}</div>
@@ -1361,7 +1385,8 @@ function vCustomer() {
         ${gone.length ? `<div class="panel-b muted" style="border-top:1px solid var(--line);font-size:13px">Disconnected: ${gone.map((s) => esc(s.name)).join(", ")}</div>` : ""}
       </section>
 
-      ${DB.hw ? (() => { const mine = DB.hw.filter((u) => u.org_id === c.id); return `<section class="panel"><div class="panel-h"><h2>Hardware</h2><a class="btn sm" href="#hardware">All hardware</a></div>
+      ${DB.hw ? (() => { const mine = DB.hw.filter((u) => u.org_id === c.id); return `${contractsPanel(c)}
+      <section class="panel"><div class="panel-h"><h2>Hardware</h2><a class="btn sm" href="#hardware">All hardware</a></div>
         <div class="list">${mine.map((u) => `<a class="row" href="#unit/${u.id}" style="text-decoration:none;color:inherit"><span class="dot ${HW_STATUS[u.status][1] === "quiet" ? "" : HW_STATUS[u.status][1]}"></span>
           <span><b class="mono">${esc(u.serial)}</b> · ${esc(HW_KIND[u.kind])}<span class="sub">${HW_STATUS[u.status][0]}${hwStation(u) ? " · " + esc(hwStation(u).name) : ""}${u.shipped_at ? " · shipped " + esc(fmtDay(u.shipped_at)) : ""}${u.tracking ? " · " + esc(u.tracking) : ""}</span></span><span class="muted" aria-hidden="true">›</span></a>`).join("")
           || `<div class="empty">Nothing shipped to them yet. Open a unit on the Hardware page to ship it.</div>`}</div></section>`; })() : ""}

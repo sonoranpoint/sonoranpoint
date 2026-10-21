@@ -921,7 +921,7 @@ select pg_temp.ok((select html like '%/brand/logo.png%' and html like '%Equipmen
 select pg_temp.ok((select html like '%See all alerts%' and html like '%#alerts?org=%' and html like '%4 things need a look%' and html like '%on the dashboard%'
                    from private.email_batches where to_email = 'owner-a@example.com'), 'several alerts: one email, a button to all alerts, and where each came from');
 update organizations set logo_url = 'https://example.test/l.png' where id = '00000000-0000-0000-0000-00000000d3e0';
-select private.enqueue_email('00000000-0000-0000-0000-00000000d3e0', 'problem', 'Test item: Damaged', 'Reported.', '#equipment', now()) \g /dev/null
+select private.enqueue_email('00000000-0000-0000-0000-00000000d3e0', 'problem', 'Test item: Damaged', 'Reported.', '#equipment', now(), null) \g /dev/null
 select private.build_email_batches() \g /dev/null
 select pg_temp.ok((select html like '%/brand/logo.png%' and html not like '%example.test/l.png%' and html not like '%#1F4E79%' from private.email_batches order by id desc limit 1),
                   'even when the company has a logo: Sonoran Point''s logo on white, no company colors');
@@ -1032,6 +1032,47 @@ select pg_temp.ok((select count(*) from equipment_loans where equipment_id = :'b
 select set_config('request.jwt.claim.sub', 'cccccccc-0000-0000-0000-000000000003', false) \g /dev/null
 select pg_temp.ok(pg_temp.raises($$select lend_equipment((select id from equipment where nfc_uid = '04DE000201'), (select id from contracts where name = 'Delta BW'))$$), 'a viewer can''t lend');
 reset role;
+
+\echo '--- Managers see only their contracts'
+update org_members set role = 'supervisor' where user_id = 'cccccccc-0000-0000-0000-000000000003';
+select id as erm02 from stations where name = 'Equipment Room 02' \gset
+select id as uawroom from stations where name = 'United AW room' \gset
+set role authenticated;
+select set_config('request.jwt.claim.sub', 'aaaaaaaa-0000-0000-0000-000000000001', false) \g /dev/null
+select pg_temp.ok(set_member_contracts('00000000-0000-0000-0000-00000000d3e0', 'aaaaaaaa-0000-0000-0000-000000000001', array[:'dbw'::uuid])->>'error' = 'owner_sees_all', 'owners always see everything');
+select pg_temp.ok((set_member_contracts('00000000-0000-0000-0000-00000000d3e0', 'cccccccc-0000-0000-0000-000000000003', array[:'dbw'::uuid])->>'ok')::boolean, 'admin makes Kelly a Delta BW supervisor');
+select set_config('request.jwt.claim.sub', 'cccccccc-0000-0000-0000-000000000003', false) \g /dev/null
+select pg_temp.ok((select count(*) from equipment where contract_id = :'ubw') = 0 and (select count(*) from equipment where contract_id = :'dbw') > 0
+                  and (select count(*) from equipment where contract_id is null) > 0, 'she sees Delta BW gear and company-wide gear, not United''s');
+select pg_temp.ok(not exists (select 1 from employees where employee_number = 'E1002') and exists (select 1 from employees where employee_number = 'E1001'), 'Delta BW crew only (no Jordan from United BW)');
+select pg_temp.ok(exists (select 1 from stations where id = :'erm02') and not exists (select 1 from stations where id = :'uawroom'), 'Delta BW stations only');
+select pg_temp.ok((select string_agg(name, ',' order by name) from contracts) = 'BW,Delta BW', 'her contract and the group above it');
+select pg_temp.ok((select count(*) from transactions where station_id = :'uawroom') = 0
+                  and (select count(*) from transactions where station_id = :'erm02') > 0, 'history at United stations is hidden');
+select pg_temp.ok((select count(*) from equipment_problems p where not exists (select 1 from equipment e where e.id = p.equipment_id)) = 0, 'problems on United gear are hidden');
+select pg_temp.ok(pg_temp.raises($$select set_equipment_status((select id from equipment where nfc_uid = '04DE000201'), 'maintenance')$$), 'can''t change United gear, even by its id');
+select pg_temp.ok(pg_temp.raises($$select report_problem((select id from equipment where nfc_uid = '04DE000201'), (select id from problem_reasons where label = 'Damaged' limit 1))$$),
+                  'or report a problem on it');
+update employees set last_name = 'X' where employee_number = 'E1002';
+reset role;
+select pg_temp.ok((select last_name from employees where employee_number = 'E1002') <> 'X', 'or edit United crew');
+set role authenticated;
+select pg_temp.ok(pg_temp.raises($$select set_member_contracts('00000000-0000-0000-0000-00000000d3e0', 'cccccccc-0000-0000-0000-000000000003', '{}')$$), 'and can''t change who sees what');
+reset role;
+update notification_prefs set kinds = array['problem'] where user_id = 'cccccccc-0000-0000-0000-000000000003';
+set role anon;
+select station_report_problem(:'keyaw', gen_random_uuid(), '04BA00000002', '04DE000201', :'damaged') \g /dev/null
+select station_report_problem(:'key4', gen_random_uuid(), '04BA00000001', '04DE000202', :'damaged') \g /dev/null
+reset role;
+select pg_temp.ok((select count(*) from private.email_queue where to_email = 'viewer@example.com' and title like 'Blower 01%') = 0
+                  and (select count(*) from private.email_queue where to_email = 'viewer@example.com' and title like 'Blower 02%') = 1, 'alert emails only for her contracts');
+set role authenticated;
+select set_config('request.jwt.claim.sub', 'aaaaaaaa-0000-0000-0000-000000000001', false) \g /dev/null
+select set_member_contracts('00000000-0000-0000-0000-00000000d3e0', 'cccccccc-0000-0000-0000-000000000003', '{}') \g /dev/null
+select set_config('request.jwt.claim.sub', 'cccccccc-0000-0000-0000-000000000003', false) \g /dev/null
+select pg_temp.ok((select count(*) from equipment where contract_id = :'ubw') > 0, 'with no contracts picked she sees everything again');
+reset role;
+update org_members set role = 'viewer' where user_id = 'cccccccc-0000-0000-0000-000000000003';
 
 update stations set contract_id = null where name = 'Equipment Room 02';
 update employees set contract_id = null;

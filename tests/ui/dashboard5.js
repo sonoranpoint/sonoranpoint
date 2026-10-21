@@ -74,6 +74,35 @@ const change = async (el, v) => { if (typeof v === "boolean") el.checked = v; el
   const f = doc.querySelector('.drawer [data-form^="lend:"]'); f.elements.to.value = "daw";
   await submit('.drawer [data-form^="lend:"]', { notes: "Swap for a radio" });
   check(E(`loanOf('${b6}').to`) === "daw" && /Lent to Delta AW/.test(doc.body.textContent), "lend it again from the panel");
+  // Part 2: the Show switcher
+  E("DB.contracts.find(c => c.id === 'uaw') || DB.contracts.push({ id: 'uaw', parent: 'aw', name: 'United AW', sort: 9 }); render()");
+  await go("equipment");
+  const vs = doc.querySelector("#viewSel");
+  check(vs && [...vs.options].map((o) => o.textContent.trim()).includes("Delta BW"), "the top bar has a Show switcher with the contracts");
+  vs.value = "dbw"; vs.dispatchEvent(new dom.window.Event("change", { bubbles: true })); await sleep(20);
+  check(E("api.equipment().every(q => !q.contract || ['dbw','bw'].includes(q.contract))") && E("api.equipment().length") > 0, "Show Delta BW: only Delta BW (and company-wide) equipment");
+  check(E("api.employees().every(e => !e.contract || ['dbw','bw'].includes(e.contract))"), "...people");
+  check(E("api.stations().every(x => !x.contract || ['dbw','bw'].includes(x.contract))") && E("api.stations().length") === 1, "...stations");
+  check(E("api.shiftReports().every(r => !r.shift.contract || r.shift.contract === 'dbw')"), "...and shift reports");
+  await go("shifts");
+  const names = () => [...doc.querySelectorAll(".main table tbody td:first-child b")].map((b) => b.textContent);
+  check(!names().includes("PM") && names().includes("AM"), "...and shifts (United's PM shift is hidden)");
+  const vs2 = doc.querySelector("#viewSel"); vs2.value = ""; vs2.dispatchEvent(new dom.window.Event("change", { bubbles: true })); await sleep(20);
+  check(names().includes("PM"), "All contracts brings everything back");
+
+  // Who sees what (Team access)
+  await go("team");
+  check(/Sees/.test(page()) && /Delta BW/.test(doc.querySelector(".main table").textContent), "Team access shows what each person covers (Kelly: Delta BW)");
+  E("openDrawer('memberScope', 'u4')"); await sleep(20);
+  check(/What Ops sees/.test(drawer()) && doc.querySelectorAll('.drawer input[name=c]').length >= 6, "pick contracts for someone");
+  doc.querySelector('.drawer input[name=c][value="ubw"]').checked = true;
+  doc.querySelector('.drawer form').dispatchEvent(new dom.window.Event("submit", { bubbles: true, cancelable: true })); await sleep(20);
+  check(JSON.stringify(E("DB.members.find(m => m.id === 'u4').contracts")) === '["ubw"]', "saved: Ops Office now covers United BW");
+  check(!E("api.setMemberContracts('u1', ['dbw']).ok"), "owners always see everything");
+  // Shift belongs to a contract
+  E(`openDrawer('shiftForm', DB.shifts.find(x => x.name === 'Overnight').id)`); await sleep(20);
+  await submit('[data-form^="shift:"]', { contract: "daw" });
+  check(E("DB.shifts.find(x => x.name === 'Overnight').contract") === "daw", "a shift belongs to a contract");
   check(errors.length === 0, "no script errors " + errors.join(";"));
   process.exit();
 })();

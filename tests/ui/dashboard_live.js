@@ -245,8 +245,18 @@ const ORG = "00000000-0000-0000-0000-00000000d3e0";
   check(one(`select nfc_uid from equipment where id='${other}'`) !== "04DEADBEEF01", "and nothing wrong was saved");
 
   // supervisor can't do admin things (RLS)
+  // Kelly covers Delta BW only (set on Team access); signed in, she can't see United BW's radio
+  one(`update org_members set role = 'supervisor' where user_id = '${kelly}'`);
+  P.go("team"); await P.E("live.reload()"); await P.settled();
+  await new Promise((r) => setTimeout(r, 150)); P.E(`openDrawer('memberScope', '${kelly}')`); await P.until(() => P.doc.querySelector(`[data-form="memberScope:${kelly}"]`));
+  { const dbw = one(`select id from contracts where name='Delta BW' and org_id='${ORG}'`);
+    P.doc.querySelector(`.drawer input[name=c][value="${dbw}"]`).checked = true; P.submit(`[data-form="memberScope:${kelly}"]`);
+    check(await P.until(() => one(`select string_agg(contract_id::text, ',') from member_contracts where user_id='${kelly}'`) === dbw), "an admin limits Kelly to Delta BW"); }
+  await P.settled();
   const K = open(); await K.signIn("kelly@demoair.example");
   check(await K.until(() => /Recent activity/.test(K.text())), "second user signs in");
+  check(await K.until(() => K.E("DB.equipment.length") > 0) && !K.E("DB.equipment.some(q => q.name === 'Radio 02')") && K.E("DB.me.contracts.length") === 1,
+        "signed in, Kelly doesn't get United BW's gear at all (the database leaves it out)");
   P.click('[data-act="signOut"]');
   check(await P.until(() => P.doc.querySelector('[data-form="signin"]')), "sign out");
   check([P, V, W, K].every((x) => x.errors.length === 0), "no script errors " + [P, V, W, K].flatMap((x) => x.errors).join(";"));

@@ -201,6 +201,13 @@ button.row:hover { background: var(--surface-2); }
 .switch input:checked + span { background: var(--ok); } .switch input:checked + span::after { transform: translateX(18px); }
 .switch input:focus-visible + span { outline: 3px solid var(--focus); outline-offset: 2px; }
 .btn > svg { width: 17px; height: 17px; flex: none; } .btn { white-space: nowrap; } a.btn { text-decoration: none; } a.btn:not(.primary) { color: var(--ink); }
+/* Show switcher + who sees what */
+.viewsw { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; color: var(--muted); }
+.viewsw select { height: 42px; border-radius: 11px; border: 1px solid var(--line); background: var(--surface); padding: 0 10px; font-weight: 700; color: var(--ink); max-width: 200px; }
+.scopes { display: flex; flex-direction: column; gap: 2px; border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px; }
+.scopes label { display: flex; align-items: center; gap: 10px; padding: 7px 0; font-weight: 700; border-bottom: 1px solid var(--line); }
+.scopes label:last-child { border-bottom: 0; }
+@media (max-width: 640px) { .viewsw span { display: none; } .viewsw select { max-width: 104px; padding: 0 6px; } }
 /* Contracts tree */
 .ctree { display: flex; flex-direction: column; gap: 2px; }
 .crow { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(0, 1.4fr) auto; gap: 12px; align-items: center; padding: 8px 0 8px calc(var(--d, 0) * 28px); border-bottom: 1px solid var(--line); }
@@ -744,6 +751,8 @@ function buildDemo() {
   employees.forEach((e, i) => { if (e.role === "employee") e.contract = ["dbw", "ubw", "daw"][i % 3]; });
   equipment.forEach((q) => { q.contract = { c1: "dbw", c2: "dbw", c3: "ubw", c4: "ubw", c5: "daw", c6: "uaw" }[q.cat] || null; });
   stations[0].contract = "dbw"; stations[1].contract = "ubw";
+  members.find((m) => m.id === "u3").contracts = ["dbw"];
+  shifts.forEach((x) => { x.contract = { AM: "dbw", PM: "ubw" }[x.name] || null; });
   const loans = [{ id: "ln1", eq: equipment.find((q) => q.name === "Battery 06").id, from: "ubw", to: "dbw", at: now - 5 * HOUR, by: "Dana Brooks", notes: "Delta's chargers are down" }];
   const emailPrefs = { u1: ["problem"], u2: ["problem", "overdue"], u3: ["overdue", "shift_report"], u4: [] };
   return { now, org, categories, equipment, employees, shifts, stations, txns, alerts, audit, reportAcks, occs, members, invites, reasons, problems, emailPrefs, contracts, loans,
@@ -754,6 +763,8 @@ const DB = buildDemo();
 const RANK = { viewer: 0, supervisor: 1, admin: 2, owner: 3 };
 const ROLE_NAME = { viewer: "View only", supervisor: "Supervisor", admin: "Admin", owner: "Owner" };
 const can = (need) => RANK[DB.me.role] >= RANK[need];
+// Contracts the signed-in person covers (null = all). The database applies the same limit.
+const myScopeIds = () => DB.me.role === "owner" || !(DB.me.contracts || []).length ? null : DB.me.contracts;
 const canManageRole = (role) => DB.me.role === "owner" || (DB.me.role === "admin" && role !== "owner");
 
 /* =====================================================================
@@ -782,6 +793,18 @@ function contractsShare(a, b) {
   const path = (id) => { const out = []; let c = contractOf(id), n = 0; while (c && n++ < 50) { out.unshift(c.id); c = contractOf(c.parent); } return out; };
   const pa = path(a), pb = path(b); let meet = null; for (let i = 0; i < Math.min(pa.length, pb.length) && pa[i] === pb[i]; i++) meet = pa[i];
   return meet ? !!contractOf(meet)?.share : !!DB.org.settings?.share_contracts;
+}
+/* "Show" switcher: one contract (with what's under it and the groups above), or everything you can see.
+   Things with no contract belong to the whole company and always show. */
+const inView = (c) => !S.view || !c || inBranch(c, S.view) || inBranch(S.view, c);
+const txnInView = (t) => { if (!S.view) return true;
+  const ce = eqOf(t.eq)?.contract, cs = DB.stations.find((x) => x.id === t.station)?.contract, cp = empOf(t.emp)?.contract;
+  return [ce, cs, cp].some((c) => c && inView(c)) || (!ce && !cs); };
+const VIEWED = { equipment: (x) => inView(x.contract), employees: (x) => inView(x.contract), stations: (x) => inView(x.contract), activity: txnInView,
+  alerts: (a) => inView(eqOf(a.eq)?.contract), problems: (p) => inView(eqOf(p.eq)?.contract), shiftReports: (r) => inView(r.shift.contract) };
+function wrapViews() {
+  for (const [k, keep] of Object.entries(VIEWED)) { const f = api[k]; if (f.__viewed) continue;
+    api[k] = (...a) => { const r = f.apply(api, a); return S.view ? r.filter(keep) : r; }; api[k].__viewed = true; }
 }
 const loanOf = (eqId) => (DB.loans || []).find((l) => l.eq === eqId && !l.ended_at) || null;
 const inBranch = (id, top) => { let c = contractOf(id), n = 0; while (c && n++ < 50) { if (c.id === top) return true; c = contractOf(c.parent); } return false; };
@@ -896,7 +919,7 @@ const api = {
       if (!days.length) return { ok: false, error: "Pick at least one day." };
       const grace = Number(d.grace), early = Number(d.early);
       if (!(grace >= 0 && grace <= 720) || !(early >= 0 && early <= 720)) return { ok: false, error: "Minutes must be between 0 and 720." };
-      const patch = { name, start: d.start, end: d.end, days: days.length === 7 ? null : days.sort(), grace, early };
+      const patch = { name, start: d.start, end: d.end, days: days.length === 7 ? null : days.sort(), grace, early, ...("contract" in d ? { contract: d.contract || null } : {}) };
       if (s0) Object.assign(s0, patch); else { id = "s" + Date.now(); DB.shifts.push({ id, active: true, ...patch }); }
       DB.audit.push({ at: Date.now(), actor: DB.me.name, text: `${s0 ? "edited" : "added"} shift ${name}` });
     } else if (!s0 || !can("supervisor")) return { ok: false, error: "Not allowed." };
@@ -961,6 +984,12 @@ const api = {
     DB.members = DB.members.filter((x) => x.id !== id); return { ok: true };
   },
   cancelInvite(id) { DB.invites = DB.invites.filter((i) => i.id !== id); },
+  /* rpc set_member_contracts (admins): which contracts someone covers; none = everything */
+  setMemberContracts(id, ids) {
+    const m = DB.members.find((x) => x.id === id);
+    if (m.role === "owner" && ids.length) return { ok: false, error: "Owners always see everything." };
+    m.contracts = ids; if (id === DB.me.id) DB.me.contracts = ids; return { ok: true };
+  },
   /* rpc lend_equipment / end_equipment_loan (supervisors) */
   lend(eqId, to, notes) {
     if (!can("supervisor")) return { ok: false, error: "Your role can't lend equipment." };
@@ -1029,6 +1058,7 @@ const api = {
     DB.emailPrefs[userId] = kinds; return { ok: true };
   },
 };
+wrapViews();
 const normUid = (u) => String(u || "").replace(/[^0-9a-f]/gi, "").toUpperCase();
 function uidOwner(uid, exceptId) {
   const e = DB.employees.find((x) => x.badge === uid && x.id !== exceptId); if (e) return `${e.name}'s badge`;
@@ -1114,7 +1144,7 @@ function applyDeep() {
   return false;
 }
 const S = {
-  route: parseHash().route || DEEP?.route || "overview",
+  route: parseHash().route || DEEP?.route || "overview", view: null,
   drawer: null, confirm: null, toast: null,
   f: { eqSearch: "", eqCat: "", eqStatus: "all", empSearch: "", actSearch: "", actType: "all", actRange: "7d", alertTab: "open", newStation: null },
 };
@@ -1176,6 +1206,7 @@ function render() {
     <main class="main">
       <header class="topbar">
         <button class="iconbtn menu-btn" data-act="navOpen" aria-label="Open menu">${ic("menu")}</button>
+        ${viewSwitch()}
         <div class="gsearch" role="search">${ic("search")}<input type="search" id="gsearch" placeholder="Search equipment or people…" aria-label="Search equipment or people" autocomplete="off" value="${esc(S.gq || "")}">
           <div class="pop" id="gsResults" role="listbox" ${S.gq ? "" : "hidden"}>${S.gq ? searchResults(S.gq) : ""}</div></div>
         <a class="iconbtn" href="#alerts" aria-label="${open ? `${open} open alert${open === 1 ? "" : "s"}` : "Alerts"}">${ic("bell")}${open ? `<span class="badge">${open > 99 ? "99+" : open}</span>` : ""}</a>
@@ -1190,6 +1221,12 @@ function render() {
       </header>
       <div class="wrap">${VIEWS[S.route]()}</div></main>`;
   renderLayer();
+}
+function viewSwitch() {
+  const tree = contractTree(); if (tree.length < 2) return "";
+  return `<label class="viewsw"><span>Show</span><select id="viewSel" aria-label="Show ${esc(CTERM().one.toLowerCase())}">
+    <option value="">${esc(myScopeIds() ? `All my ${CTERM().many.toLowerCase()}` : `All ${CTERM().many.toLowerCase()}`)}</option>
+    ${tree.map((c) => `<option value="${c.id}" ${S.view === c.id ? "selected" : ""}>${"\u2003".repeat(c.depth)}${esc(c.name)}</option>`).join("")}</select></label>`;
 }
 // Any picture becomes a PNG at most 1024 px on its longest side (transparency kept), so only small, safe PNGs are stored.
 async function toPng(file) {
@@ -1481,17 +1518,18 @@ function vShifts() {
   const byDay = {};
   reps.forEach((r) => { (byDay[dayKey(r.day)] = byDay[dayKey(r.day)] || []).push(r); });
   const crewN = (id) => DB.employees.filter((e) => e.active && e.shifts.includes(id)).length;
+  const shiftList = DB.shifts.filter((x) => inView(x.contract));
   return head("Shifts", "Who works when, and what each crew hadn't returned by the end of their shift.", `<span class="actions"><button class="btn" data-act="csvReports">${ic("download")}Download reports</button>${can("admin") ? `<button class="btn primary" data-open="shiftForm:">Add a shift</button>` : ""}</span>`) +
     `<section class="panel"><div class="panel-h"><h2>Shifts</h2>${can("supervisor") ? "" : `<span class="muted" style="font-size:13px">View only</span>`}</div><div class="tablewrap"><table class="tbl">
       <thead><tr><th>Shift</th><th>Time</th><th>Days</th><th>Grace</th><th>Crew</th><th></th></tr></thead><tbody>
-      ${DB.shifts.map((x) => `<tr ${x.active ? "" : 'style="opacity:.6"'}><td><b>${esc(x.name)}</b>${x.active ? "" : ` <span class="chip quiet">Not in use</span>`}</td>
+      ${shiftList.map((x) => `<tr ${x.active ? "" : 'style="opacity:.6"'}><td><b>${esc(x.name)}</b>${x.active ? "" : ` <span class="chip quiet">Not in use</span>`}${x.contract ? `<span class="sub">${esc(contractName(x.contract))}</span>` : ""}</td>
         <td>${fmtClock(x.start)} to ${fmtClock(x.end)}${x.end < x.start ? ` <span class="muted">(next day)</span>` : ""}</td><td>${esc(daysText(x.days))}</td>
         <td>${x.grace} min</td><td>${crewN(x.id)}</td>
         <td style="text-align:right"><button class="btn sm" data-open="shiftForm:${x.id}">${can("supervisor") ? "Edit" : "View"}</button></td></tr>`).join("")}
       </tbody></table></div></section>
     <h2 style="margin:6px 0 0;font-family:var(--display);font-size:22px">Shift reports</h2>
     <p class="muted" style="margin:0 0 4px">Made automatically after every shift ends (plus its grace period).</p>
-    ${DB.shifts.length > 1 ? `<div class="filters"><div class="seg" role="group" aria-label="Which shift">${[["all", "All shifts"], ...DB.shifts.map((x) => [x.id, x.name])]
+    ${shiftList.length > 1 ? `<div class="filters"><div class="seg" role="group" aria-label="Which shift">${[["all", "All shifts"], ...shiftList.map((x) => [x.id, x.name])]
       .map(([k, l]) => `<button class="${only === k ? "on" : ""}" data-seg="repShift:${k}">${esc(l)}</button>`).join("")}</div></div>` : ""}` +
     Object.entries(byDay).map(([k, list]) => `<section class="panel"><div class="panel-h"><h2>${esc(fmtDay(list[0].day))}</h2></div><div class="list">
       ${list.map((r) => `<button class="row" data-open="report:${r.key}" style="grid-template-columns:110px minmax(0,1fr) auto">
@@ -1657,9 +1695,10 @@ function vTeam() {
       </form>
       <div class="panel-b muted" style="border-top:1px solid var(--line);font-size:13.5px">They get an email with a link that works for 14 days, only when signed in with that address.</div></section>
     <section class="panel"><div class="panel-h"><h2>People (${members.length})</h2></div><div class="tablewrap"><table>
-      <thead><tr><th>Name</th><th>Role</th><th>Last signed in</th><th></th></tr></thead>
+      <thead><tr><th>Name</th><th>Role</th>${DB.contracts?.length ? `<th>Sees</th>` : ""}<th>Last signed in</th><th></th></tr></thead>
       <tbody>${members.map((m) => `<tr><td><b>${esc(m.name)}</b>${m.id === DB.me.id ? ` <span class="chip quiet">You</span>` : ""}<span class="sub">${esc(m.email)}</span></td>
-        <td>${roleSel(m)}</td><td class="num">${esc(ago(m.last))}</td>
+        <td>${roleSel(m)}</td>${DB.contracts?.length ? `<td>${m.role === "owner" ? `<span class="muted">Everything</span>`
+          : `<button class="link" data-open="memberScope:${m.id}">${esc((m.contracts || []).length ? m.contracts.map(contractName).filter(Boolean).join(", ") : "Everything")}</button>`}</td>` : ""}<td class="num">${esc(ago(m.last))}</td>
         <td>${S.confirm === "rm:" + m.id ? `<span class="confirm" style="padding:4px 8px">Remove ${esc(m.name.split(" ")[0])}? <button class="btn sm danger" data-act="rmMember" data-id="${m.id}">Remove</button><button class="btn sm" data-act="noConfirm">Cancel</button></span>`
           : canManageRole(m.role) && m.id !== DB.me.id ? `<button class="btn sm danger" data-act="askRm" data-id="${m.id}">Remove</button>` : ""}</td></tr>`).join("")}</tbody></table></div></section>
     ${invites.length ? `<section class="panel"><div class="panel-h"><h2>Waiting to accept (${invites.length})</h2></div><div class="list">${invites.map((i) => `
@@ -1842,6 +1881,16 @@ function dEmpForm(id) {
       <div class="actions full"><button class="btn primary">${id ? "Save changes" : "Add employee"}</button><button class="btn" type="button" data-act="${id ? "backEmp" : "close"}">Cancel</button></div>
     </form></div>`;
 }
+function dMemberScope(id) {
+  const m = api.members().members.find((x) => x.id === id); if (!m) return drawerHead("Not found");
+  const T = CTERM(), on = new Set(m.contracts || []);
+  return drawerHead(`What ${esc(firstName(m.name))} sees`, esc(m.email)) + `<div class="drawer-b">
+    <p class="muted" style="margin:0 0 12px">Pick the ${esc(T.many.toLowerCase())} ${esc(firstName(m.name))} covers. They'll see those, everything under them, and anything that belongs to the whole company,
+      on every page and in their alert emails. Pick none to let them see everything.</p>
+    <form data-form="memberScope:${m.id}"><div class="scopes">${contractTree().map((c) => `<label style="padding-left:${c.depth * 22}px"><input type="checkbox" name="c" value="${c.id}" ${on.has(c.id) ? "checked" : ""}> ${esc(c.name)}</label>`).join("")}</div>
+      <div class="err" role="alert">${esc(S.formErr || "")}</div>
+      <div class="actions" style="margin-top:14px"><button class="btn primary">Save</button><button class="btn" type="button" data-act="close">Cancel</button></div></form></div>`;
+}
 function dShiftForm(id) {
   const x = id ? DB.shifts.find((s) => s.id === id) : { name: "", start: "05:00", end: "13:30", days: null, grace: 15, early: 60, active: true };
   const admin = can("admin"), sup = can("supervisor"), c = S.confirm;
@@ -1851,6 +1900,8 @@ function dShiftForm(id) {
     ${!sup ? `<div class="readonly-note">You have View only access.</div>` : !admin ? `<div class="readonly-note">Supervisors can change who's on the shift. An admin changes its times.</div>` : ""}
     <form class="fgrid" data-form="shift:${id || ""}"><fieldset ${admin ? "" : "disabled"} class="full fgrid" style="border:0;padding:0;margin:0;min-width:0">
       <label class="full">Name<input class="field" name="name" required maxlength="40" value="${esc(x.name)}" placeholder="AM, PM, Overnight"></label>
+      ${DB.contracts?.length ? `<label class="full">${esc(CTERM().one)}<small>Who works this shift. Its reports go to that ${esc(CTERM().one.toLowerCase())}'s supervisors.</small>
+        <select class="field" name="contract">${contractOptions(x.contract ?? S.view ?? "")}</select></label>` : ""}
       <label>Starts<input class="field" type="time" name="start" required value="${x.start}"></label>
       <label>Ends<small>Earlier than the start = ends the next day</small><input class="field" type="time" name="end" required value="${x.end}"></label>
       <div class="full" style="display:flex;flex-direction:column;gap:5px"><b style="font-size:13.5px">Days</b>
@@ -1870,7 +1921,7 @@ function dShiftForm(id) {
       : `<p class="muted" style="margin:0 0 8px">No reports are made for it. Past reports are kept.</p><div class="actions"><button class="btn" data-act="doShiftActive" data-v="1">Start using again</button></div>`}</div>` : ""}
   </div>`;
 }
-const DRAWERS = { shiftForm: dShiftForm, eqForm: dEqForm, empForm: dEmpForm, equipment: dEquipment, employee: dEmployee, report: dReport, station: dStation };
+const DRAWERS = { memberScope: dMemberScope, shiftForm: dShiftForm, eqForm: dEqForm, empForm: dEmpForm, equipment: dEquipment, employee: dEmployee, report: dReport, station: dStation };
 
 /* =====================================================================
    Events
@@ -1961,6 +2012,7 @@ document.addEventListener("input", (e) => {
 });
 document.addEventListener("change", (e) => {
   const t = e.target;
+  if (t.id === "viewSel") { S.view = t.value || null; try { localStorage.setItem("sp.view." + (DB.org.id || "demo"), S.view || ""); } catch {} S.drawer = null; return render(); }
   if (t.id === "switchOrg") { S.drawer = null; return openCompany(t.value); }
   if (t.id === "actDay") { S.f.actDay = t.value; S.f.actShow = 150;
     if (LIVE && t.value && live.loadDay) { S.dayLoading = true; render(); live.loadDay(t.value).catch((err) => toast(niceErr(err))).finally(() => { S.dayLoading = false; render(); }); return; }
@@ -2003,6 +2055,11 @@ document.addEventListener("submit", async (e) => {
   e.preventDefault();
   const f = e.target, kind = f.dataset.form || "", data = Object.fromEntries(new FormData(f));
   if (kind === "signin" || kind === "newpass" || kind === "profile") return authAction(kind, f);
+  if (kind.startsWith("memberScope:")) {
+    const ids = new FormData(f).getAll("c"); const r = api.setMemberContracts(kind.slice(12), ids);
+    if (!r.ok) { S.formErr = r.error; renderLayer(); return; }
+    S.formErr = null; S.drawer = null; toast("Saved"); return render();
+  }
   if (kind.startsWith("lend:")) {
     const r = api.lend(kind.slice(5), data.to, data.notes);
     if (!r.ok) { S.formErr = r.error; renderLayer(); return; }
@@ -2140,6 +2197,8 @@ const live = {
     // Added in database update 11; the dashboard still works before it's run.
     const since30 = new Date(Date.now() - 30 * 86400000).toISOString();
     const contracts = await q(sb.from("contracts").select("*").eq("org_id", org).order("sort_order")).catch(() => []);
+    const covers = await q(sb.from("member_contracts").select("user_id,contract_id").eq("org_id", org)).catch(() => []);
+    const coversOf = (uid) => covers.filter((x) => x.user_id === uid).map((x) => x.contract_id);
     const loans = await all("equipment_loans", "*", (x) => x.eq("org_id", org).or(`ended_at.is.null,lent_at.gte.${new Date(Date.now() - 30 * 86400000).toISOString()}`).order("lent_at")).catch(() => []);
     const [reasons, problems, prefs] = await Promise.all([
       q(sb.from("problem_reasons").select("*").eq("org_id", org).is("archived_at", null).order("sort_order")).catch(() => []),
@@ -2163,7 +2222,7 @@ const live = {
         holder: x.current_employee_id, out_at: ms(x.checked_out_at), due_at: ms(x.due_at), lost_at: x.status === "lost" ? ms(x.last_event_at) : null, contract: x.contract_id || null })),
       employees: emps.map((e) => ({ id: e.id, first: e.first_name, last: e.last_name, name: [e.first_name, e.last_name].filter(Boolean).join(" "), number: e.employee_number,
         role: e.station_role, active: e.active, badge: e.badge_uid, pin: pinSet.has(e.id), shifts: assigns.filter((a) => a.employee_id === e.id).map((a) => a.shift_id), contract: e.contract_id || null })),
-      shifts: shifts.map((s) => ({ id: s.id, name: s.name, start: hhmm(s.start_time), end: hhmm(s.end_time), grace: s.grace_minutes, early: s.early_checkout_minutes,
+      shifts: shifts.map((s) => ({ id: s.id, name: s.name, start: hhmm(s.start_time), end: hhmm(s.end_time), grace: s.grace_minutes, early: s.early_checkout_minutes, contract: s.contract_id || null,
         days: s.days_of_week && s.days_of_week.length < 7 ? s.days_of_week : null, active: s.active })),
       stations: stations.map((s) => ({ id: s.id, name: s.name, location: s.location || "", version: s.software_version, last_seen: ms(s.last_seen_at) || 0, revoked: !!s.revoked_at,
         added: ms(s.created_at), pending: !s.activated_at && !s.revoked_at, code: (DB.stations || []).find((x) => x.id === s.id)?.code || null, contract: s.contract_id || null })),
@@ -2178,6 +2237,8 @@ const live = {
       contracts: contracts.map((c) => ({ id: c.id, parent: c.parent_id, name: c.name, share: c.share_children, move: c.move_on_return, sort: c.sort_order })),
       emailPrefs: Object.fromEntries(prefs.map((p) => [p.user_id, p.kinds || []])),
     });
+    DB.me.contracts = coversOf(L.user.id); DB.members.forEach((m) => { m.contracts = coversOf(m.id); });
+    try { const v = localStorage.getItem("sp.view." + org); S.view = v && DB.contracts.some((c) => c.id === v) ? v : null; } catch {}
     const empName = (id) => { const e = DB.employees.find((x) => x.id === id); return e ? e.name : null; };
     DB.loans = loans.map((l) => ({ id: l.id, eq: l.equipment_id, from: l.from_contract_id, to: l.to_contract_id, at: ms(l.lent_at), notes: l.notes,
       by: empName(l.lent_by_employee) || who(l.lent_by_user), ended_at: ms(l.ended_at), how: l.ended_how }));
@@ -2265,7 +2326,7 @@ const REMOTE = {
   saveShift: async ([id, d, crew], r) => {
     const s = DB.shifts.find((x) => x.id === r.id); let sid = id;
     if (can("admin")) {
-      const row = { name: s.name, start_time: s.start, end_time: s.end, days_of_week: s.days || null, grace_minutes: s.grace, early_checkout_minutes: s.early };
+      const row = { name: s.name, start_time: s.start, end_time: s.end, days_of_week: s.days || null, grace_minutes: s.grace, early_checkout_minutes: s.early, ...(DB.contracts?.length ? { contract_id: s.contract || null } : {}) };
       if (id) await upd("shifts", id, row); else { sid = (await q(sb.from("shifts").insert({ org_id: ORG(), ...row }).select("id").single())).id; L.idMap[r.id] = sid; s.id = sid; }
     }
     if (crew) await syncAssignments("shift_id", sid, crew, "employee_id");
@@ -2291,6 +2352,7 @@ const REMOTE = {
   setMemberRole: ([id, role]) => okRpc("set_member_role", { p_org: ORG(), p_user: id, p_role: role }),
   removeMember: ([id]) => okRpc("remove_member", { p_org: ORG(), p_user: id }),
   cancelInvite: ([id]) => rpc("cancel_invite", { p_invite: id }),
+  setMemberContracts: ([id, ids]) => okRpc("set_member_contracts", { p_org: ORG(), p_user: id, p_contracts: ids }),
   reportProblem: async ([eq, reason, notes], r) => { const x = await okRpc("report_problem", { p_equipment: eq, p_reason: reason, p_notes: notes || null }); if (r?.id && !r.already) L.idMap[r.id] = x.id; },
   clearProblem: ([id, notes]) => okRpc("clear_problem", { p_problem: id, p_notes: (notes || "").trim() || null }),
   saveReason: async ([id], r) => { const x = DB.reasons.find((y) => y.id === r.id); if (!x) return;
@@ -2331,6 +2393,7 @@ function goLive() {
     return r.activation_code;
   };
   api.shiftReports = () => DB.liveReports || [];
+  wrapViews();
 }
 
 /* ---- Sign-in, invites, company choice ---- */

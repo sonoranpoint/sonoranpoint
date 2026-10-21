@@ -147,6 +147,10 @@ const submit = async (sel) => { doc.querySelector(sel).dispatchEvent(new dom.win
   await go("fleet"); await click('[data-seg="fleet:all"]'); check(doc.querySelectorAll('a[href^="#unit/"]').length >= 9, "stations page links each unit");
   await go("unit/" + nid); await click('[data-act="askHwDelete"]'); await click('[data-act="hwDelete"]'); await sleep(40);
   check(!E("DB.hw.some(u => u.serial === 'SP-0015')"), "owner deletes a mistake");
+  // Contracts on the customer page
+  dom.window.location.hash = "customer/" + E("DB.customers.find(c => c.name === 'Demo Air Services').id"); await sleep(60);
+  check([...doc.querySelectorAll("tr.grp")].map((r) => r.textContent.trim()).join("|") === "Delta BW|United BW", "a customer's stations are grouped by contract");
+  check(/what's under it never crosses/.test(doc.body.textContent) && /shares badges and gear/.test(doc.body.textContent), "their contract tree shows with its sharing rules");
   check(errors.length === 0, "no script errors " + errors.join(";"));
   process.exit();
 })();
