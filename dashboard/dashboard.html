@@ -576,7 +576,7 @@ function downloadCsv(name, header, rows) {
   return csv;
 }
 const csvWhen = (ms) => (ms ? new Intl.DateTimeFormat("en-US", { timeZone: tz(), year: "numeric", month: "2-digit", day: "2-digit", hour: "numeric", minute: "2-digit" }).format(new Date(ms)) : "");
-function statusText(q) { return statusText0(q) + (q.problem ? ` (${q.problem.reason})` : ""); }
+function statusText(q) { return statusText0(q) + (q.problem ? ` (${q.problem.reason})` : "") + (q.loan ? ` (on loan to ${contractName(q.loan.to)})` : ""); }
 function statusText0(q) { return q.status === "lost" ? "Lost" : q.status === "maintenance" ? "Maintenance" : q.status === "retired" ? "Retired" : q.is_overdue ? "Overdue" : q.is_extended ? "Out too long" : q.holder ? "Checked out" : "Available"; }
 const HOUR = 3600000, MIN = 60000;
 
@@ -744,8 +744,9 @@ function buildDemo() {
   employees.forEach((e, i) => { if (e.role === "employee") e.contract = ["dbw", "ubw", "daw"][i % 3]; });
   equipment.forEach((q) => { q.contract = { c1: "dbw", c2: "dbw", c3: "ubw", c4: "ubw", c5: "daw", c6: "uaw" }[q.cat] || null; });
   stations[0].contract = "dbw"; stations[1].contract = "ubw";
+  const loans = [{ id: "ln1", eq: equipment.find((q) => q.name === "Battery 06").id, from: "ubw", to: "dbw", at: now - 5 * HOUR, by: "Dana Brooks", notes: "Delta's chargers are down" }];
   const emailPrefs = { u1: ["problem"], u2: ["problem", "overdue"], u3: ["overdue", "shift_report"], u4: [] };
-  return { now, org, categories, equipment, employees, shifts, stations, txns, alerts, audit, reportAcks, occs, members, invites, reasons, problems, emailPrefs, contracts,
+  return { now, org, categories, equipment, employees, shifts, stations, txns, alerts, audit, reportAcks, occs, members, invites, reasons, problems, emailPrefs, contracts, loans,
            me: { id: "u1", name: "Morgan Reyes", role: "owner", email: "morgan.reyes@demoair.example" } };
 }
 const DB = buildDemo();
@@ -776,6 +777,13 @@ function contractTree() {   // depth-first, with depth for indenting
   walk(null, 0); return out;
 }
 const contractName = (id) => contractOf(id)?.name || "";
+function contractsShare(a, b) {
+  if (!a || !b || a === b || inBranch(a, b) || inBranch(b, a)) return true;
+  const path = (id) => { const out = []; let c = contractOf(id), n = 0; while (c && n++ < 50) { out.unshift(c.id); c = contractOf(c.parent); } return out; };
+  const pa = path(a), pb = path(b); let meet = null; for (let i = 0; i < Math.min(pa.length, pb.length) && pa[i] === pb[i]; i++) meet = pa[i];
+  return meet ? !!contractOf(meet)?.share : !!DB.org.settings?.share_contracts;
+}
+const loanOf = (eqId) => (DB.loans || []).find((l) => l.eq === eqId && !l.ended_at) || null;
 const inBranch = (id, top) => { let c = contractOf(id), n = 0; while (c && n++ < 50) { if (c.id === top) return true; c = contractOf(c.parent); } return false; };
 function contractOptions(sel, blank = "Whole company", skip) {
   return `<option value="">${esc(blank)}</option>` + contractTree().filter((c) => !skip || !inBranch(c.id, skip))
@@ -793,7 +801,7 @@ const api = {
       const hoursOut = q.holder ? (now - q.out_at) / HOUR : null;
       return { ...q, category: c.name, holderName: q.holder ? empOf(q.holder)?.name : null, limit: lim, extended_hours: ext,
         hours_out: hoursOut, is_overdue: !!(q.due_at && q.due_at < now && q.status !== "lost"),
-        is_extended: !!(q.holder && ext != null && hoursOut > ext && q.status !== "lost"), problem: problemOf(q.id) };
+        is_extended: !!(q.holder && ext != null && hoursOut > ext && q.status !== "lost"), problem: problemOf(q.id), loan: loanOf(q.id) };
     });
   },
   /* activity_log view */
@@ -953,6 +961,17 @@ const api = {
     DB.members = DB.members.filter((x) => x.id !== id); return { ok: true };
   },
   cancelInvite(id) { DB.invites = DB.invites.filter((i) => i.id !== id); },
+  /* rpc lend_equipment / end_equipment_loan (supervisors) */
+  lend(eqId, to, notes) {
+    if (!can("supervisor")) return { ok: false, error: "Your role can't lend equipment." };
+    const q = eqOf(eqId); if (!q.contract) return { ok: false, error: `Put it in a ${CTERM().one.toLowerCase()} first. With none, it works everywhere already.` };
+    if (!contractOf(to)) return { ok: false, error: `Pick who to lend it to.` };
+    if (contractsShare(q.contract, to)) return { ok: false, error: "They can already use it." };
+    const open = loanOf(eqId); if (open) Object.assign(open, { ended_at: Date.now(), how: "ended" });
+    DB.loans.push({ id: "ln" + Date.now(), eq: eqId, from: q.contract, to, at: Date.now(), by: DB.me.name, notes: (notes || "").trim() || null });
+    return { ok: true };
+  },
+  endLoan(eqId) { const l = loanOf(eqId); if (l) Object.assign(l, { ended_at: Date.now(), how: "ended", ended_by: DB.me.name }); return { ok: true }; },
   /* contracts: save_contract / delete_contract rpcs (admins) */
   contracts() { return contractTree(); },
   saveContract(id, d) {
@@ -1049,7 +1068,8 @@ function ago(ms) { const m = (Date.now() - ms) / MIN; if (m < 1) return "just no
 function limitText(l) { return l.rule === "none" ? "No limit" : l.rule === "shift_end" ? `End of shift${l.hours ? ` (else ${l.hours} h)` : ""}` : `${l.hours} h`; }
 function statusChip(q) {
   const base = statusChip0(q);
-  return q.problem ? `${base} <span class="chip ${q.problem.blocks ? "bad" : "warn"}" title="Reported problem">${ic("wrench")}${esc(q.problem.reason)}</span>` : base;
+  const loan = q.loan ? ` <span class="chip info" title="On loan">On loan · ${esc(contractName(q.loan.to))}</span>` : "";
+  return (q.problem ? `${base} <span class="chip ${q.problem.blocks ? "bad" : "warn"}" title="Reported problem">${ic("wrench")}${esc(q.problem.reason)}</span>` : base) + loan;
 }
 function statusChip0(q) {
   if (q.status === "lost") return `<span class="chip bad">Lost</span>`;
@@ -1312,10 +1332,10 @@ function vEquipment() {
   const q = f.eqSearch.trim().toLowerCase();
   const rows = all.filter((x) => (!f.eqCat || x.cat === f.eqCat) && (!f.eqContract || inBranch(x.contract, f.eqContract))
     && (f.eqStatus === "all" || (f.eqStatus === "out" && x.holder && x.status !== "lost") || (f.eqStatus === "available" && x.status === "available")
-        || (f.eqStatus === "overdue" && x.is_overdue) || (f.eqStatus === "extended" && x.is_extended) || (f.eqStatus === x.status && ["lost", "maintenance"].includes(x.status)) || (f.eqStatus === "problem" && x.problem))
+        || (f.eqStatus === "overdue" && x.is_overdue) || (f.eqStatus === "extended" && x.is_extended) || (f.eqStatus === x.status && ["lost", "maintenance"].includes(x.status)) || (f.eqStatus === "problem" && x.problem) || (f.eqStatus === "loan" && x.loan))
     && (!q || `${x.name} ${x.asset} ${x.holderName || ""} ${x.tag}`.toLowerCase().includes(q)))
     .sort((a, b) => (b.is_overdue - a.is_overdue) || (b.is_extended - a.is_extended) || a.name.localeCompare(b.name, undefined, { numeric: true }));
-  const seg = [["all", "All"], ["out", "Out"], ["overdue", "Overdue"], ["extended", "Out too long"], ["available", "Available"], ["lost", "Lost"], ["maintenance", "Maintenance"], ["problem", "Problems"]];
+  const seg = [["all", "All"], ["out", "Out"], ["overdue", "Overdue"], ["extended", "Out too long"], ["available", "Available"], ["lost", "Lost"], ["maintenance", "Maintenance"], ["problem", "Problems"], ...((DB.loans || []).some((l) => !l.ended_at) ? [["loan", "On loan"]] : [])];
   S.eqRows = rows;
   return head("Equipment", `${all.length} items · also addable at a station with a manager or admin fob`, `<span class="actions"><button class="btn" data-act="csvEquipment">${ic("download")}Download CSV</button>${can("admin") ? `<button class="btn primary" data-act="newEq">Add equipment</button>` : ""}</span>`) + `
     <div class="filters">
@@ -1374,7 +1394,7 @@ function vActivity() {
     if (k !== lastDay) { lastDay = k; const n = rows.filter((x) => dayKey(localDay(x.at, tz())) === k).length;
       html += `<tr class="dayrow"><td colspan="5">${esc(k === today ? "Today" : fmtDay(d))}<span>${n} tap${n === 1 ? "" : "s"}</span></td></tr>`; }
     html += `<tr><td class="num" data-label="When">${esc(fmtTime(a.at))}</td><td class="lead"><button class="link" data-open="employee:${a.byId}">${esc(a.by)}</button></td>
-      <td class="pin">${a.action === "checkout" ? `<span class="chip info">Out</span>` : `<span class="chip ok">In</span>`} ${esc(a.description)}${a.flags.includes("returned_after_extended") ? ` <span class="chip warn">late</span>` : ""}${a.flags.includes("reported_problem") ? ` <span class="chip warn">had a reported problem</span>` : ""}</td>
+      <td class="pin">${a.action === "checkout" ? `<span class="chip info">Out</span>` : `<span class="chip ok">In</span>`} ${esc(a.description)}${a.flags.includes("returned_after_extended") ? ` <span class="chip warn">late</span>` : ""}${a.flags.includes("reported_problem") ? ` <span class="chip warn">had a reported problem</span>` : ""}${a.flags.includes("on_loan") ? ` <span class="chip info">on loan</span>` : ""}${a.flags.includes("returned_other_contract") ? ` <span class="chip quiet">returned at another ${esc(CTERM().one.toLowerCase())}</span>` : ""}</td>
       <td data-label="Item"><button class="link" data-open="equipment:${a.eq}">${esc(a.equipment)}</button></td><td class="muted" data-label="Where">${esc(a.place || "")}</td></tr>`;
   }
   return head("Activity", "Every tap, who made it, and for whom. History can't be edited or deleted.", `<button class="btn" data-act="csvActivity">${ic("download")}Download CSV</button>`) + `
@@ -1670,7 +1690,9 @@ function dEquipment(id) {
       ${x.holder && x.due_at ? `<dt>Due</dt><dd class="${x.is_overdue ? "late" : ""}">${esc(fmtWhen(x.due_at))}</dd>` : ""}
       <dt>Time limit</dt><dd>${esc(limitText(x.limit))}${x.mode === "category" ? ` <span class="muted">(from ${esc(x.category)})</span>` : ""}</dd>
       <dt>Out-too-long alert</dt><dd>${x.extended_hours != null ? x.extended_hours + " h" : "Off"}</dd>
-      <dt>Tag</dt><dd class="mono">${x.tag ? esc(fmtUid(x.tag)) : `<span class="muted" style="font-family:var(--body)">Not tagged yet</span>`}</dd>${x.notes ? `<dt>Notes</dt><dd>${esc(x.notes)}</dd>` : ""}</dl></div>
+      <dt>Tag</dt><dd class="mono">${x.tag ? esc(fmtUid(x.tag)) : `<span class="muted" style="font-family:var(--body)">Not tagged yet</span>`}</dd>${x.notes ? `<dt>Notes</dt><dd>${esc(x.notes)}</dd>` : ""}
+      ${DB.contracts?.length ? `<dt>Belongs to</dt><dd>${esc(contractName(x.contract) || "Whole company")}</dd>` : ""}</dl></div>
+    ${loanSect(x)}
     ${can("admin") ? `<div class="actions"><button class="btn" data-act="editEq">Edit details</button></div>` : ""}
     ${problemsSect(x)}
     ${can("supervisor") ? `<div class="sect"><h3>Status</h3>
@@ -1692,8 +1714,27 @@ function dEquipment(id) {
       <button class="btn primary">Save</button></form>
       <p class="muted" style="margin:8px 0 0;font-size:13px">Applies from the next checkout. Leave "Alert after" blank to use the category or company setting.</p></div>` : ""}
     <div class="sect"><h3>History</h3>${hist.length ? `<div class="hist">${hist.map((a) => `<div class="${a.action === "checkin" ? "in" : ""} ${a.flags.length ? "flag" : ""}">
-        <time>${esc(fmtWhen(a.at))} · ${esc(a.place)}</time><b>${esc(a.by)}</b> ${esc(a.description.charAt(0).toLowerCase() + a.description.slice(1))}${a.flags.includes("returned_after_extended") ? " (late)" : ""}${a.flags.includes("reported_problem") ? " (had a reported problem)" : ""}</div>`).join("")}</div>` : `<p class="muted">No checkouts yet.</p>`}</div>
+        <time>${esc(fmtWhen(a.at))} · ${esc(a.place)}</time><b>${esc(a.by)}</b> ${esc(a.description.charAt(0).toLowerCase() + a.description.slice(1))}${a.flags.includes("returned_after_extended") ? " (late)" : ""}${a.flags.includes("reported_problem") ? " (had a reported problem)" : ""}${a.flags.includes("on_loan") ? " (on loan)" : ""}</div>`).join("")}</div>` : `<p class="muted">No checkouts yet.</p>`}</div>
   </div>`;
+}
+// Lending to another contract: who has it on loan, and lend / end loan for supervisors.
+function loanSect(x) {
+  if (!DB.contracts?.length || !x.contract) return "";
+  const l = x.loan, T = CTERM();
+  const targets = contractTree().filter((c) => !contractsShare(x.contract, c.id));
+  const past = (DB.loans || []).filter((y) => y.eq === x.id && y.ended_at).sort((a, b) => b.at - a.at).slice(0, 3);
+  if (!l && !can("supervisor") && !past.length) return "";
+  return `<div class="sect"><h3>Loan</h3>
+    ${l ? `<div class="notice">On loan to <b>${esc(contractName(l.to))}</b> since ${esc(fmtWhen(l.at))}${l.by ? `, lent by ${esc(l.by)}` : ""}.${l.notes ? ` “${esc(l.notes)}”` : ""}
+        It comes back when it's tapped at one of ${esc(contractName(x.contract))}'s stations.</div>
+        ${can("supervisor") ? `<div class="actions" style="margin-top:10px"><button class="btn" data-act="endLoan">End the loan now</button></div>` : ""}`
+      : can("supervisor") && targets.length ? `<form class="inline-form" data-form="lend:${x.id}">
+        <select class="field" name="to" aria-label="Lend to" required><option value="">Lend to…</option>${targets.map((c) => `<option value="${c.id}">${"\u2003".repeat(c.depth)}${esc(c.name)}</option>`).join("")}</select>
+        <input class="field" name="notes" aria-label="Note" placeholder="Note (optional)" maxlength="300"><button class="btn primary">Lend</button><span class="err" role="alert">${esc(S.formErr || "")}</span></form>
+        <p class="muted" style="margin:8px 0 0;font-size:13px">They can check it out at their stations until it's tapped back at one of ${esc(contractName(x.contract))}'s.</p>`
+      : `<p class="muted" style="margin:0">Not on loan.</p>`}
+    ${past.length ? `<details class="past"><summary>Earlier loans (${past.length})</summary><div class="hist">${past.map((y) => `<div><time>${esc(fmtWhen(y.at))} to ${esc(fmtWhen(y.ended_at))}</time>
+      Lent to <b>${esc(contractName(y.to))}</b>${y.how === "returned" ? ", tapped back in" : ", ended by hand"}</div>`).join("")}</div></details>` : ""}</div>`;
 }
 function problemsSect(x) {
   const mine = api.problems().filter((p) => p.eq === x.id); const open = mine.filter((p) => !p.cleared_at), past = mine.filter((p) => p.cleared_at).slice(0, 5);
@@ -1852,6 +1893,7 @@ document.addEventListener("click", async (e) => {
     t.setAttribute("aria-expanded", String(S.pop === k)); if (S.pop) pop.querySelector("button, a, select")?.focus(); return; }
   if (a === "rmLogo") { api.saveSettings({ logo_url: null }); toast("Logo removed. Stations show Sonoran Point's."); return render(); }
   if (a === "clearDay") { S.f.actDay = ""; return render(); }
+  if (a === "endLoan") { api.endLoan(D.id); toast("The loan is over"); return render(); }
   if (a === "reportStart") { S.f.reporting = D.id; S.formErr = null; renderLayer(); $('.report-form input[type=radio]')?.focus(); return; }
   if (a === "reportCancel") { S.f.reporting = null; S.formErr = null; return renderLayer(); }
   if (a === "clearStart") { S.f.clearing = t.dataset.id; render(); $(`[data-form="clear:${t.dataset.id}"] input`)?.focus(); return; }
@@ -1961,6 +2003,11 @@ document.addEventListener("submit", async (e) => {
   e.preventDefault();
   const f = e.target, kind = f.dataset.form || "", data = Object.fromEntries(new FormData(f));
   if (kind === "signin" || kind === "newpass" || kind === "profile") return authAction(kind, f);
+  if (kind.startsWith("lend:")) {
+    const r = api.lend(kind.slice(5), data.to, data.notes);
+    if (!r.ok) { S.formErr = r.error; renderLayer(); return; }
+    S.formErr = null; toast(`Lent to ${contractName(data.to)}`); return render();
+  }
   if (kind.startsWith("problem:")) {
     const r = api.reportProblem(kind.slice(8), data.reason, data.notes);
     if (!r.ok) { S.formErr = r.error; renderLayer(); return; }
@@ -2093,6 +2140,7 @@ const live = {
     // Added in database update 11; the dashboard still works before it's run.
     const since30 = new Date(Date.now() - 30 * 86400000).toISOString();
     const contracts = await q(sb.from("contracts").select("*").eq("org_id", org).order("sort_order")).catch(() => []);
+    const loans = await all("equipment_loans", "*", (x) => x.eq("org_id", org).or(`ended_at.is.null,lent_at.gte.${new Date(Date.now() - 30 * 86400000).toISOString()}`).order("lent_at")).catch(() => []);
     const [reasons, problems, prefs] = await Promise.all([
       q(sb.from("problem_reasons").select("*").eq("org_id", org).is("archived_at", null).order("sort_order")).catch(() => []),
       all("equipment_problems", "*", (x) => x.eq("org_id", org).or(`cleared_at.is.null,reported_at.gte.${since30}`).order("reported_at")).catch(() => []),
@@ -2131,6 +2179,8 @@ const live = {
       emailPrefs: Object.fromEntries(prefs.map((p) => [p.user_id, p.kinds || []])),
     });
     const empName = (id) => { const e = DB.employees.find((x) => x.id === id); return e ? e.name : null; };
+    DB.loans = loans.map((l) => ({ id: l.id, eq: l.equipment_id, from: l.from_contract_id, to: l.to_contract_id, at: ms(l.lent_at), notes: l.notes,
+      by: empName(l.lent_by_employee) || who(l.lent_by_user), ended_at: ms(l.ended_at), how: l.ended_how }));
     DB.problems = problems.map((p) => ({ id: p.id, eq: p.equipment_id, reason_id: p.reason_id, reason: p.reason, blocks: p.blocks_checkout, notes: p.notes, at: ms(p.reported_at),
       by: empName(p.reported_by_employee) || who(p.reported_by_user) || "someone", place: p.station_id ? DB.stations.find((s) => s.id === p.station_id)?.name || "a station" : "Dashboard",
       cleared_at: ms(p.cleared_at), cleared_by: empName(p.cleared_by_employee) || who(p.cleared_by_user), clear_notes: p.clear_notes }));
@@ -2201,6 +2251,8 @@ const REMOTE = {
     const res = await okRpc("save_contract", { p_org: ORG(), p: { id: id || null, name: c.name, parent_id: c.parent || null, share_children: c.share, move_on_return: c.move } });
     if (!id) { L.idMap[r.id] = res.id; c.id = res.id; } },
   deleteContract: ([id]) => okRpc("delete_contract", { p_contract: id }),
+  lend: ([eq, to, notes]) => okRpc("lend_equipment", { p_equipment: eq, p_to_contract: to, p_notes: (notes || "").trim() || null }),
+  endLoan: ([eq]) => okRpc("end_equipment_loan", { p_equipment: eq }),
   setActive: ([id, active]) => upd("employees", id, { active }),
   saveSettings: () => { const o = DB.org;
     return upd("organizations", o.id, { name: o.name, logo_url: o.logo_url || null, primary_color: o.primary.toUpperCase(), accent_color: o.accent.toUpperCase(), extended_checkout_hours: o.extended_hours, settings: o.settings, terminology: o.terminology }); },

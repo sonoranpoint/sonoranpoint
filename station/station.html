@@ -654,13 +654,14 @@ function demoSeed() {
     reasons: demoReasons(),
     problems: [],
     contracts: [],   // { id, parent_id, name, share_children, move_on_return } — none in the demo until a test adds them
+    loans: [],       // { id, equipment_id, from, to, lent_at, ended_at, ended_how }
   };
 }
 function demoReasons() { return [["Damaged", false], ["Not charging", false], ["Missing part", false], ["Other", false]].map(([label, blocks_checkout], i) => ({ id: "r" + (i + 1), label, blocks_checkout, sort: i + 1 })); }
 
 const demo = {
   db: null, wifi: true, listeners: [],
-  load() { this.db = store.get("demoServer.v2") || demoSeed(); this.db.reasons ||= demoReasons(); this.db.problems ||= []; this.db.contracts ||= [];
+  load() { this.db = store.get("demoServer.v2") || demoSeed(); this.db.reasons ||= demoReasons(); this.db.problems ||= []; this.db.contracts ||= []; this.db.loans ||= [];
     const dmg = this.db.reasons.find((r) => r.label === "Damaged"); if (dmg && !this.db.reasonsV2) { dmg.blocks_checkout = false; this.db.reasonsV2 = true; } },
   /* Contracts (same as private.contracts_share / contracts_move) */
   cpath(id) { const out = []; let c = this.db.contracts.find((x) => x.id === id); while (c && out.length < 50) { out.unshift(c.id); c = this.db.contracts.find((x) => x.id === c.parent_id); } return out; },
@@ -675,6 +676,8 @@ const demo = {
   moves(item, station) { if (!item || !station || item === station) return false; const m = this.cmeet(item, station); if (m.related) return false;
     return m.meet ? !!this.db.contracts.find((c) => c.id === m.meet)?.move_on_return : !!this.db.org.settings.move_on_return; },
   cname(id) { return this.db.contracts.find((c) => c.id === id)?.name || null; },
+  loanOf(eqId) { return (this.db.loans || []).find((l) => l.equipment_id === eqId && !l.ended_at) || null; },
+  endLoan(eqId, how) { const l = this.loanOf(eqId); if (l) Object.assign(l, { ended_at: clock.now(), ended_how: how }); return !!l; },
   openProblem(eqId) {
     const p = (this.db.problems || []).filter((x) => x.equipment_id === eqId && !x.cleared_at).sort((a, b) => (b.blocks_checkout - a.blocks_checkout) || (b.reported_at - a.reported_at))[0];
     return p ? { id: p.id, reason: p.reason, blocks_checkout: p.blocks_checkout, reported_at: new Date(p.reported_at).toISOString() } : null;
@@ -714,6 +717,7 @@ const demo = {
       organization: { name: o.name, logo_url: o.logo_url, primary_color: o.primary_color, accent_color: o.accent_color,
         timezone: o.timezone, terminology: o.terminology, settings: o.settings, enabled_modules: o.enabled_modules },
       categories: [...this.db.categories].sort((a, b) => a.sort - b.sort).map((c) => ({ id: c.id, name: c.name, icon: null })),
+      contracts: this.db.contracts.map((c) => ({ id: c.id, name: c.name, parent_id: c.parent_id })),
       problem_reasons: this.db.reasons.filter((r) => !r.archived).sort((a, b) => a.sort - b.sort).map((r) => ({ id: r.id, label: r.label, blocks_checkout: r.blocks_checkout })) };
   },
   fns: {
@@ -733,10 +737,11 @@ const demo = {
     station_sync_cache({ p_device_key }) {
       const st = demo.station(p_device_key); if (!st) return { ok: false, error: "station_not_authorized" };
       return { ok: true, generated_at: new Date(clock.now()).toISOString(),
+        contract_names: Object.fromEntries(demo.db.contracts.map((c) => [c.id, c.name])),
         reach: st.contract_id ? demo.db.contracts.filter((c) => demo.shares(st.contract_id, c.id)).map((c) => c.id) : null,
         employees: demo.db.employees.filter((e) => e.active && e.badge_uid).map((e) => ({ id: e.id, badge_uid: e.badge_uid, name: e.name, role: e.role, has_pin: !!e.pin, contract_id: e.contract_id || null })),
         equipment: demo.db.equipment.filter((q) => q.nfc_uid && q.status !== "retired").map((q) => ({
-          id: q.id, nfc_uid: q.nfc_uid, name: q.name, category_id: q.category_id, status: q.status, contract_id: q.contract_id || null,
+          id: q.id, nfc_uid: q.nfc_uid, name: q.name, category_id: q.category_id, status: q.status, contract_id: q.contract_id || null, loan_to: demo.loanOf(q.id)?.to || null,
           current_employee_id: q.current_employee_id, checked_out_at: q.checked_out_at, due_at: q.due_at,
           extended_alert_hours: demo.extendedHours(q), problem: demo.openProblem(q.id) })) };
     },
@@ -751,7 +756,9 @@ const demo = {
       const h = eq.current_employee_id && demo.emp(eq.current_employee_id);
       return { ok: true, equipment: { id: eq.id, name: eq.name, status: eq.status, category: demo.cat(eq.category_id)?.name },
         holder: h ? { id: h.id, name: h.name } : null, checked_out_at: eq.checked_out_at, due_at: eq.due_at,
-        is_overdue: !!(eq.due_at && eq.due_at < clock.now()), problem: demo.openProblem(eq.id) };
+        is_overdue: !!(eq.due_at && eq.due_at < clock.now()), problem: demo.openProblem(eq.id),
+        contract: eq.contract_id ? { id: eq.contract_id, name: demo.cname(eq.contract_id) } : null,
+        loan: demo.loanOf(eq.id) ? { to: demo.cname(demo.loanOf(eq.id).to), to_id: demo.loanOf(eq.id).to, since: new Date(demo.loanOf(eq.id).lent_at).toISOString() } : null };
     },
     /* ---- Reported problems (same as station_report_problem / station_clear_problem) ---- */
     station_report_problem(a) {
@@ -769,6 +776,23 @@ const demo = {
         station_id: st.id, client_report_id: a.p_client_report_id, reported_at: Math.min(a.p_occurred_at ? Date.parse(a.p_occurred_at) : clock.now(), clock.now()), cleared_at: null };
       demo.db.problems.push(p);
       return { ok: true, id: p.id, equipment: { id: eq.id, name: eq.name }, reason: r.label, blocks_checkout: r.blocks_checkout, held_by_reporter: eq.current_employee_id === emp.id };
+    },
+    station_lend_equipment(a) {
+      const ss = demo.staffSession(a, "manager"); if (!ss.ok) return ss;
+      const q = demo.db.equipment.find((x) => x.nfc_uid === normUid(a.p_equipment_uid)); if (!q) return { ok: false, error: "unknown_equipment" };
+      if (!demo.db.contracts.some((c) => c.id === a.p_to_contract)) return { ok: false, error: "unknown_contract" };
+      if (!q.contract_id) return { ok: false, error: "no_contract" };
+      if (demo.shares(q.contract_id, a.p_to_contract)) return { ok: false, error: "already_shared" };
+      if (!demo.shares(ss.st.contract_id, q.contract_id)) return { ok: false, error: "not_yours_to_lend" };
+      demo.endLoan(q.id, "ended");
+      demo.db.loans.push({ id: "l" + randHex(4), equipment_id: q.id, from: q.contract_id, to: a.p_to_contract, lent_at: clock.now(), ended_at: null });
+      demo.log(ss.e, `lent ${q.name} to ${demo.cname(a.p_to_contract)}`);
+      return { ok: true, equipment: { id: q.id, name: q.name }, to: demo.cname(a.p_to_contract), from: demo.cname(q.contract_id) };
+    },
+    station_end_loan(a) {
+      const ss = demo.staffSession(a, "manager"); if (!ss.ok) return ss;
+      const q = demo.db.equipment.find((x) => x.nfc_uid === normUid(a.p_equipment_uid)); if (!q) return { ok: false, error: "unknown_equipment" };
+      return { ok: true, ended: demo.endLoan(q.id, "ended") };
     },
     station_clear_problem(a) {
       const ss = demo.staffSession(a, "manager"); if (!ss.ok) return ss;
@@ -879,16 +903,24 @@ const demo = {
       if (!emp) return { ok: false, error: "unknown_badge" };
       const eq = demo.db.equipment.find((q) => q.nfc_uid === normUid(p_equipment_uid));
       if (!eq) return { ok: false, error: "unknown_equipment" };
+      if (!p_queued && !demo.shares(st.contract_id, emp.contract_id)) return { ok: false, error: "other_contract", station_contract: demo.cname(st.contract_id), employee_contract: demo.cname(emp.contract_id) };
+      let ln = demo.loanOf(eq.id);
+      if (ln && st.contract_id && demo.shares(st.contract_id, ln.from) && !demo.shares(st.contract_id, ln.to)) {   // back at the owner's station
+        demo.endLoan(eq.id, "returned");
+        if (!eq.current_employee_id && !p_queued) return { ok: true, action: "loan_returned", flags: [], equipment: { id: eq.id, name: eq.name }, borrower: demo.cname(ln.to) };
+        ln = null;
+      }
       if (!p_queued) {
-        if (!demo.shares(st.contract_id, emp.contract_id)) return { ok: false, error: "other_contract", station_contract: demo.cname(st.contract_id), employee_contract: demo.cname(emp.contract_id) };
         const out = p_action ? p_action === "checkout" : !(eq.status === "lost" || eq.current_employee_id === emp.id || (eq.current_employee_id && demo.db.org.settings.allow_return_by_other));
-        if (out && !demo.shares(st.contract_id, eq.contract_id)) return { ok: false, error: "other_contract_item", equipment: { id: eq.id, name: eq.name }, item_contract: demo.cname(eq.contract_id) };
+        if (out && !demo.shares(st.contract_id, eq.contract_id) && !(ln && demo.shares(st.contract_id, ln.to)))
+          return { ok: false, error: "other_contract_item", equipment: { id: eq.id, name: eq.name }, item_contract: demo.cname(eq.contract_id), loaned_to: ln ? demo.cname(ln.to) : null };
       }
       const itemContract = eq.contract_id || null;
       const r = demo.recordEvent(eq, emp, p_action || null, p_occurred_at ? Date.parse(p_occurred_at) : clock.now(), st.id, p_client_txn_id, !p_queued);
+      if (r.ok && r.action === "checkout" && ln) { r.flags.push("on_loan"); r.loan_from = demo.cname(ln.from); }
       if (r.ok && r.action === "checkin" && st.contract_id && itemContract !== st.contract_id && !r.flags.includes("late_sync")) {
         r.flags.push("returned_other_contract");
-        if (demo.moves(itemContract, st.contract_id)) { eq.contract_id = st.contract_id; r.moved_to = demo.cname(st.contract_id); }
+        if (!ln && demo.moves(itemContract, st.contract_id)) { eq.contract_id = st.contract_id; r.moved_to = demo.cname(st.contract_id); }
       }
       return r;
     },
@@ -1210,6 +1242,9 @@ const reasons = () => S.saved.config?.problem_reasons || [];
 // Contracts this station serves (null = all). Someone or something with no contract works everywhere.
 const serves = (contractId) => { const reach = S.saved.cache?.reach; return !reach || !contractId || reach.includes(contractId); };
 const stationContract = () => S.saved.config?.station?.contract?.name || null;
+const contractLabel = (id) => S.saved.cache?.contract_names?.[id] || "another team";
+// An item can be checked out here if it's ours, or it's on loan to us.
+const servesItem = (q) => serves(q.contract_id) || (!!q.loan_to && serves(q.loan_to));
 function renderLookup(el) {
   const L = S.lookup; const i = L.info; const st = i.equipment.status;
   const holder = i.holder?.name; const first = holder ? holder.split(" ")[0] : "";
@@ -1222,6 +1257,9 @@ function renderLookup(el) {
   } else if (["maintenance", "retired"].includes(st)) {
     who = st === "retired" ? "This item has been taken out of service." : "Being repaired or checked.";
     nextTitle = "Can't be checked out"; nextText = "Ask a supervisor if you need it."; wantBadge = false;
+  } else if (!holder && i.contract && !(serves(i.contract.id) || (i.loan && serves(i.loan.to_id)))) {
+    who = `Belongs to <b>${esc(i.contract.name)}</b>${i.loan ? `, on loan to ${esc(i.loan.to)}` : ""}.`;
+    nextTitle = "Can't be checked out here"; nextText = `Only ${esc(i.loan ? i.loan.to : i.contract.name)} stations can check it out. Take it back to them.`; wantBadge = false;
   } else if (i.problem?.blocks_checkout && !holder) {
     who = "In the room, but it can't be used right now.";
     nextTitle = "Can't be checked out"; nextText = "A supervisor has to clear the problem first. Take a different one."; wantBadge = false;
@@ -1245,6 +1283,7 @@ function renderLookup(el) {
         <p class="lk-who">${who}</p>
         ${meta ? `<p class="lk-meta">${meta}</p>` : ""}
         ${i.problem ? `<p class="lk-prob ${i.problem.blocks_checkout ? "stop" : ""}">Reported: <b>${esc(i.problem.reason)}</b></p>` : ""}
+        ${i.contract && (holder || serves(i.contract.id) || (i.loan && serves(i.loan.to_id))) ? `<p class="lk-meta">${i.loan && serves(i.loan.to_id) && !serves(i.contract.id) ? `On loan from <b>${esc(i.contract.name)}</b>` : `Belongs to <b>${esc(i.contract.name)}</b>${i.loan ? `, on loan to ${esc(i.loan.to)}` : ""}`}</p>` : ""}
         ${L.cached ? `<p class="lk-meta">Offline: showing the last synced status.</p>` : ""}
       </div>
       <div class="lk-next">
@@ -1438,7 +1477,7 @@ async function activate() {
       : r.error === "bad_response" || /^\d+$/.test(String(r.error)) ? `${S.saved.url} isn't answering like a station server. Check the address, or use the hosted server.`
       : "Activation failed: " + r.error;
     else {
-      Object.assign(S.saved, { deviceKey: r.device_key, config: { station: r.station, organization: r.organization, categories: r.categories, problem_reasons: r.problem_reasons || [] }, queue: [], syncIssues: [],
+      Object.assign(S.saved, { deviceKey: r.device_key, config: { station: r.station, organization: r.organization, categories: r.categories, problem_reasons: r.problem_reasons || [], contracts: r.contracts || [] }, queue: [], syncIssues: [],
                                everActivated: true, setupDone: false, setupHasAdmin: !!r.has_admin_fob });
       applyBrand(); renderTop();
       await refreshData();
@@ -1756,11 +1795,11 @@ async function refreshData(withConfig) {
   try {
     if (withConfig) {
       const c = await call("station_config", { p_device_key: S.saved.deviceKey });
-      if (c.ok) { S.saved.config = { station: c.station, organization: c.organization, categories: c.categories, problem_reasons: c.problem_reasons || [] }; applyBrand(); renderTop(); }
+      if (c.ok) { S.saved.config = { station: c.station, organization: c.organization, categories: c.categories, problem_reasons: c.problem_reasons || [], contracts: c.contracts || [] }; applyBrand(); renderTop(); }
       else if (c.error === "station_not_authorized") return lockedOut();
     }
     const r = await call("station_sync_cache", { p_device_key: S.saved.deviceKey });
-    if (r.ok) { S.saved.cache = { employees: r.employees, equipment: r.equipment, reach: r.reach ?? null }; S.saved.lastSync = clock.now(); persist(); renderStatus(); if (S.screen === "session") renderMain(); }
+    if (r.ok) { S.saved.cache = { employees: r.employees, equipment: r.equipment, reach: r.reach ?? null, contract_names: r.contract_names || {} }; S.saved.lastSync = clock.now(); persist(); renderStatus(); if (S.screen === "session") renderMain(); }
     else if (r.error === "station_not_authorized") lockedOut();
   } catch {}
 }
@@ -1841,7 +1880,9 @@ async function lookupItem(uid) {
     const h = item.current_employee_id;
     info = { equipment: { id: item.id, name: item.name, status: item.status,
              category: S.saved.config?.categories?.find((c) => c.id === item.category_id)?.name },
-             holder: h ? { id: h, name: empName(h) } : null, checked_out_at: item.checked_out_at, due_at: item.due_at, problem: item.problem || null };
+             holder: h ? { id: h, name: empName(h) } : null, checked_out_at: item.checked_out_at, due_at: item.due_at, problem: item.problem || null,
+             contract: item.contract_id ? { id: item.contract_id, name: contractLabel(item.contract_id) } : null,
+             loan: item.loan_to ? { to: contractLabel(item.loan_to), to_id: item.loan_to } : null };
     cached = true;
   }
   if (!info) { beep("bad"); return toast("Not recognized", `ID ${fmtUid(uid)} isn't a registered badge or ${term().equipment.toLowerCase()} tag. Ask a supervisor to add it.`); }
@@ -1958,9 +1999,9 @@ async function tapItem(uid) {
   const action = lost || prevHolder === s.emp.id || (other && set.allow_return_by_other) ? "checkin" : "checkout";
   const block = action === "checkout" && ["maintenance", "retired"].includes(item.status) ? "item_unavailable"
               : action === "checkout" && item.problem?.blocks_checkout ? "item_has_problem"
-              : action === "checkout" && !serves(item.contract_id) ? "other_contract_item"
+              : action === "checkout" && !servesItem(item) ? "other_contract_item"
               : action === "checkout" && other && !set.allow_checkout_while_held ? "checked_out_to_other" : null;
-  if (block) return replaceResult(pending, onlineResult({ ok: false, error: block, equipment: { id: item.id, name: item.name, status: item.status },
+  if (block) return replaceResult(pending, onlineResult({ ok: false, error: block, equipment: { id: item.id, name: item.name, status: item.status }, item_contract: contractLabel(item.contract_id),
                                   holder: other ? { id: prevHolder, name: empName(prevHolder) } : null, problem: item.problem }, item, prevHolder, uid));
   Object.assign(ev, { p_action: action, p_queued: true });
   S.saved.queue.push(ev);
@@ -1969,6 +2010,9 @@ async function tapItem(uid) {
   persist(); renderTop(); renderStatus(); beep(action === "checkout" ? "ok" : "ret");
   const lines = [{ text: "Saved on this station. It syncs when the connection is back." }];
   const flagged = action === "checkout" && item.problem;
+  // Back at the owner's station while on loan: the loan ends (the server does the same when this syncs).
+  if (item.loan_to && serves(item.contract_id) && !serves(item.loan_to)) item.loan_to = null;
+  if (action === "checkout" && item.loan_to && serves(item.loan_to)) lines.unshift({ text: `On loan from ${contractLabel(item.contract_id)}. Return it when you're done.`, note: true });
   if (flagged) lines.unshift({ text: `Reported: ${item.problem.reason}. Look it over before you use it.`, note: true });
   if (lost) lines.unshift({ text: "It was listed as lost. Thanks for bringing it back.", note: true });
   else if (other) lines.unshift({ text: `Returned for ${empName(prevHolder)}.${item.problem?.blocks_checkout ? "" : " Tap it again to check it out."}`, note: true });
@@ -1990,8 +2034,9 @@ function onlineResult(r, item, prevHolder, uid) {
       lines: [{ text: `Checked out to ${r.holder?.name || "someone else"}.`, note: true }, { text: "Only they can return it. Ask a supervisor if they're not here." }] };
     if (r.error === "other_contract") { setTimeout(endSession, 3000); return { tone: "bad", kind: "refused", title: "Not your station", item: "",
       lines: [{ text: `This station is for ${r.station_contract || stationContract() || "another team"}.`, note: true }, { text: "Use your own team's station." }] }; }
-    if (r.error === "other_contract_item") return { tone: "bad", kind: "refused", detail: "another team's", title: "Can't check out", item: nm,
-      lines: [{ text: `It belongs to ${r.item_contract || "another team"}.`, note: true }, { text: "It can only be checked out at their stations. You can still return it here." }] };
+    if (r.error === "other_contract_item") return { tone: "bad", kind: "refused", detail: `${r.item_contract || "another team"}'s`, title: `${r.item_contract || "Another team"}'s`, item: nm,
+      lines: [{ text: r.loaned_to ? `It's on loan to ${r.loaned_to}, not here.` : `Only ${r.item_contract || "their"} stations can check it out, unless they lend it to you.`, note: true },
+              { text: "You can still return it here." }] };
     if (r.error === "item_has_problem") return { tone: "bad", kind: "refused", detail: (r.problem?.reason || "reported problem").toLowerCase(), title: "Can't check out", item: nm,
       lines: [{ text: `Reported: ${r.problem?.reason || "a problem"}.`, note: true }, { text: "A supervisor has to clear it first. Take a different one." }] };
     if (r.error === "item_lost") return { tone: "bad", kind: "refused", detail: "listed as lost", title: "Listed as lost", item: nm, lines: [{ text: "Tap it again to return it as found." }] };
@@ -2000,6 +2045,11 @@ function onlineResult(r, item, prevHolder, uid) {
     return { tone: "bad", kind: "refused", detail: "try again", title: "Didn't go through", item: item?.name || "", lines: [{ text: "Try again. Error: " + r.error }] };
   }
   const cached = S.saved.cache.equipment.find((q) => q.id === r.equipment.id);
+  if (r.action === "loan_returned") {
+    if (cached) { cached.loan_to = null; persist(); } beep("ret");
+    return { tone: "ret", kind: "in", detail: "back from loan", title: "Back from loan", item: r.equipment.name,
+      lines: [{ text: `${r.borrower || "The other team"} had it on loan. It's back with you now.`, note: true }, { text: "Tap it again to check it out." }] };
+  }
   const now = new Date(clock.now()).toISOString();
   if (cached && !r.flags.includes("late_sync")) Object.assign(cached, r.action === "checkout"
     ? { current_employee_id: r.employee.id, checked_out_at: now, due_at: r.due_at, status: cached.status === "available" ? "checked_out" : cached.status }
@@ -2015,6 +2065,7 @@ function onlineResult(r, item, prevHolder, uid) {
     if (f.has("no_active_shift")) lines.push({ text: "You're not on a scheduled shift, so the standard time limit applies." });
     if (f.has("conflict_already_held")) { tone = "warn"; lines.unshift({ text: `Was still checked out to ${empName(prevHolder)}. It's yours now.`, note: true }); }
     if ([...f].some((x) => x.startsWith("item_"))) { tone = "warn"; lines.unshift({ text: "This item is marked for maintenance. Let a supervisor know.", note: true }); }
+    if (r.loan_from) lines.unshift({ text: `On loan from ${r.loan_from}. Return it when you're done.`, note: true });
     const pb = r.problem || (f.has("reported_problem") ? cached?.problem : null);
     if (pb) { tone = "warn"; lines.unshift({ text: `Reported: ${pb.reason}. Look it over before you use it.`, note: true }); }
     beep(tone === "warn" ? "bad" : "ok");
@@ -2215,6 +2266,7 @@ function renderStaff(el) {
     </div>`;
   else if (["addEmp", "addEq", "setPin"].includes(T.view)) body = formHtml();
   else if (T.view === "item") body = itemHtml();
+  else if (T.view === "lend") body = lendHtml();
   else if (T.view === "people") body = `<div class="people fit" data-fit=",dense,dense tight">${T.data.employees.map((e) =>
       `<button class="person ${e.active ? "" : "off"}" data-pick="person:${e.id}"><b>${esc(e.name)}</b>
         <small>${e.role !== "employee" ? `<span class="r">${ROLE[e.role]}</span> · ` : ""}${e.active ? (e.has_badge ? esc(e.employee_number || "Badge set") : "No badge") : "Inactive"}</small></button>`).join("")}</div>`;
@@ -2314,9 +2366,11 @@ function itemHtml() {
       <span class="pill ${pill}">${esc(label.toUpperCase())}</span>
       ${i.holder ? `<p>${st === "lost" ? "Last with" : "With"} <b>${esc(i.holder.name)}</b> since ${esc(fmtTime(i.checked_out_at))}</p>` : ""}
       ${i.problem ? `<p class="lk-prob ${i.problem.blocks_checkout ? "stop" : ""}">Reported: <b>${esc(i.problem.reason)}</b>${i.problem.blocks_checkout ? " · can't be checked out" : ""}</p>` : ""}
+      ${i.contract ? `<p>Belongs to <b>${esc(i.contract.name)}</b>${i.loan ? ` · on loan to <b>${esc(i.loan.to)}</b>` : ""}</p>` : ""}
       <p class="muted">Tag ${esc(fmtUid(T.itemUid))}</p></div>
     <div class="btncol">
       ${i.problem ? `<button class="sbtn primary" data-act="clearProblem">Problem fixed: clear it</button>` : ""}
+      ${i.loan ? `<button class="sbtn" data-act="endLoan">End the loan</button>` : i.contract && serves(i.contract.id) && lendTargets().length ? `<button class="sbtn" data-act="lend">Lend to another ${esc(cTerm().toLowerCase())}</button>` : ""}
       ${st !== "lost" ? `<button class="sbtn danger" data-status="lost" data-act="setStatus">Mark lost</button>` : ""}
       ${st !== "maintenance" ? `<button class="sbtn" data-status="maintenance" data-act="setStatus">Send to maintenance</button>` : ""}
       ${["lost", "maintenance", "retired"].includes(st) ? `<button class="sbtn primary" data-status="available" data-act="setStatus">Back in service</button>` : ""}
@@ -2324,6 +2378,25 @@ function itemHtml() {
       ${admin && st !== "retired" ? `<button class="sbtn danger" data-status="retired" data-act="setStatus">Retire (take out of service)</button>` : ""}
       <button class="sbtn" data-act="item">Look up another item</button>
     </div></div>`;
+}
+const cTerm = () => S.saved.config?.organization?.terminology?.contract || "Contract";
+// Contracts this item could be lent to: the ones this station doesn't already serve.
+const lendTargets = () => (S.saved.config?.contracts || []).filter((c) => !serves(c.id));
+function lendHtml() {
+  const T = S.staff;
+  return `<p class="prompt" style="font-size:2.6cqw;margin:0">Lend ${esc(T.item.equipment.name)} to…<small>They can check it out until it's tapped back at one of your stations.</small></p>
+    <div class="people fit" data-fit=",dense,dense tight">${lendTargets().map((c) => `<button class="person" data-pick="lend:${esc(c.id)}"><b>${esc(c.name)}</b></button>`).join("")}</div>
+    <div class="row" style="margin-top:1.4cqw"><button class="sbtn" data-act="backItem">Back</button></div>`;
+}
+async function lendTo(contractId) {
+  const T = S.staff;
+  const r = await staffCall("station_lend_equipment", { p_equipment_uid: T.itemUid, p_to_contract: contractId });
+  if (!S.staff) return;
+  if (r.ok) {
+    try { const i = await call("station_item_status", { p_device_key: S.saved.deviceKey, p_equipment_uid: T.itemUid }); if (i.ok) T.item = i; } catch {}
+    T.view = "item"; setMsg("ok", `${r.equipment.name} is on loan to ${r.to}. It comes back to you when it's tapped at one of your stations.`); beep("ok"); refreshData();
+  } else { beep("bad"); setMsg("bad", { already_shared: "They can already use it.", not_yours_to_lend: "Only its own team's stations can lend it.", no_contract: "It works everywhere already." }[r.error] || staffError(r)); }
+  renderMain();
 }
 function stationSettingsHtml() {
   const T = S.staff, ws = T.wifiStatus, q = S.saved.queue.length;
@@ -2407,6 +2480,7 @@ document.addEventListener("click", async (e) => {
       if (!T.form.name || (prev && T.form.name === nextName(prev))) T.form.name = nextName(cat);
       T.form.category = val; T.field = "name";
     }
+    if (kind === "lend") return lendTo(val);
     if (kind === "person") { T.person = T.data.employees.find((x) => x.id === val); T.view = "person"; }
     if (kind === "tagq") { const q = T.data.untagged.find((x) => x.id === val); T.item = { equipment: { id: q.id, name: q.name } }; T.view = "item"; T.capture = { kind: "replaceTag" }; }
     if (kind === "setrole") {
@@ -2469,6 +2543,15 @@ document.addEventListener("click", async (e) => {
   if (a === "replaceBadge") { T.capture = { kind: "replaceBadge" }; setMsg(); return renderMain(); }
   if (a === "setPin") { T.view = "setPin"; T.form = { pin: "" }; T.field = "pin"; setMsg(); return renderMain(); }
   if (a === "toggleActive") return updatePerson({ p_active: !T.person.active }, T.person.active ? `${T.person.name} is deactivated. Their badge no longer works.` : `${T.person.name} is active again.`);
+  if (a === "lend") { T.view = "lend"; setMsg(); return renderMain(); }
+  if (a === "backItem") { T.view = "item"; setMsg(); return renderMain(); }
+  if (a === "endLoan") {
+    const r = await staffCall("station_end_loan", { p_equipment_uid: T.itemUid });
+    if (!S.staff) return;
+    if (r.ok) { try { const i = await call("station_item_status", { p_device_key: S.saved.deviceKey, p_equipment_uid: T.itemUid }); if (i.ok) T.item = i; } catch {}
+      setMsg("ok", "The loan is over."); beep("ok"); refreshData(); } else { beep("bad"); setMsg("bad", staffError(r)); }
+    return renderMain();
+  }
   if (a === "clearProblem") {
     const r = await staffCall("station_clear_problem", { p_equipment_uid: T.itemUid });
     if (!S.staff) return;

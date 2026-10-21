@@ -57,6 +57,23 @@ const change = async (el, v) => { if (typeof v === "boolean") el.checked = v; el
   E("openDrawer('station', 'st2')"); await sleep(20);
   await submit('[data-form="stationEdit:st2"]', { contract: "daw" });
   check(E("DB.stations.find(s => s.id === 'st2').contract") === "daw" && /Delta AW/.test(page()), "set a station's contract from its panel");
+  // Loans (BW back to not sharing)
+  E("contractOf('bw').share = false");
+  await go("equipment");
+  check(/On loan · Delta BW/.test(page()), "an item on loan shows who has it");
+  await click('[data-seg="eqStatus:loan"]');
+  check(doc.querySelectorAll("tbody tr").length === 1, "filter to items on loan");
+  E("S.f.eqStatus = 'all'; render()");
+  const b6 = E("DB.equipment.find(q => q.name === 'Battery 06').id");
+  E(`openDrawer('equipment', '${b6}')`); await sleep(20);
+  check(/On loan to Delta BW/.test(drawer()) && /Delta.s chargers are down/.test(drawer()) && /Belongs toUnited BW/.test(drawer()), "its panel says whose it is and who has it", drawer().slice(0, 600));
+  await click(".drawer [data-act=endLoan]");
+  check(!E(`loanOf('${b6}')`) && /Earlier loans \(1\)/.test(drawer()), "end the loan; it stays in the item's history");
+  const opts = [...doc.querySelectorAll('.drawer [data-form^="lend:"] option')].map((o) => o.textContent.trim());
+  check(opts.includes("Delta BW") && !opts.includes("United BW") && !opts.includes("BW"), "lend to: only contracts that can't already use it");
+  const f = doc.querySelector('.drawer [data-form^="lend:"]'); f.elements.to.value = "daw";
+  await submit('.drawer [data-form^="lend:"]', { notes: "Swap for a radio" });
+  check(E(`loanOf('${b6}').to`) === "daw" && /Lent to Delta AW/.test(doc.body.textContent), "lend it again from the panel");
   check(errors.length === 0, "no script errors " + errors.join(";"));
   process.exit();
 })();

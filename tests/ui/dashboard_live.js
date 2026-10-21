@@ -222,6 +222,18 @@ const ORG = "00000000-0000-0000-0000-00000000d3e0";
     P.set('[data-form^="emp:"] [name=contract]', cid); P.submit('[data-form^="emp:"]');
     check(await P.until(() => one(`select contract_id from employees where id='${eid}'`) === cid), "put a person in a contract");
     await P.settled(); }
+  // lend an item to another contract from its panel
+  one(`insert into contracts (org_id, parent_id, name) select org_id, id, 'United BW' from contracts where org_id='${ORG}' and name='BW'`);
+  one(`update equipment set contract_id = (select id from contracts where name='United BW' and org_id='${ORG}') where org_id='${ORG}' and name='Radio 02'`);
+  await P.E("live.reload()"); await P.settled();
+  { const eid = one(`select id from equipment where org_id='${ORG}' and name='Radio 02'`), dbw = one(`select id from contracts where name='Delta BW' and org_id='${ORG}'`);
+    P.go("equipment"); await new Promise((r) => setTimeout(r, 150)); P.E(`openDrawer('equipment', '${eid}')`); await P.until(() => P.doc.querySelector(`[data-form="lend:${eid}"]`));
+    P.set(`[data-form="lend:${eid}"] [name=to]`, dbw); P.submit(`[data-form="lend:${eid}"]`);
+    check(await P.until(() => one(`select count(*) from equipment_loans where equipment_id='${eid}' and to_contract_id='${dbw}' and ended_at is null`) === "1"), "lend an item to another contract");
+    await P.settled(); await P.until(() => P.doc.querySelector(".drawer [data-act=endLoan]"));
+    P.click(".drawer [data-act=endLoan]");
+    check(await P.until(() => one(`select count(*) from equipment_loans where equipment_id='${eid}' and ended_at is null`) === "0"), "and end the loan");
+    await P.settled(); if (P.doc.querySelector('[data-act="close"]')) P.click('[data-act="close"]'); }
   // a failed save is reported and the screen goes back to the database's version
   one(`update equipment set nfc_uid = '04DEADBEEF01' where name = 'Radio 09'`);
   P.go("equipment"); await P.E("live.reload()"); await P.until(() => /Radio/.test(P.text()));

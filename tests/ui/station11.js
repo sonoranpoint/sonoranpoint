@@ -30,7 +30,7 @@ const ALEX = "04BA00000001", JORDAN = "04BA00000002", SAM = "04BA00000003", DANA
   await tap(ALEX); await tap("04DE000101", 600);
   check(/Checked out Vacuum 01/.test(text()), "Delta BW crew checks out Delta BW gear");
   await tap("04DE000102", 600);
-  check(/Can't check out Vacuum 02/.test(text()) && /belongs to United BW/.test(text()), "United BW gear can't be checked out here");
+  check(/United BW's Vacuum 02/.test(text()) && /unless they lend it to you/.test(text()), "United BW gear can't be checked out here, and it says whose it is");
   E("endSession(); endSummary()"); await sleep(50);
   await tap(JORDAN, 300);
   check(/Not your station/.test(text()) && /This station is for Delta BW/.test(text()) && !E("S.session"), "a United BW badge is turned away");
@@ -45,7 +45,7 @@ const ALEX = "04BA00000001", JORDAN = "04BA00000002", SAM = "04BA00000003", DANA
   await tap(JORDAN, 200);
   check(/Not your station/.test(text()), "offline: a United BW badge is still turned away");
   await tap(ALEX, 200); await tap("04DE000102", 300);
-  check(/Can't check out Vacuum 02/.test(text()), "offline: United BW gear still can't be checked out");
+  check(/United BW's Vacuum 02/.test(text()), "offline: United BW gear still can't be checked out");
   E("endSession(); endSummary(); demo.wifi = true"); await sleep(50);
 
   // Above wing shares, and items move to where they're returned
@@ -55,6 +55,35 @@ const ALEX = "04BA00000001", JORDAN = "04BA00000002", SAM = "04BA00000003", DANA
   await tap("04DE000501", 600);
   check(/Returned Radio 01/.test(text()) && /now belongs to United AW/.test(text()) && E("demo.db.equipment.find(x => x.name === 'Radio 01').contract_id") === "uaw",
         "returned at the United AW station: it moves there, and the station says so");
+  E("endSession(); endSummary()");
+  // Tapped on its own at a Delta BW station: says whose it is
+  E("demo.db.stations[0].contract_id = 'dbw'; demo.save()"); await E("refreshData(true)"); await sleep(400);
+  await tap("04DE000102", 600);
+  check(/Belongs to United BW/.test(text()) && /Can't be checked out here/.test(text()), "tapped on its own: says it belongs to United BW");
+  E("endLookup()");
+
+  // Loans: a United BW manager lends Vacuum 02 to Delta BW at a United BW station
+  E("demo.db.stations[0].contract_id = 'ubw'; demo.save()"); await E("refreshData(true)"); await sleep(400);
+  await tap(DANA, 200); await click("#staffBtn", 100); await pin("2468");
+  await click('[data-act="item"]', 100); await tap("04DE000102", 600);
+  check(/Belongs to United BW/.test(text()) && doc.querySelector('#screen [data-act="lend"]'), "admin menu: the item says whose it is, with Lend");
+  await click('[data-act="lend"]');
+  check(/Lend Vacuum 02 to/.test(text()) && /Delta BW/.test(text()) && !/United BW<\/b>/.test(doc.querySelector("#screen .people").innerHTML), "pick who to lend it to");
+  await click('[data-pick="lend:dbw"]', 600);
+  check(/on loan to Delta BW/.test(text()) && E("demo.loanOf(demo.db.equipment.find(q => q.name === 'Vacuum 02').id).to") === "dbw", "lent");
+  E("exitStaff()"); await sleep(300);
+  // Delta BW can take it
+  E("demo.db.stations[0].contract_id = 'dbw'; demo.save()"); await E("refreshData(true)"); await sleep(400);
+  await tap(ALEX); await tap("04DE000102", 600);
+  check(/Checked out Vacuum 02/.test(text()) && /On loan from United BW/.test(text()), "Delta BW checks out the loaned item");
+  check(E("demo.db.txns.at(-1).flags.includes('on_loan')"), "the checkout is marked on loan");
+  await tap("04DE000102", 600); E("endSession(); endSummary()");
+  // Back at a United BW station: the loan ends
+  E("demo.db.stations[0].contract_id = 'ubw'; demo.save()"); await E("refreshData(true)"); await sleep(400);
+  await tap(JORDAN); await tap("04DE000102", 600);
+  check(/Back from loan Vacuum 02/.test(text()) && /Delta BW had it on loan/.test(text()) && !E("demo.loanOf(demo.db.equipment.find(q => q.name === 'Vacuum 02').id)"), "tapped back at United BW: the loan is over");
+  await tap("04DE000102", 600);
+  check(/Checked out Vacuum 02/.test(text()), "and the next tap checks it out as normal");
   E("endSession(); endSummary()");
   check(errors.length === 0, "no script errors " + errors.join(";"));
   process.exit();

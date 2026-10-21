@@ -990,6 +990,49 @@ select set_config('request.jwt.claim.sub', 'cccccccc-0000-0000-0000-000000000003
 select pg_temp.ok(pg_temp.raises($$select save_contract('00000000-0000-0000-0000-00000000d3e0', '{"name":"Nope"}')$$), 'a viewer can''t change contracts');
 select pg_temp.ok((select count(*) from contracts) = 6, 'but can see them');
 reset role;
+\echo '--- Lending equipment between contracts'
+select id as blower1 from equipment where nfc_uid = '04DE000201' \gset
+update stations set contract_id = :'ubw' where name = 'United AW room';
+set role authenticated;
+select set_config('request.jwt.claim.sub', 'aaaaaaaa-0000-0000-0000-000000000001', false) \g /dev/null
+select pg_temp.ok(lend_equipment(:'blower1', :'ubw')->>'error' = 'already_shared', 'lending to its own contract makes no sense');
+select pg_temp.ok(lend_equipment((select id from equipment where nfc_uid = '04DE000101'), :'dbw')->>'error' = 'no_contract', 'an item with no contract already works everywhere');
+select lend_equipment(:'blower1', :'dbw', 'For the 7am push') as r \gset
+select pg_temp.ok((:'r'::jsonb->>'ok')::boolean and :'r'::jsonb->>'to' = 'Delta BW' and :'r'::jsonb->>'from' = 'United BW', 'United BW lends Blower 01 to Delta BW');
+reset role;
+set role anon;
+select pg_temp.ok(station_item_status(:'key4', '04DE000201')->'contract'->>'name' = 'United BW' and station_item_status(:'key4', '04DE000201')->'loan'->>'to' = 'Delta BW',
+                  'tapping it on its own says whose it is, and who has it on loan');
+select pg_temp.ok((select x->>'loan_to' from jsonb_array_elements(station_sync_cache(:'key4')->'equipment') x where x->>'nfc_uid' = '04DE000201') = :'dbw'
+                  and station_sync_cache(:'key4')->'contract_names'->>:'ubw' = 'United BW', 'the offline list knows about the loan and the contract names');
+select station_tap(:'key4', gen_random_uuid(), '04BA00000001', '04DE000201') as r \gset
+select pg_temp.ok(:'r'::jsonb->>'action' = 'checkout' and :'r'::jsonb->'flags' ? 'on_loan' and :'r'::jsonb->>'loan_from' = 'United BW', 'Delta BW checks it out, marked as on loan');
+select pg_temp.ok(station_tap(:'key4', gen_random_uuid(), '04BA00000001', '04DE000201')->>'action' = 'checkin', 'returned at Delta: still on loan');
+select station_tap(:'keyaw', gen_random_uuid(), '04BA00000002', '04DE000201') as r \gset
+select pg_temp.ok(:'r'::jsonb->>'action' = 'loan_returned' and :'r'::jsonb->>'borrower' = 'Delta BW', 'tapped at a United BW station: back with United, loan over');
+reset role;
+select pg_temp.ok((select ended_how from equipment_loans where equipment_id = :'blower1' order by lent_at desc limit 1) = 'returned'
+                  and (select current_employee_id is null from equipment where id = :'blower1'), 'the loan is closed and the item is in the room');
+set role anon;
+select pg_temp.ok(station_tap(:'key4', gen_random_uuid(), '04BA00000001', '04DE000201')->>'error' = 'other_contract_item', 'Delta can''t take it any more');
+select pg_temp.ok(station_lend_equipment(:'key4', '04BA0000000A', '2468', '04DE000201', :'dbw')->>'error' = 'not_yours_to_lend', 'lending at a station: only at the owner''s station');
+select pg_temp.ok((station_lend_equipment(:'keyaw', '04BA0000000A', '2468', '04DE000201', :'dbw')->>'ok')::boolean, 'a manager lends it at a United BW station');
+select pg_temp.ok(station_tap(:'key4', gen_random_uuid(), '04BA00000001', '04DE000201')->>'action' = 'checkout', 'Delta takes it again');
+select pg_temp.ok(station_tap(:'keyaw', gen_random_uuid(), '04BA00000002', '04DE000201')->>'action' = 'checkin', 'brought straight back to United while checked out: returned');
+reset role;
+select pg_temp.ok((select count(*) from equipment_loans where equipment_id = :'blower1' and ended_at is null) = 0, '...and the loan is over');
+set role anon;
+select station_lend_equipment(:'keyaw', '04BA0000000A', '2468', '04DE000201', :'dbw') \g /dev/null
+select pg_temp.ok((station_end_loan(:'keyaw', '04BA0000000A', '2468', '04DE000201')->>'ended')::boolean, 'a manager can end a loan at the station');
+reset role;
+set role authenticated;
+select lend_equipment(:'blower1', :'dbw') \g /dev/null
+select pg_temp.ok((end_equipment_loan(:'blower1')->>'ended')::boolean, 'or a supervisor from the dashboard');
+select pg_temp.ok((select count(*) from equipment_loans where equipment_id = :'blower1') = 4, 'every loan is kept in the item''s history');
+select set_config('request.jwt.claim.sub', 'cccccccc-0000-0000-0000-000000000003', false) \g /dev/null
+select pg_temp.ok(pg_temp.raises($$select lend_equipment((select id from equipment where nfc_uid = '04DE000201'), (select id from contracts where name = 'Delta BW'))$$), 'a viewer can''t lend');
+reset role;
+
 update stations set contract_id = null where name = 'Equipment Room 02';
 update employees set contract_id = null;
 
