@@ -201,6 +201,17 @@ button.row:hover { background: var(--surface-2); }
 .switch input:checked + span { background: var(--ok); } .switch input:checked + span::after { transform: translateX(18px); }
 .switch input:focus-visible + span { outline: 3px solid var(--focus); outline-offset: 2px; }
 .btn > svg { width: 17px; height: 17px; flex: none; } .btn { white-space: nowrap; } a.btn { text-decoration: none; } a.btn:not(.primary) { color: var(--ink); }
+/* Contracts tree */
+.ctree { display: flex; flex-direction: column; gap: 2px; }
+.crow { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(0, 1.4fr) auto; gap: 12px; align-items: center; padding: 8px 0 8px calc(var(--d, 0) * 28px); border-bottom: 1px solid var(--line); }
+.crow.top { background: var(--surface-2); padding: 10px 12px; border-radius: 10px; border: 0; margin-bottom: 6px; }
+.crow.add { display: flex; } .crow .sub { display: block; color: var(--muted); font-size: 12.5px; margin-top: 3px; }
+.crow .cname { width: 100%; max-width: 260px; font-weight: 700; }
+.crow[style*="--d:1"] .cname, .crow[style*="--d:2"] .cname { border-left: 3px solid var(--brand-soft); }
+.cflags { display: flex; flex-wrap: wrap; gap: 6px 16px; } .cact { display: flex; gap: 6px; justify-content: flex-end; }
+.mini-switch { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); font-weight: 400; }
+.mini-switch .switch { transform: scale(.85); }
+@media (max-width: 900px) { .crow { grid-template-columns: minmax(0, 1fr); } .cact { justify-content: flex-start; } }
 /* Small polish */
 .iconbtn.xclose { width: 38px; height: 38px; box-shadow: none; } .iconbtn.xclose svg { width: 18px; height: 18px; }
 .minis { display: flex; gap: 18px; } .minis span { display: flex; flex-direction: column; font-size: 12.5px; color: var(--muted); }
@@ -727,8 +738,14 @@ function buildDemo() {
     if (lastOut) problems[0].at = lastOut - 40 * MIN; }
   // Checkouts of an item with an open problem are flagged (the station warns them to look it over).
   for (const p of problems) if (!p.cleared_at) txns.filter((t) => t.eq === p.eq && t.action === "checkout" && t.at > p.at).forEach((t) => t.flags.push("reported_problem"));
+  // Contracts: below wing never crosses; above wing shares and items move to where they're returned.
+  const contracts = [["bw", null, "BW"], ["aw", null, "AW", true, true], ["dbw", "bw", "Delta BW"], ["ubw", "bw", "United BW"], ["daw", "aw", "Delta AW"], ["uaw", "aw", "United AW"]]
+    .map(([id, parent, name, share = false, move = false], i) => ({ id, parent, name, share, move, sort: i }));
+  employees.forEach((e, i) => { if (e.role === "employee") e.contract = ["dbw", "ubw", "daw"][i % 3]; });
+  equipment.forEach((q) => { q.contract = { c1: "dbw", c2: "dbw", c3: "ubw", c4: "ubw", c5: "daw", c6: "uaw" }[q.cat] || null; });
+  stations[0].contract = "dbw"; stations[1].contract = "ubw";
   const emailPrefs = { u1: ["problem"], u2: ["problem", "overdue"], u3: ["overdue", "shift_report"], u4: [] };
-  return { now, org, categories, equipment, employees, shifts, stations, txns, alerts, audit, reportAcks, occs, members, invites, reasons, problems, emailPrefs,
+  return { now, org, categories, equipment, employees, shifts, stations, txns, alerts, audit, reportAcks, occs, members, invites, reasons, problems, emailPrefs, contracts,
            me: { id: "u1", name: "Morgan Reyes", role: "owner", email: "morgan.reyes@demoair.example" } };
 }
 const DB = buildDemo();
@@ -750,6 +767,20 @@ function limitOf(q) { const c = catOf(q.cat); const rule = q.mode === "category"
 const extOf = (q) => q.extended ?? catOf(q.cat).extended ?? DB.org.extended_hours;
 // The open problem that matters most on an item: one that blocks checkout first, then the newest.
 const problemOf = (id) => (DB.problems || []).filter((p) => p.eq === id && !p.cleared_at).sort((a, b) => (b.blocks - a.blocks) || (b.at - a.at))[0] || null;
+/* Contracts: the company's own word for them, the tree, and pickers. */
+const CTERM = () => ({ one: DB.org.terminology?.contract || "Contract", many: DB.org.terminology?.contract_plural || (DB.org.terminology?.contract ? DB.org.terminology.contract + "s" : "Contracts") });
+const contractOf = (id) => (DB.contracts || []).find((c) => c.id === id);
+function contractTree() {   // depth-first, with depth for indenting
+  const out = []; const kids = (pid) => (DB.contracts || []).filter((c) => (c.parent || null) === pid).sort((a, b) => a.sort - b.sort || a.name.localeCompare(b.name));
+  const walk = (pid, d) => { for (const c of kids(pid)) { out.push({ ...c, depth: d, hasKids: kids(c.id).length > 0 }); if (d < 20) walk(c.id, d + 1); } };
+  walk(null, 0); return out;
+}
+const contractName = (id) => contractOf(id)?.name || "";
+const inBranch = (id, top) => { let c = contractOf(id), n = 0; while (c && n++ < 50) { if (c.id === top) return true; c = contractOf(c.parent); } return false; };
+function contractOptions(sel, blank = "Whole company", skip) {
+  return `<option value="">${esc(blank)}</option>` + contractTree().filter((c) => !skip || !inBranch(c.id, skip))
+    .map((c) => `<option value="${c.id}" ${sel === c.id ? "selected" : ""}>${"\u2003".repeat(c.depth)}${esc(c.name)}</option>`).join("");
+}
 const EMAIL_KINDS = [["problem", "Problem reported", "Someone reports damage or another problem with an item"], ["overdue", "Overdue", "An item isn't back by its due time"],
   ["extended", "Out too long", "An item passes the out-too-long limit"], ["shift_report", "Shift report", "A shift ends with items not back on time"]];
 
@@ -824,7 +855,7 @@ const api = {
     const name = (d.name || "").trim(), location = (d.location || "").trim();
     if (!name) return { ok: false, error: "Enter a name." };
     if (DB.stations.some((x) => x.id !== id && !x.revoked && x.name.toLowerCase() === name.toLowerCase())) return { ok: false, error: "Another station already has that name." };
-    Object.assign(DB.stations.find((x) => x.id === id), { name, location }); return { ok: true };
+    Object.assign(DB.stations.find((x) => x.id === id), { name, location, ...("contract" in d ? { contract: d.contract || null } : {}) }); return { ok: true };
   },
   /* rpc revoke_station */
   revokeStation(id) { Object.assign(DB.stations.find((s) => s.id === id), { revoked: true }); },
@@ -875,9 +906,9 @@ const api = {
     if (!catOf(d.cat)) return { ok: false, error: "Pick a category." };
     if (tag) { const own = uidOwner(tag, id); if (own) return { ok: false, error: `That tag ID is already on ${own}.` }; }
     if (asset && DB.equipment.some((q) => q.asset === asset && q.id !== id)) return { ok: false, error: "That asset tag is already used." };
-    if (id) { Object.assign(eqOf(id), { name, cat: d.cat, tag: tag || null, asset: asset || null, notes: d.notes || null }); return { ok: true, id }; }
+    if (id) { Object.assign(eqOf(id), { name, cat: d.cat, tag: tag || null, asset: asset || null, notes: d.notes || null, ...("contract" in d ? { contract: d.contract || null } : {}) }); return { ok: true, id }; }
     const nid = "q" + Date.now();
-    DB.equipment.push({ id: nid, cat: d.cat, name, tag: tag || null, asset: asset || null, notes: d.notes || null, status: "available", mode: "category", hours: null, extended: null, holder: null, out_at: null, due_at: null });
+    DB.equipment.push({ id: nid, cat: d.cat, name, tag: tag || null, asset: asset || null, notes: d.notes || null, contract: d.contract || null, status: "available", mode: "category", hours: null, extended: null, holder: null, out_at: null, due_at: null });
     DB.audit.push({ at: Date.now(), actor: DB.me.name, text: `added equipment ${name}` });
     return { ok: true, id: nid };
   },
@@ -890,7 +921,7 @@ const api = {
     const e0 = id ? empOf(id) : null; const role = d.role || "employee";
     if (role !== "employee" && !(e0 && e0.pin) && !/^[0-9]{4,8}$/.test(d.pin || "")) return { ok: false, error: "A manager or admin fob needs a PIN of 4 to 8 digits." };
     if (d.pin && !/^[0-9]{4,8}$/.test(d.pin)) return { ok: false, error: "PINs are 4 to 8 digits." };
-    const patch = { first, last, name: [first, last].filter(Boolean).join(" "), number: number || null, badge: badge || null, shifts: d.shifts || [] };
+    const patch = { first, last, name: [first, last].filter(Boolean).join(" "), number: number || null, badge: badge || null, shifts: d.shifts || [], ...("contract" in d ? { contract: d.contract || null } : {}) };
     if (can("admin")) { patch.role = role; if (d.pin) patch.pin = true; if (role === "employee") patch.pin = false; }
     if (id) { Object.assign(e0, patch); return { ok: true, id }; }
     const nid = "e" + Date.now();
@@ -922,6 +953,25 @@ const api = {
     DB.members = DB.members.filter((x) => x.id !== id); return { ok: true };
   },
   cancelInvite(id) { DB.invites = DB.invites.filter((i) => i.id !== id); },
+  /* contracts: save_contract / delete_contract rpcs (admins) */
+  contracts() { return contractTree(); },
+  saveContract(id, d) {
+    const name = (d.name || "").trim(), parent = d.parent || null;
+    if (!name) return { ok: false, error: "Enter a name." };
+    if (name.length > 60) return { ok: false, error: "Keep it under 60 characters." };
+    if (id && parent && inBranch(parent, id)) return { ok: false, error: "It can't go inside itself." };
+    if (DB.contracts.some((c) => c.id !== id && (c.parent || null) === parent && c.name.toLowerCase() === name.toLowerCase())) return { ok: false, error: "There's already one with that name there." };
+    if (id) { Object.assign(contractOf(id), { name, parent, share: !!d.share, move: !!d.move }); return { ok: true, id }; }
+    const nid = "k" + Date.now(); DB.contracts.push({ id: nid, parent, name, share: !!d.share, move: !!d.move, sort: DB.contracts.length });
+    return { ok: true, id: nid };
+  },
+  deleteContract(id) {
+    const n = DB.contracts.filter((c) => c.parent === id).length + DB.stations.filter((x) => x.contract === id && !x.revoked).length
+      + DB.employees.filter((x) => x.contract === id && x.active).length + DB.equipment.filter((x) => x.contract === id && x.status !== "retired").length;
+    if (n) return { ok: false, error: "in_use" };
+    DB.contracts = DB.contracts.filter((c) => c.id !== id); [DB.stations, DB.employees, DB.equipment].forEach((l) => l.forEach((x) => { if (x.contract === id) x.contract = null; }));
+    return { ok: true };
+  },
   /* problem_reasons (the company's list) */
   reasons() { return (DB.reasons || []).filter((r) => !r.archived).sort((a, b) => a.sort - b.sort || a.label.localeCompare(b.label)); },
   /* equipment_problems: open ones first, newest first */
@@ -1260,7 +1310,7 @@ function feedRow(a) {
 function vEquipment() {
   const f = S.f; const all = api.equipment();
   const q = f.eqSearch.trim().toLowerCase();
-  const rows = all.filter((x) => (!f.eqCat || x.cat === f.eqCat)
+  const rows = all.filter((x) => (!f.eqCat || x.cat === f.eqCat) && (!f.eqContract || inBranch(x.contract, f.eqContract))
     && (f.eqStatus === "all" || (f.eqStatus === "out" && x.holder && x.status !== "lost") || (f.eqStatus === "available" && x.status === "available")
         || (f.eqStatus === "overdue" && x.is_overdue) || (f.eqStatus === "extended" && x.is_extended) || (f.eqStatus === x.status && ["lost", "maintenance"].includes(x.status)) || (f.eqStatus === "problem" && x.problem))
     && (!q || `${x.name} ${x.asset} ${x.holderName || ""} ${x.tag}`.toLowerCase().includes(q)))
@@ -1271,12 +1321,13 @@ function vEquipment() {
     <div class="filters">
       <input class="field" id="eqSearch" type="search" aria-label="Search equipment" placeholder="Search name, asset tag or person" value="${esc(f.eqSearch)}" data-f="eqSearch">
       <select class="field" id="eqCat" aria-label="Category" data-f="eqCat"><option value="">All categories</option>${DB.categories.map((c) => `<option value="${c.id}" ${f.eqCat === c.id ? "selected" : ""}>${esc(c.name)}</option>`).join("")}</select>
+      ${DB.contracts?.length ? `<select class="field" id="eqContract" aria-label="${esc(CTERM().one)}" data-f="eqContract">${contractOptions(f.eqContract || "", `All ${CTERM().many.toLowerCase()}`)}</select>` : ""}
       <div class="seg" role="group" aria-label="Status">${seg.map(([k, l]) => `<button class="${f.eqStatus === k ? "on" : ""}" data-seg="eqStatus:${k}">${l}</button>`).join("")}</div>
     </div>
     <section class="panel"><div class="tablewrap"><table class="cardify">
       <thead><tr><th>Item</th><th>Category</th><th>Status</th><th>With</th><th>Out since</th><th>Due</th><th>Time limit</th></tr></thead>
       <tbody>${rows.map((x) => `<tr class="click" data-open="equipment:${x.id}" tabindex="0">
-        <td class="lead"><b>${esc(x.name)}</b><span class="sub mono">${esc(x.asset)}</span></td><td data-label="Category">${esc(x.category)}</td><td class="pin">${statusChip(x)}</td>
+        <td class="lead"><b>${esc(x.name)}</b><span class="sub"><span class="mono">${esc(x.asset)}</span>${x.contract ? ` · ${esc(contractName(x.contract))}` : ""}</span></td><td data-label="Category">${esc(x.category)}</td><td class="pin">${statusChip(x)}</td>
         <td data-label="With">${x.holderName ? esc(x.holderName) : `<span class="muted">In the room</span>`}</td>
         <td class="num ${x.holder ? "" : "empty-sm"}" data-label="Out since">${x.holder ? esc(fmtWhen(x.out_at)) : ""}</td>
         <td class="num ${x.is_overdue ? "late" : ""} ${x.due_at && x.holder ? "" : "empty-sm"}" data-label="Due">${x.due_at && x.holder ? esc(fmtWhen(x.due_at)) : ""}</td>
@@ -1287,14 +1338,14 @@ function vEquipment() {
 /* ---------------- Employees ---------------- */
 function vEmployees() {
   const q = S.f.empSearch.trim().toLowerCase();
-  const rows = api.employees().filter((e) => !q || `${e.name} ${e.number}`.toLowerCase().includes(q))
+  const rows = api.employees().filter((e) => (!q || `${e.name} ${e.number}`.toLowerCase().includes(q)) && (!S.f.empContract || inBranch(e.contract, S.f.empContract)))
     .sort((a, b) => (b.active - a.active) || (b.out - a.out) || a.name.localeCompare(b.name));
   return head("Employees", `${rows.filter((e) => e.active).length} active · also addable at a station with a manager or admin fob`, can("supervisor") ? `<button class="btn primary" data-act="newEmp">Add employee</button>` : "") + `
-    <div class="filters"><input class="field" type="search" id="empSearch" aria-label="Search employees" placeholder="Search name or employee #" value="${esc(S.f.empSearch)}" data-f="empSearch"></div>
+    <div class="filters"><input class="field" type="search" id="empSearch" aria-label="Search employees" placeholder="Search name or employee #" value="${esc(S.f.empSearch)}" data-f="empSearch">${DB.contracts?.length ? `<select class="field" id="empContract" aria-label="${esc(CTERM().one)}" data-f="empContract">${contractOptions(S.f.empContract || "", `All ${CTERM().many.toLowerCase()}`)}</select>` : ""}</div>
     <section class="panel"><div class="tablewrap"><table class="cardify">
       <thead><tr><th>Name</th><th>Role</th><th>Shift</th><th>Badge</th><th>Has out</th><th>Last tap</th></tr></thead>
       <tbody>${rows.map((e) => `<tr class="click" data-open="employee:${e.id}" tabindex="0" ${e.active ? "" : 'style="opacity:.55"'}>
-        <td class="lead"><b>${esc(e.name)}</b><span class="sub">${esc(e.number || "")}${e.active ? "" : " · Inactive"}</span></td>
+        <td class="lead"><b>${esc(e.name)}</b><span class="sub">${esc([e.number, contractName(e.contract)].filter(Boolean).join(" · "))}${e.active ? "" : " · Inactive"}</span></td>
         <td class="pin">${e.role === "employee" ? `<span class="muted">Employee</span>` : `<span class="chip brand">${ROLE[e.role]} fob</span>`}</td>
         <td data-label="Shift">${esc(e.shiftNames.join(", ") || "—")}</td><td data-label="Badge">${e.badge ? `On file <span class="muted mono" title="${esc(fmtUid(e.badge))}">${esc(shortUid(e.badge))}</span>` : `<span class="muted">No badge</span>`}</td>
         <td class="num" data-label="Has out">${e.out ? `<b>${e.out}</b>` : `<span class="muted">0</span>`}</td><td class="num ${e.last ? "" : "empty-sm"}" data-label="Last tap">${e.last ? esc(fmtWhen(e.last)) : ""}</td></tr>`).join("")}</tbody></table></div></section>`;
@@ -1462,7 +1513,7 @@ function vStations() {
       <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start"><h3>${esc(s.name)}</h3>
         ${s.revoked ? `<span class="chip quiet">Disconnected</span>` : s.pending ? `<span class="chip info">Waiting for setup</span>` : s.online ? `<span class="chip ok">Online</span>` : `<span class="chip warn">Offline</span>`}</div>
       ${s.pending || s.revoked ? "" : (() => { const k = stat(s.id); return `<div class="minis"><span><b>${k.taps}</b>Taps today</span><span><b>${k.out}</b>Items out</span></div>`; })()}
-      <dl class="kv"><dt>Location</dt><dd>${esc(s.location || "—")}</dd>
+      <dl class="kv"><dt>Location</dt><dd>${esc(s.location || "—")}</dd>${DB.contracts?.length ? `<dt>${esc(CTERM().one)}</dt><dd>${esc(contractName(s.contract) || "Whole company")}</dd>` : ""}
         <dt>${s.pending ? "Code" : "Last seen"}</dt><dd>${s.pending ? (s.code ? `<span class="mono">${esc(s.code)}</span>` : `<span class="muted" style="font-weight:400">Sent with the station. Lost it? Details › New activation code</span>`) : s.revoked ? "—" : esc(ago(s.last_seen))}</dd>
         <dt>Software</dt><dd>${esc(s.version || "—")}</dd></dl>
       <div class="actions"><button class="btn sm" data-open="station:${s.id}">Details</button></div></div>`).join("")}</div>`;
@@ -1509,6 +1560,7 @@ function vSettings() {
         <input class="field" name="hours" type="number" min="0.5" max="72" step="0.5" aria-label="Hours" placeholder="Hours" style="max-width:100px">
         <button class="btn primary">Add category</button><span class="err" id="catErr" role="alert"></span></form>
       <div class="panel-b muted" style="border-top:1px solid var(--line);font-size:13.5px">Changes save as you go and apply from the next checkout. <b>End of shift:</b> the hours are used when someone checks out while they're not on a shift. <b>Out-too-long:</b> leave blank to use the company setting. Single items can be changed from Equipment. Categories with equipment can't be deleted.</div></section>
+    ${vContracts()}
     <section class="panel"><div class="panel-h"><h2>Problem reasons</h2></div>
       <div class="panel-b muted" style="font-size:13.5px;padding-bottom:0">What crews pick from when they report a problem at a station. Normally a reported item can still be checked out: the station tells the person what was reported, and the checkout is flagged here. Turn on <b>Stops checkout</b> for anything that isn't safe to use: nobody can check it out until a supervisor clears it.</div>
       <div class="tablewrap"><table class="reasons-t">
@@ -1527,6 +1579,36 @@ function vSettings() {
     <section class="panel"><div class="panel-h"><h2>Plan and modules</h2></div><div class="panel-b" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">
       <span class="chip ok">Shifts and shift reports: on</span><span class="muted">To add modules, contact support.</span></div></section></fieldset>
     ${vEmailAlerts()}`;
+}
+// Contracts (or whatever the company calls them): the tree, sharing switches, what's in each.
+function vContracts() {
+  const T = CTERM(), tree = api.contracts(), o = DB.org;
+  const count = (id) => ({ st: DB.stations.filter((x) => x.contract === id && !x.revoked).length, emp: DB.employees.filter((x) => x.contract === id && x.active).length,
+    eq: DB.equipment.filter((x) => x.contract === id && x.status !== "retired").length });
+  const sw = (id, k, on, label) => `<label class="mini-switch"><span class="switch"><input type="checkbox" data-contract="${id}" data-k="${k}" ${on ? "checked" : ""}><span></span></span>${label}</label>`;
+  const adding = S.f.addContract;
+  return `<section class="panel" id="contracts"><div class="panel-h"><h2>${esc(T.many)}</h2></div>
+    <div class="panel-b muted" style="font-size:13.5px;padding-bottom:0">Split your stations, people and equipment into ${esc(T.many.toLowerCase())}, like Delta BW and United BW.
+      A station only serves its own ${esc(T.one.toLowerCase())}, unless the group they're in shares. People and items with none work everywhere.</div>
+    <div class="panel-b ctree">
+      ${tree.length ? "" : `<p class="muted" style="margin:0">No ${esc(T.many.toLowerCase())} yet: every station serves everyone.</p>`}
+      ${tree.length > 1 || tree.some((c) => c.hasKids) ? `<div class="crow top"><span><b>Whole company</b><span class="sub">Between your top-level ${esc(T.many.toLowerCase())}</span></span>
+        <span class="cflags">${sw("", "share", o.settings.share_contracts, "Share badges and equipment")}${sw("", "move", o.settings.move_on_return, "Items move to where they're returned")}</span><span></span></div>` : ""}
+      ${tree.map((c) => { const n = count(c.id); const conf = S.confirm === "delcontract:" + c.id; return `<div class="crow" style="--d:${c.depth}">
+        <span><input class="field cname" aria-label="${esc(T.one)} name" data-contract="${c.id}" data-k="name" value="${esc(c.name)}" maxlength="60">
+          <span class="sub">${[n.st && `${n.st} station${n.st > 1 ? "s" : ""}`, n.emp && `${n.emp} ${n.emp > 1 ? "people" : "person"}`, n.eq && `${n.eq} item${n.eq > 1 ? "s" : ""}`].filter(Boolean).join(" · ") || (c.hasKids ? "" : "Nothing assigned yet")}</span></span>
+        <span class="cflags">${c.hasKids ? sw(c.id, "share", c.share, `Share across the ${esc(T.many.toLowerCase())} under it`) + sw(c.id, "move", c.move, "Items move to where they're returned") : ""}</span>
+        <span class="cact">${conf ? `<span class="confirm" style="padding:4px 8px">Delete ${esc(c.name)}? <button class="btn sm danger" type="button" data-act="doDelContract" data-id="${c.id}">Delete</button><button class="btn sm" type="button" data-act="noConfirm">Cancel</button></span>`
+          : `<button class="btn sm" type="button" data-act="addContract" data-id="${c.id}">Add under it</button><button class="btn sm danger" type="button" data-act="askDelContract" data-id="${c.id}">Delete</button>`}</span></div>
+        ${adding === c.id ? `<form class="inline-form crow add" style="--d:${c.depth + 1}" data-form="newContract:${c.id}"><input class="field" name="name" aria-label="New ${esc(T.one.toLowerCase())} name" placeholder="Name, like Delta BW" maxlength="60" required><button class="btn primary sm">Add</button><button class="btn sm" type="button" data-act="cancelContract">Cancel</button></form>` : ""}`; }).join("")}
+    </div>
+    <form class="panel-b inline-form" data-form="newContract:" style="border-top:1px solid var(--line)">
+      <input class="field" name="name" aria-label="New top-level ${esc(T.one.toLowerCase())}" placeholder="New ${esc(T.one.toLowerCase())}, like BW" maxlength="60" style="max-width:260px">
+      <button class="btn primary">Add ${esc(T.one.toLowerCase())}</button><span class="err" id="contractErr" role="alert"></span></form>
+    <form class="panel-b inline-form" data-form="contractWord" style="border-top:1px solid var(--line)">
+      <label class="muted" for="cWord" style="font-size:13.5px">What do you call these?</label>
+      <input class="field" id="cWord" name="word" maxlength="24" value="${esc(T.one)}" style="max-width:180px"><button class="btn sm">Save</button></form>
+    <div class="panel-b muted" style="border-top:1px solid var(--line);font-size:13.5px">Put a station, person or item in a ${esc(T.one.toLowerCase())} from its panel. Only empty ones can be deleted.</div></section>`;
 }
 // Who gets emailed about what. Everyone can set their own; admins can set anyone's.
 function vEmailAlerts() {
@@ -1674,6 +1756,7 @@ function dStation(id) {
     ${can("admin") && !s.revoked ? `<div class="sect"><h3>Name and location</h3><form class="inline-form" data-form="stationEdit:${s.id}">
       <input class="field" name="name" aria-label="Station name" required maxlength="60" value="${esc(s.name)}">
       <input class="field" name="location" aria-label="Location" placeholder="Location (optional)" maxlength="60" value="${esc(s.location || "")}">
+      ${DB.contracts?.length ? `<select class="field" name="contract" aria-label="${esc(CTERM().one)}">${contractOptions(s.contract || "", "Whole company (serves everyone)")}</select>` : ""}
       <button class="btn primary">Save</button><span class="err" role="alert">${esc(S.formErr || "")}</span></form>
       <p class="muted" style="margin:8px 0 0;font-size:13px">The station shows its new name within a minute.</p></div>` : ""}
     ${!can("admin") ? "" : `<div class="sect"><h3>Access</h3>${c === "revoke" ? `<div class="confirm">Disconnect ${esc(s.name)}? It stops working right away. Use this if a station is lost or stolen.
@@ -1691,6 +1774,8 @@ function dEqForm(id) {
       <label>Asset tag<small>Your own ID, optional</small><input class="field" name="asset" maxlength="40" value="${esc(x.asset || "")}" placeholder="RAD-007"></label>
       <label class="full">NFC tag ID<small>Printed on the tag or shown when it's tapped at a station. Leave blank to tag it later.</small>
         <input class="field mono" name="tag" maxlength="40" value="${esc(fmtUid(x.tag || ""))}" placeholder="04:DE:00:05:07"></label>
+      ${DB.contracts?.length ? `<label class="full">${esc(CTERM().one)}<small>Who it belongs to. Stations from other ${esc(CTERM().many.toLowerCase())} won't check it out unless they share.</small>
+        <select class="field" name="contract">${contractOptions(x.contract ?? S.f.eqContract ?? "")}</select></label>` : ""}
       <label class="full">Notes<input class="field" name="notes" maxlength="200" value="${esc(x.notes || "")}" placeholder="Optional"></label>
       <div class="err full" role="alert">${esc(S.formErr || "")}</div>
       <div class="actions full"><button class="btn primary">${id ? "Save changes" : "Add equipment"}</button><button class="btn" type="button" data-act="${id ? "backEq" : "close"}">Cancel</button></div>
@@ -1705,6 +1790,8 @@ function dEmpForm(id) {
       <label>Last name<input class="field" name="last" maxlength="40" value="${esc(e.last)}"></label>
       <label>Employee #<small>Optional</small><input class="field" name="number" maxlength="20" value="${esc(e.number || "")}"></label>
       <label>Badge ID<small>Leave blank to give them a badge at a station</small><input class="field mono" name="badge" maxlength="40" value="${esc(fmtUid(e.badge || ""))}" placeholder="04:BA:00:00:00:21"></label>
+      ${DB.contracts?.length ? `<label class="full">${esc(CTERM().one)}<small>Their badge works at this ${esc(CTERM().one.toLowerCase())}'s stations, and any it shares with.</small>
+        <select class="field" name="contract">${contractOptions(e.contract ?? S.f.empContract ?? "", "Whole company (works everywhere)")}</select></label>` : ""}
       <div class="full" style="display:flex;flex-direction:column;gap:5px"><b style="font-size:13.5px">Shifts</b>
         <div class="checks">${DB.shifts.filter((s) => s.active || e.shifts.includes(s.id)).map((s) => `<label><input type="checkbox" name="shifts" value="${s.id}" ${e.shifts.includes(s.id) ? "checked" : ""}> ${esc(s.name)} <span class="muted">${fmtClock(s.start)}–${fmtClock(s.end)}</span></label>`).join("")}</div></div>
       ${can("admin") ? `<label>Station fob<small>Managers and admins open the station's Admin menu</small>
@@ -1769,6 +1856,11 @@ document.addEventListener("click", async (e) => {
   if (a === "reportCancel") { S.f.reporting = null; S.formErr = null; return renderLayer(); }
   if (a === "clearStart") { S.f.clearing = t.dataset.id; render(); $(`[data-form="clear:${t.dataset.id}"] input`)?.focus(); return; }
   if (a === "clearCancel") { S.f.clearing = null; return render(); }
+  if (a === "addContract") { S.f.addContract = t.dataset.id; render(); $(`[data-form="newContract:${t.dataset.id}"] input`)?.focus(); return; }
+  if (a === "cancelContract") { S.f.addContract = null; return render(); }
+  if (a === "askDelContract") { S.confirm = "delcontract:" + t.dataset.id; return render(); }
+  if (a === "doDelContract") { const r = api.deleteContract(t.dataset.id); S.confirm = null;
+    toast(r.ok ? "Deleted" : `Move its ${CTERM().many.toLowerCase()}, stations, people and items out first.`); return render(); }
   if (a === "askRmReason") { S.confirm = "rmreason:" + t.dataset.id; return render(); }
   if (a === "doRmReason") { api.removeReason(t.dataset.id); S.confirm = null; toast("Reason removed"); return render(); }
   if (a === "hideSetup") { try { localStorage.setItem("sp.setupHidden." + (DB.org.id || "demo"), "1"); } catch {} toast("Hidden. Everything is still under the menu on the left."); return render(); }
@@ -1843,6 +1935,12 @@ document.addEventListener("change", (e) => {
     const uid = t.dataset.email; const kinds = [...document.querySelectorAll(`input[data-email="${cssq(uid)}"]:checked`)].map((x) => x.value);
     const r = api.setEmailPrefs(uid, kinds); toast(r.ok ? "Email alerts saved" : r.error); return render();
   }
+  if (t.dataset.contract !== undefined && t.dataset.k) {
+    const id = t.dataset.contract, k = t.dataset.k;
+    if (!id) { api.saveSettings({ settings: { ...DB.org.settings, [k === "share" ? "share_contracts" : "move_on_return"]: t.checked } }); toast("Saved"); return render(); }
+    const c = contractOf(id); const r = api.saveContract(id, { name: k === "name" ? t.value : c.name, parent: c.parent, share: k === "share" ? t.checked : c.share, move: k === "move" ? t.checked : c.move });
+    toast(r.ok ? "Saved" : r.error); return render();
+  }
   if (t.dataset.reason) {
     const r0 = DB.reasons.find((x) => x.id === t.dataset.reason); if (!r0) return;
     const r = api.saveReason(r0.id, t.dataset.k === "label" ? { label: t.value, blocks: r0.blocks } : { label: r0.label, blocks: t.checked });
@@ -1870,6 +1968,15 @@ document.addEventListener("submit", async (e) => {
     toast(r.already ? "Already reported. Your details were added." : r.blocks ? "Reported. Nobody can check it out until it's cleared." : "Reported"); return render();
   }
   if (kind.startsWith("clear:")) { api.clearProblem(kind.slice(6), data.note); S.f.clearing = null; toast("Cleared. It can be checked out again."); return render(); }
+  if (kind.startsWith("newContract:")) {
+    const parent = kind.slice(12) || null; const r = api.saveContract(null, { name: data.name, parent });
+    if (!r.ok) { if (parent) toast(r.error); else $("#contractErr").textContent = r.error; return; }
+    S.f.addContract = null; toast(`Added ${data.name.trim()}`); return render();
+  }
+  if (kind === "contractWord") {
+    const w = (data.word || "").trim().replace(/s$/i, "") || "Contract";
+    api.saveSettings({ terminology: { ...DB.org.terminology, contract: w, contract_plural: w + "s" } }); toast(`Saved. The dashboard now says ${w}.`); return render();
+  }
   if (kind === "newReason") {
     const r = api.saveReason(null, { label: data.label, blocks: data.blocks === "on" });
     if (!r.ok) { $("#reasonErr").textContent = r.error; return; }
@@ -1911,7 +2018,7 @@ document.addEventListener("submit", async (e) => {
     toast(`Invite sent to ${data.email.trim().toLowerCase()}`); return render();
   }
   if (kind.startsWith("stationEdit:")) {
-    const r = api.saveStation(kind.slice(12), { name: data.name, location: data.location });
+    const r = api.saveStation(kind.slice(12), { name: data.name, location: data.location, ...("contract" in data ? { contract: data.contract } : {}) });
     if (!r.ok) { S.formErr = r.error; renderLayer(); return; }
     S.formErr = null; toast("Station saved"); return render();
   }
@@ -1985,6 +2092,7 @@ const live = {
     ]);
     // Added in database update 11; the dashboard still works before it's run.
     const since30 = new Date(Date.now() - 30 * 86400000).toISOString();
+    const contracts = await q(sb.from("contracts").select("*").eq("org_id", org).order("sort_order")).catch(() => []);
     const [reasons, problems, prefs] = await Promise.all([
       q(sb.from("problem_reasons").select("*").eq("org_id", org).is("archived_at", null).order("sort_order")).catch(() => []),
       all("equipment_problems", "*", (x) => x.eq("org_id", org).or(`cleared_at.is.null,reported_at.gte.${since30}`).order("reported_at")).catch(() => []),
@@ -2004,13 +2112,13 @@ const live = {
         extended: c.extended_alert_hours == null ? null : Number(c.extended_alert_hours), sort: c.sort_order })),
       equipment: eq.map((x) => ({ id: x.id, cat: x.category_id, name: x.name, tag: x.nfc_uid, asset: x.asset_tag, notes: x.notes, status: x.status, mode: x.time_limit_mode,
         hours: x.checkout_hours == null ? null : Number(x.checkout_hours), extended: x.extended_alert_hours == null ? null : Number(x.extended_alert_hours),
-        holder: x.current_employee_id, out_at: ms(x.checked_out_at), due_at: ms(x.due_at), lost_at: x.status === "lost" ? ms(x.last_event_at) : null })),
+        holder: x.current_employee_id, out_at: ms(x.checked_out_at), due_at: ms(x.due_at), lost_at: x.status === "lost" ? ms(x.last_event_at) : null, contract: x.contract_id || null })),
       employees: emps.map((e) => ({ id: e.id, first: e.first_name, last: e.last_name, name: [e.first_name, e.last_name].filter(Boolean).join(" "), number: e.employee_number,
-        role: e.station_role, active: e.active, badge: e.badge_uid, pin: pinSet.has(e.id), shifts: assigns.filter((a) => a.employee_id === e.id).map((a) => a.shift_id) })),
+        role: e.station_role, active: e.active, badge: e.badge_uid, pin: pinSet.has(e.id), shifts: assigns.filter((a) => a.employee_id === e.id).map((a) => a.shift_id), contract: e.contract_id || null })),
       shifts: shifts.map((s) => ({ id: s.id, name: s.name, start: hhmm(s.start_time), end: hhmm(s.end_time), grace: s.grace_minutes, early: s.early_checkout_minutes,
         days: s.days_of_week && s.days_of_week.length < 7 ? s.days_of_week : null, active: s.active })),
       stations: stations.map((s) => ({ id: s.id, name: s.name, location: s.location || "", version: s.software_version, last_seen: ms(s.last_seen_at) || 0, revoked: !!s.revoked_at,
-        added: ms(s.created_at), pending: !s.activated_at && !s.revoked_at, code: (DB.stations || []).find((x) => x.id === s.id)?.code || null })),
+        added: ms(s.created_at), pending: !s.activated_at && !s.revoked_at, code: (DB.stations || []).find((x) => x.id === s.id)?.code || null, contract: s.contract_id || null })),
       txns: txns.map((t) => ({ id: t.id, at: ms(t.occurred_at), eq: t.equipment_id, emp: t.employee_id, prev: t.previous_employee_id, action: t.action, station: t.station_id,
         source: t.source, flags: t.flags || [], notes: t.notes })),
       alerts: alerts.map((a) => ({ id: a.id, eq: a.equipment_id, emp: a.employee_id, kind: a.kind, out_at: ms(a.checked_out_at), threshold_at: ms(a.threshold_at), raised_at: ms(a.raised_at),
@@ -2019,6 +2127,7 @@ const live = {
       invites: (team.invites || []).map((i) => ({ id: i.id, email: i.email, role: i.role, created: ms(i.created_at), expires: ms(i.expires_at) })),
       me: { id: L.user.id, name: L.names[L.user.id], role, email: L.user.email }, audit: [], reportAcks: {}, occs: [],
       reasons: reasons.map((r) => ({ id: r.id, label: r.label, blocks: r.blocks_checkout, sort: r.sort_order })),
+      contracts: contracts.map((c) => ({ id: c.id, parent: c.parent_id, name: c.name, share: c.share_children, move: c.move_on_return, sort: c.sort_order })),
       emailPrefs: Object.fromEntries(prefs.map((p) => [p.user_id, p.kinds || []])),
     });
     const empName = (id) => { const e = DB.employees.find((x) => x.id === id); return e ? e.name : null; };
@@ -2087,10 +2196,14 @@ const REMOTE = {
   saveStation: async ([id]) => { const st = DB.stations.find((x) => x.id === id); let loc = null;
     if (st.location) { const found = await q(sb.from("locations").select("id").eq("org_id", ORG()).eq("name", st.location).limit(1));
       loc = found[0]?.id || (await q(sb.from("locations").insert({ org_id: ORG(), name: st.location }).select("id").single())).id; }
-    await upd("stations", id, { name: st.name, location_id: loc }); },
+    await upd("stations", id, { name: st.name, location_id: loc, ...(DB.contracts?.length ? { contract_id: st.contract || null } : {}) }); },
+  saveContract: async ([id], r) => { const c = contractOf(r.id); if (!c) return;
+    const res = await okRpc("save_contract", { p_org: ORG(), p: { id: id || null, name: c.name, parent_id: c.parent || null, share_children: c.share, move_on_return: c.move } });
+    if (!id) { L.idMap[r.id] = res.id; c.id = res.id; } },
+  deleteContract: ([id]) => okRpc("delete_contract", { p_contract: id }),
   setActive: ([id, active]) => upd("employees", id, { active }),
   saveSettings: () => { const o = DB.org;
-    return upd("organizations", o.id, { name: o.name, logo_url: o.logo_url || null, primary_color: o.primary.toUpperCase(), accent_color: o.accent.toUpperCase(), extended_checkout_hours: o.extended_hours, settings: o.settings }); },
+    return upd("organizations", o.id, { name: o.name, logo_url: o.logo_url || null, primary_color: o.primary.toUpperCase(), accent_color: o.accent.toUpperCase(), extended_checkout_hours: o.extended_hours, settings: o.settings, terminology: o.terminology }); },
   saveCategory: ([id]) => { const c = catOf(id); if (!c) return;
     return upd("equipment_categories", id, { name: c.name, time_limit_type: c.rule, default_checkout_hours: c.hours, extended_alert_hours: c.extended }); },
   addCategory: async ([d]) => { const c = DB.categories.find((x) => x.name.toLowerCase() === (d.name || "").trim().toLowerCase()); if (!c) return;
@@ -2106,13 +2219,13 @@ const REMOTE = {
     if (crew) await syncAssignments("shift_id", sid, crew, "employee_id");
   },
   saveEquipment: async ([id, d], r) => {
-    const x = eqOf(r.id); const row = { category_id: x.cat, name: x.name, nfc_uid: x.tag || null, asset_tag: x.asset || null, notes: x.notes || null };
+    const x = eqOf(r.id); const row = { category_id: x.cat, name: x.name, nfc_uid: x.tag || null, asset_tag: x.asset || null, notes: x.notes || null, ...(DB.contracts?.length ? { contract_id: x.contract || null } : {}) };
     if (id) return upd("equipment", id, row);
     const nid = (await q(sb.from("equipment").insert({ org_id: ORG(), ...row }).select("id").single())).id;
     L.idMap[r.id] = nid; x.id = nid; if (S.drawer?.id === r.id) S.drawer.id = nid;
   },
   saveEmployee: async ([id, d], r) => {
-    const e = empOf(r.id); const row = { first_name: e.first, last_name: e.last || "", employee_number: e.number || null, badge_uid: e.badge || null };
+    const e = empOf(r.id); const row = { first_name: e.first, last_name: e.last || "", employee_number: e.number || null, badge_uid: e.badge || null, ...(DB.contracts?.length ? { contract_id: e.contract || null } : {}) };
     let eid = id;
     if (id) await upd("employees", id, row); else { eid = (await q(sb.from("employees").insert({ org_id: ORG(), ...row }).select("id").single())).id; L.idMap[r.id] = eid; e.id = eid; if (S.drawer?.id === r.id) S.drawer.id = eid; }
     await syncAssignments("employee_id", eid, e.shifts || [], "shift_id");

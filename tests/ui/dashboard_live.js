@@ -207,6 +207,21 @@ const ORG = "00000000-0000-0000-0000-00000000d3e0";
     P.submit(`[data-form="stationEdit:${sid}"]`);
     check(await P.until(() => one(`select s.name || '|' || l.name from stations s join locations l on l.id = s.location_id where s.id='${sid}'`) === "Ramp Room|Terminal 4"), "rename a station and change its location");
     await P.settled(); if (P.doc.querySelector('[data-act="close"]')) P.click('[data-act="close"]'); }
+  // contracts: build a small tree, put a person and a station in it
+  P.go("settings"); await P.until(() => P.doc.querySelector('[data-form="newContract:"]'));
+  P.set('[data-form="newContract:"] [name=name]', "BW"); P.submit('[data-form="newContract:"]');
+  check(await P.until(() => one(`select count(*) from contracts where org_id='${ORG}' and name='BW'`) === "1"), "add a top-level contract");
+  await P.settled(); await P.until(() => P.doc.querySelector('[data-act="addContract"]'));
+  P.click('[data-act="addContract"]'); await P.until(() => P.doc.querySelector('[data-form^="newContract:"] [name=name]:not([placeholder^="New"])'));
+  { const f = [...P.doc.querySelectorAll('[data-form^="newContract:"]')].find((x) => x.dataset.form !== "newContract:");
+    f.querySelector("[name=name]").value = "Delta BW"; f.dispatchEvent(new P.dom.window.Event("submit", { bubbles: true, cancelable: true })); }
+  check(await P.until(() => one(`select p.name from contracts c join contracts p on p.id = c.parent_id where c.name='Delta BW' and c.org_id='${ORG}'`) === "BW"), "add one under it");
+  await P.settled();
+  { const cid = one(`select id from contracts where name='Delta BW' and org_id='${ORG}'`), eid = one(`select id from employees where org_id='${ORG}' and first_name='Alex'`);
+    P.go("employees"); P.E(`openDrawer('empForm', '${eid}')`); await P.until(() => P.doc.querySelector('[data-form^="emp:"] [name=contract]'));
+    P.set('[data-form^="emp:"] [name=contract]', cid); P.submit('[data-form^="emp:"]');
+    check(await P.until(() => one(`select contract_id from employees where id='${eid}'`) === cid), "put a person in a contract");
+    await P.settled(); }
   // a failed save is reported and the screen goes back to the database's version
   one(`update equipment set nfc_uid = '04DEADBEEF01' where name = 'Radio 09'`);
   P.go("equipment"); await P.E("live.reload()"); await P.until(() => /Radio/.test(P.text()));

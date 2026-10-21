@@ -25,8 +25,8 @@ if [[ $what == all || $what == ui ]]; then
     elif [[ $rc -ne 0 ]]; then echo "FAIL $1 (crashed)"; tail -8 <<<"$out"; exit 1; else echo "ok   $1 ($n checks)"; fi; }
   echo "== screens (demo data)"
   run console.js platform/console.html
-  for f in dashboard1.js dashboard2.js dashboard3.js dashboard4.js; do run $f dashboard/dashboard.html; done
-  for i in 1 2 3 4 5 6 7 8 9 10; do run station$i.js station/station.html; done
+  for f in dashboard1.js dashboard2.js dashboard3.js dashboard4.js dashboard5.js; do run $f dashboard/dashboard.html; done
+  for i in 1 2 3 4 5 6 7 8 9 10 11; do run station$i.js station/station.html; done
 fi
 
 if [[ $what == all ]] && [[ -x ${POSTGREST_BIN:-.tools/postgrest} ]]; then

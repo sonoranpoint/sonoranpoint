@@ -653,14 +653,28 @@ function demoSeed() {
     audit: [],   // staff actions (what the audit log records)
     reasons: demoReasons(),
     problems: [],
+    contracts: [],   // { id, parent_id, name, share_children, move_on_return } — none in the demo until a test adds them
   };
 }
 function demoReasons() { return [["Damaged", false], ["Not charging", false], ["Missing part", false], ["Other", false]].map(([label, blocks_checkout], i) => ({ id: "r" + (i + 1), label, blocks_checkout, sort: i + 1 })); }
 
 const demo = {
   db: null, wifi: true, listeners: [],
-  load() { this.db = store.get("demoServer.v2") || demoSeed(); this.db.reasons ||= demoReasons(); this.db.problems ||= [];
+  load() { this.db = store.get("demoServer.v2") || demoSeed(); this.db.reasons ||= demoReasons(); this.db.problems ||= []; this.db.contracts ||= [];
     const dmg = this.db.reasons.find((r) => r.label === "Damaged"); if (dmg && !this.db.reasonsV2) { dmg.blocks_checkout = false; this.db.reasonsV2 = true; } },
+  /* Contracts (same as private.contracts_share / contracts_move) */
+  cpath(id) { const out = []; let c = this.db.contracts.find((x) => x.id === id); while (c && out.length < 50) { out.unshift(c.id); c = this.db.contracts.find((x) => x.id === c.parent_id); } return out; },
+  cmeet(a, b) {
+    if (!a || !b || a === b) return { related: true };
+    const pa = this.cpath(a), pb = this.cpath(b); if (pb.includes(a) || pa.includes(b)) return { related: true };
+    let meet = null; for (let i = 0; i < Math.min(pa.length, pb.length) && pa[i] === pb[i]; i++) meet = pa[i];
+    return { related: false, meet };
+  },
+  shares(a, b) { const m = this.cmeet(a, b); if (m.related) return true;
+    return m.meet ? !!this.db.contracts.find((c) => c.id === m.meet)?.share_children : !!this.db.org.settings.share_contracts; },
+  moves(item, station) { if (!item || !station || item === station) return false; const m = this.cmeet(item, station); if (m.related) return false;
+    return m.meet ? !!this.db.contracts.find((c) => c.id === m.meet)?.move_on_return : !!this.db.org.settings.move_on_return; },
+  cname(id) { return this.db.contracts.find((c) => c.id === id)?.name || null; },
   openProblem(eqId) {
     const p = (this.db.problems || []).filter((x) => x.equipment_id === eqId && !x.cleared_at).sort((a, b) => (b.blocks_checkout - a.blocks_checkout) || (b.reported_at - a.reported_at))[0];
     return p ? { id: p.id, reason: p.reason, blocks_checkout: p.blocks_checkout, reported_at: new Date(p.reported_at).toISOString() } : null;
@@ -696,7 +710,7 @@ const demo = {
   config(st) {
     const o = this.db.org;
     return { ok: true,
-      station: { id: st.id, name: st.name, location: st.location },
+      station: { id: st.id, name: st.name, location: st.location, contract: st.contract_id ? { id: st.contract_id, name: this.cname(st.contract_id) } : null },
       organization: { name: o.name, logo_url: o.logo_url, primary_color: o.primary_color, accent_color: o.accent_color,
         timezone: o.timezone, terminology: o.terminology, settings: o.settings, enabled_modules: o.enabled_modules },
       categories: [...this.db.categories].sort((a, b) => a.sort - b.sort).map((c) => ({ id: c.id, name: c.name, icon: null })),
@@ -719,9 +733,10 @@ const demo = {
     station_sync_cache({ p_device_key }) {
       const st = demo.station(p_device_key); if (!st) return { ok: false, error: "station_not_authorized" };
       return { ok: true, generated_at: new Date(clock.now()).toISOString(),
-        employees: demo.db.employees.filter((e) => e.active && e.badge_uid).map((e) => ({ id: e.id, badge_uid: e.badge_uid, name: e.name, role: e.role, has_pin: !!e.pin })),
+        reach: st.contract_id ? demo.db.contracts.filter((c) => demo.shares(st.contract_id, c.id)).map((c) => c.id) : null,
+        employees: demo.db.employees.filter((e) => e.active && e.badge_uid).map((e) => ({ id: e.id, badge_uid: e.badge_uid, name: e.name, role: e.role, has_pin: !!e.pin, contract_id: e.contract_id || null })),
         equipment: demo.db.equipment.filter((q) => q.nfc_uid && q.status !== "retired").map((q) => ({
-          id: q.id, nfc_uid: q.nfc_uid, name: q.name, category_id: q.category_id, status: q.status,
+          id: q.id, nfc_uid: q.nfc_uid, name: q.name, category_id: q.category_id, status: q.status, contract_id: q.contract_id || null,
           current_employee_id: q.current_employee_id, checked_out_at: q.checked_out_at, due_at: q.due_at,
           extended_alert_hours: demo.extendedHours(q), problem: demo.openProblem(q.id) })) };
     },
@@ -782,7 +797,7 @@ const demo = {
       const own = demo.uidOwner(uid); if (own) return { ok: false, error: own.kind === "badge" ? "badge_in_use" : "tag_is_equipment", used_by: own.name };
       const dup = num && demo.db.employees.find((e) => e.employee_number === num); if (dup) return { ok: false, error: "number_in_use", used_by: dup.name };
       const name = [a.p_first_name.trim(), (a.p_last_name || "").trim()].filter(Boolean).join(" ");
-      const e = { id: "e" + randHex(4), employee_number: num, name, badge_uid: uid, active: true, role, pin: role !== "employee" ? a.p_new_pin : null };
+      const e = { id: "e" + randHex(4), employee_number: num, name, badge_uid: uid, active: true, role, pin: role !== "employee" ? a.p_new_pin : null, contract_id: ss.st.contract_id || null };
       demo.db.employees.push(e); demo.log(ss.e, `added employee ${name}${role !== "employee" ? " (" + role + ")" : ""}`);
       return { ok: true, employee: { id: e.id, name, role } };
     },
@@ -794,7 +809,7 @@ const demo = {
       if (!uid) return { ok: false, error: "no_tag" };
       const own = demo.uidOwner(uid); if (own) return { ok: false, error: own.kind === "tag" ? "tag_in_use" : "tag_is_badge", used_by: own.name };
       const q = { id: "q" + randHex(4), category_id: a.p_category_id, name, nfc_uid: uid, asset_tag: (a.p_asset_tag || "").trim() || null, status: "available",
-        mode: "category", hours: null, extended: null, current_employee_id: null, checked_out_at: null, due_at: null, last_event_at: null };
+        mode: "category", hours: null, extended: null, current_employee_id: null, checked_out_at: null, due_at: null, last_event_at: null, contract_id: ss.st.contract_id || null };
       demo.db.equipment.push(q); demo.log(ss.e, `added equipment ${name}`);
       return { ok: true, equipment: { id: q.id, name } };
     },
@@ -864,7 +879,18 @@ const demo = {
       if (!emp) return { ok: false, error: "unknown_badge" };
       const eq = demo.db.equipment.find((q) => q.nfc_uid === normUid(p_equipment_uid));
       if (!eq) return { ok: false, error: "unknown_equipment" };
-      return demo.recordEvent(eq, emp, p_action || null, p_occurred_at ? Date.parse(p_occurred_at) : clock.now(), st.id, p_client_txn_id, !p_queued);
+      if (!p_queued) {
+        if (!demo.shares(st.contract_id, emp.contract_id)) return { ok: false, error: "other_contract", station_contract: demo.cname(st.contract_id), employee_contract: demo.cname(emp.contract_id) };
+        const out = p_action ? p_action === "checkout" : !(eq.status === "lost" || eq.current_employee_id === emp.id || (eq.current_employee_id && demo.db.org.settings.allow_return_by_other));
+        if (out && !demo.shares(st.contract_id, eq.contract_id)) return { ok: false, error: "other_contract_item", equipment: { id: eq.id, name: eq.name }, item_contract: demo.cname(eq.contract_id) };
+      }
+      const itemContract = eq.contract_id || null;
+      const r = demo.recordEvent(eq, emp, p_action || null, p_occurred_at ? Date.parse(p_occurred_at) : clock.now(), st.id, p_client_txn_id, !p_queued);
+      if (r.ok && r.action === "checkin" && st.contract_id && itemContract !== st.contract_id && !r.flags.includes("late_sync")) {
+        r.flags.push("returned_other_contract");
+        if (demo.moves(itemContract, st.contract_id)) { eq.contract_id = st.contract_id; r.moved_to = demo.cname(st.contract_id); }
+      }
+      return r;
     },
   },
   /* Same decisions as private.record_event in the database. */
@@ -1181,6 +1207,9 @@ const BADGE_SVG = `<svg class="badge-ico" viewBox="0 0 64 64" fill="none" aria-h
 const LOOKUP_MS = 15000;
 const settings = () => S.saved.config?.organization?.settings || { allow_return_by_other: true, allow_checkout_while_held: false };
 const reasons = () => S.saved.config?.problem_reasons || [];
+// Contracts this station serves (null = all). Someone or something with no contract works everywhere.
+const serves = (contractId) => { const reach = S.saved.cache?.reach; return !reach || !contractId || reach.includes(contractId); };
+const stationContract = () => S.saved.config?.station?.contract?.name || null;
 function renderLookup(el) {
   const L = S.lookup; const i = L.info; const st = i.equipment.status;
   const holder = i.holder?.name; const first = holder ? holder.split(" ")[0] : "";
@@ -1731,7 +1760,7 @@ async function refreshData(withConfig) {
       else if (c.error === "station_not_authorized") return lockedOut();
     }
     const r = await call("station_sync_cache", { p_device_key: S.saved.deviceKey });
-    if (r.ok) { S.saved.cache = { employees: r.employees, equipment: r.equipment }; S.saved.lastSync = clock.now(); persist(); renderStatus(); if (S.screen === "session") renderMain(); }
+    if (r.ok) { S.saved.cache = { employees: r.employees, equipment: r.equipment, reach: r.reach ?? null }; S.saved.lastSync = clock.now(); persist(); renderStatus(); if (S.screen === "session") renderMain(); }
     else if (r.error === "station_not_authorized") lockedOut();
   } catch {}
 }
@@ -1782,6 +1811,10 @@ function handleTag(raw) {
   if (S.screen === "pin") { if (S.pinEntry && uid === S.pinEntry.emp.badge_uid) return; S.pinEntry = null; S.screen = "idle"; }
   const cache = S.saved.cache || { employees: [], equipment: [] };
   const emp = cache.employees.find((e) => e.badge_uid === uid);
+  if (emp && !serves(emp.contract_id)) {
+    beep("bad"); S.lookup = null;
+    return toast("Not your station", `This station is for ${stationContract() || "another team"}. Use your own team's station.`);
+  }
   if (emp) {
     // Badge right after looking up an item: act on that item.
     const pend = S.lookup && Date.now() - S.lookup.at < LOOKUP_MS && !["maintenance", "retired"].includes(S.lookup.info.equipment.status) ? S.lookup.uid : null;
@@ -1925,6 +1958,7 @@ async function tapItem(uid) {
   const action = lost || prevHolder === s.emp.id || (other && set.allow_return_by_other) ? "checkin" : "checkout";
   const block = action === "checkout" && ["maintenance", "retired"].includes(item.status) ? "item_unavailable"
               : action === "checkout" && item.problem?.blocks_checkout ? "item_has_problem"
+              : action === "checkout" && !serves(item.contract_id) ? "other_contract_item"
               : action === "checkout" && other && !set.allow_checkout_while_held ? "checked_out_to_other" : null;
   if (block) return replaceResult(pending, onlineResult({ ok: false, error: block, equipment: { id: item.id, name: item.name, status: item.status },
                                   holder: other ? { id: prevHolder, name: empName(prevHolder) } : null, problem: item.problem }, item, prevHolder, uid));
@@ -1954,6 +1988,10 @@ function onlineResult(r, item, prevHolder, uid) {
       lines: [{ text: `Checked out to ${r.holder?.name || "someone else"}.`, note: true }, { text: "It has to be returned before anyone else can take it." }] };
     if (r.error === "not_your_item") return { tone: "bad", kind: "refused", detail: `${r.holder?.name || "someone else"} has it`, title: "Can't return", item: nm,
       lines: [{ text: `Checked out to ${r.holder?.name || "someone else"}.`, note: true }, { text: "Only they can return it. Ask a supervisor if they're not here." }] };
+    if (r.error === "other_contract") { setTimeout(endSession, 3000); return { tone: "bad", kind: "refused", title: "Not your station", item: "",
+      lines: [{ text: `This station is for ${r.station_contract || stationContract() || "another team"}.`, note: true }, { text: "Use your own team's station." }] }; }
+    if (r.error === "other_contract_item") return { tone: "bad", kind: "refused", detail: "another team's", title: "Can't check out", item: nm,
+      lines: [{ text: `It belongs to ${r.item_contract || "another team"}.`, note: true }, { text: "It can only be checked out at their stations. You can still return it here." }] };
     if (r.error === "item_has_problem") return { tone: "bad", kind: "refused", detail: (r.problem?.reason || "reported problem").toLowerCase(), title: "Can't check out", item: nm,
       lines: [{ text: `Reported: ${r.problem?.reason || "a problem"}.`, note: true }, { text: "A supervisor has to clear it first. Take a different one." }] };
     if (r.error === "item_lost") return { tone: "bad", kind: "refused", detail: "listed as lost", title: "Listed as lost", item: nm, lines: [{ text: "Tap it again to return it as found." }] };
@@ -1985,6 +2023,8 @@ function onlineResult(r, item, prevHolder, uid) {
     if (f.has("found_lost_item")) { tone = "ok"; detail = "found"; lines.splice(0, lines.length, { text: "It was listed as lost. Thanks for bringing it back!", note: true }, { text: "It's back in the room and available." }); }
     if (forName) { tone = "warn"; detail = "for " + forName; lines.splice(0, lines.length, { text: `Returned for ${forName}.`, note: true }, { text: "Tap it again if you want to check it out." }); }
     if (f.has("returned_after_extended")) { tone = "warn"; lines.unshift({ text: "It was out longer than allowed. Your supervisor can see this.", note: true }); }
+    if (r.moved_to) { lines.push({ text: `It now belongs to ${r.moved_to}.` }); if (cached) cached.contract_id = S.saved.config?.station?.contract?.id || cached.contract_id; persist(); }
+    else if (f.has("returned_other_contract")) lines.push({ text: "It belongs to another team. Their supervisor can see it was returned here." });
     const pr = cached?.problem;
     if (pr?.blocks_checkout) { const i = lines.findIndex((l) => /Tap it again/.test(l.text)); if (i >= 0) lines.splice(i, 1);
       lines.push({ text: `Reported ${pr.reason.toLowerCase()}, so it stays in the room until a supervisor clears it.` }); }

@@ -931,6 +931,68 @@ delete from org_members where user_id = 'cccccccc-0000-0000-0000-000000000003';
 select pg_temp.ok(not exists (select 1 from notification_prefs where user_id = 'cccccccc-0000-0000-0000-000000000003'), 'removing someone removes their email settings');
 insert into org_members (org_id, user_id, role) values ('00000000-0000-0000-0000-00000000d3e0', 'cccccccc-0000-0000-0000-000000000003', 'viewer');
 
+\echo '--- Contracts'
+update equipment set current_employee_id = null, checked_out_at = null, due_at = null, status = 'available' where nfc_uid in ('04DE000201', '04DE000202', '04DE000601');
+set role authenticated;
+select set_config('request.jwt.claim.sub', 'aaaaaaaa-0000-0000-0000-000000000001', false) \g /dev/null
+select save_contract('00000000-0000-0000-0000-00000000d3e0', '{"name":"BW"}')->>'id' as bw \gset
+select save_contract('00000000-0000-0000-0000-00000000d3e0', '{"name":"AW","share_children":true,"move_on_return":true}')->>'id' as aw \gset
+select save_contract('00000000-0000-0000-0000-00000000d3e0', jsonb_build_object('name', 'Delta BW', 'parent_id', :'bw'))->>'id' as dbw \gset
+select save_contract('00000000-0000-0000-0000-00000000d3e0', jsonb_build_object('name', 'United BW', 'parent_id', :'bw'))->>'id' as ubw \gset
+select save_contract('00000000-0000-0000-0000-00000000d3e0', jsonb_build_object('name', 'Delta AW', 'parent_id', :'aw'))->>'id' as daw \gset
+select save_contract('00000000-0000-0000-0000-00000000d3e0', jsonb_build_object('name', 'United AW', 'parent_id', :'aw'))->>'id' as uaw \gset
+select pg_temp.ok((select count(*) from contracts) = 6, 'admin builds the contract tree');
+select pg_temp.ok(save_contract('00000000-0000-0000-0000-00000000d3e0', jsonb_build_object('name', 'delta bw', 'parent_id', :'bw'))->>'error' = 'duplicate_name', 'no two contracts with the same name in one group');
+select pg_temp.ok(save_contract('00000000-0000-0000-0000-00000000d3e0', jsonb_build_object('id', :'bw', 'name', 'BW', 'parent_id', :'dbw'))->>'error' = 'parent_inside_itself', 'a contract can''t go inside its own branch');
+-- assign (dashboard edits: plain updates, allowed for admins)
+update stations set contract_id = :'dbw' where name = 'Equipment Room 02';
+update employees set contract_id = :'dbw' where employee_number = 'E1001';   -- Alex
+update employees set contract_id = :'ubw' where employee_number = 'E1002';   -- Jordan
+update employees set contract_id = :'daw' where employee_number = 'E1003';   -- Sam
+update equipment set contract_id = :'ubw' where nfc_uid = '04DE000201';
+update equipment set contract_id = :'dbw' where nfc_uid = '04DE000202';
+update equipment set contract_id = :'daw' where nfc_uid = '04DE000601';
+select pg_temp.ok((select contract_id from employees where employee_number = 'E1001') = :'dbw'::uuid, 'people, items and stations are assigned to contracts');
+select create_station('00000000-0000-0000-0000-00000000d3e0', 'United AW room')->>'activation_code' as awcode \gset
+update stations set contract_id = :'uaw' where name = 'United AW room';
+reset role;
+set role anon;
+select activate_station(:'awcode')->>'device_key' as keyaw \gset
+select pg_temp.ok(station_config(:'key4')->'station'->'contract'->>'name' = 'Delta BW', 'the station knows its contract');
+select pg_temp.ok(station_tap(:'key4', gen_random_uuid(), '04BA00000001', '04DE000202')->>'action' = 'checkout', 'Delta BW: Alex checks out a Delta BW item at a Delta BW station');
+select station_tap(:'key4', gen_random_uuid(), '04BA00000002', '04DE000202') as r \gset
+select pg_temp.ok(:'r'::jsonb->>'error' = 'other_contract' and :'r'::jsonb->>'station_contract' = 'Delta BW' and :'r'::jsonb->>'employee_contract' = 'United BW',
+                  'below wing never crosses: a United BW badge is refused at a Delta BW station');
+select station_tap(:'key4', gen_random_uuid(), '04BA00000001', '04DE000201') as r \gset
+select pg_temp.ok(:'r'::jsonb->>'error' = 'other_contract_item' and :'r'::jsonb->>'item_contract' = 'United BW', '...and a United BW item can''t be checked out there');
+select pg_temp.ok(station_tap(:'key4', gen_random_uuid(), '04BA00000002', '04DE000201', null, 'checkout', true)->>'action' = 'checkout', 'a tap saved offline is still recorded');
+select pg_temp.ok(station_tap(:'key4', gen_random_uuid(), '04BA0000000A', '04DE000201')->>'action' = 'checkin', 'someone with no contract (the admin office) works everywhere');
+select pg_temp.ok((select x->>'reach' from (select station_sync_cache(:'key4') x) y)::jsonb @> jsonb_build_array(:'dbw', :'bw')
+                  and not ((select x->'reach' from (select station_sync_cache(:'key4') x) y) @> jsonb_build_array(:'ubw')),
+                  'the offline list says which contracts this station serves');
+select station_tap(:'keyaw', gen_random_uuid(), '04BA00000003', '04DE000601') as r \gset
+select pg_temp.ok(:'r'::jsonb->>'action' = 'checkout', 'above wing shares: Sam (Delta AW) checks out a Delta AW item at the United AW station');
+select station_tap(:'keyaw', gen_random_uuid(), '04BA00000003', '04DE000601') as r \gset
+select pg_temp.ok(:'r'::jsonb->>'action' = 'checkin' and :'r'::jsonb->'flags' ? 'returned_other_contract' and :'r'::jsonb->>'moved_to' = 'United AW',
+                  'returned at the United AW station: flagged, and it moves there because AW says so');
+reset role;
+select pg_temp.ok((select contract_id from equipment where nfc_uid = '04DE000601') = :'uaw'::uuid, 'the item now belongs to United AW');
+select id as radiocat from equipment_categories where name = 'Radio' and org_id = '00000000-0000-0000-0000-00000000d3e0' \gset
+set role anon;
+select pg_temp.ok((station_add_equipment(:'key4', '04BA0000000A', '2468', 'Radio 77', :'radiocat', '04DE00007777')->>'ok')::boolean, 'a manager adds an item at the Delta BW station ');
+reset role;
+select pg_temp.ok((select contract_id from equipment where nfc_uid = '04DE00007777') = :'dbw'::uuid, 'items added at a station join its contract');
+set role authenticated;
+select pg_temp.ok(delete_contract(:'dbw')->>'error' = 'in_use', 'a contract that''s in use can''t be deleted');
+select save_contract('00000000-0000-0000-0000-00000000d3e0', jsonb_build_object('name', 'Spare', 'parent_id', :'aw'))->>'id' as spare \gset
+select pg_temp.ok((delete_contract(:'spare')->>'ok')::boolean, 'an empty one can');
+select set_config('request.jwt.claim.sub', 'cccccccc-0000-0000-0000-000000000003', false) \g /dev/null
+select pg_temp.ok(pg_temp.raises($$select save_contract('00000000-0000-0000-0000-00000000d3e0', '{"name":"Nope"}')$$), 'a viewer can''t change contracts');
+select pg_temp.ok((select count(*) from contracts) = 6, 'but can see them');
+reset role;
+update stations set contract_id = null where name = 'Equipment Room 02';
+update employees set contract_id = null;
+
 \echo '--- Deleting a company removes all its data'
 delete from organizations where slug = 'demo';
 select pg_temp.ok((select count(*) from equipment) = 0 and (select count(*) from transactions) = 0, 'company delete cascades cleanly');
