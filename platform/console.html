@@ -870,7 +870,30 @@ const api = {
   },
   /* rpc platform_revoke_station(station) */
   revokeStation(orgId, stId) { const c = custOf(orgId); const s = c.stations.find((x) => x.id === stId); s.revoked = true; s.code = null; log(c, "disconnected station", s.name); },
+  /* rpc platform_remove_station(station) — leaves every list; its taps stay in the customer's history; its box comes back */
+  removeStation(orgId, stId) {
+    const c = custOf(orgId); const s = c.stations.find((x) => x.id === stId); if (!s) return { ok: false, error: "That station is already gone." };
+    hwRelease(c, s, "returned", "station removed"); c.stations = c.stations.filter((x) => x !== s); log(c, "removed station", s.name); return { ok: true };
+  },
+  /* rpc platform_replace_station(station, unit) — same station on a new box; the old box goes to repair */
+  replaceStation(orgId, stId, unitId) {
+    const c = custOf(orgId); const s = c.stations.find((x) => x.id === stId); const u = unitId ? (DB.hw || []).find((x) => x.id === unitId) : null;
+    if (unitId && (!u || !inStock(u, c))) return { ok: false, error: HW_ERR.unit_not_in_stock };
+    hwRelease(c, s, "repair", "replaced");
+    if (u) { Object.assign(u, { org_id: c.id, station_id: s.id, status: "ready" }); u.events?.unshift({ at: Date.now(), by: OPERATOR.name, action: "replacement", details: { station: s.name, customer: c.name } }); }
+    Object.assign(s, { code: newCode(), code_expires: Date.now() + 7 * DAY, activated_at: null, last_seen: null, admin_claimed_at: null, revoked: false, replaced: Date.now() });
+    log(c, "replaced station hardware", changeText({ station: s.name, ...(u ? { unit: u.serial } : {}) })); return { ok: true, code: s.code, unit: u?.serial || null };
+  },
 };
+// The box a station ran on goes back to you (returned) or to the bench (repair).
+function hwRelease(c, s, status, reason) {
+  for (const u of (DB.hw || []).filter((x) => x.station_id === s.id && x.status !== "retired")) {
+    Object.assign(u, { status, station_id: null, ...(status === "returned" ? { org_id: null } : {}) });
+    u.events?.unshift({ at: Date.now(), by: OPERATOR.name, action: "status: " + status, details: { reason, station: s.name, customer: c.name } });
+  }
+}
+// A station unit you can send out: ready or returned, not on another station, not someone else's.
+const inStock = (u, c) => u.kind === "station" && ["ready", "returned"].includes(u.status) && !u.station_id && (!u.org_id || u.org_id === c.id);
 
 /* =====================================================================
    LIVE MODE — the same screens on your real database (Supabase).
@@ -901,7 +924,7 @@ const mapTeam = (t) => ({ operators: (t.operators || []).map((o) => ({ ...o, sin
   invites: (t.invites || []).map((i) => ({ ...i, name: i.name || "", expires: ms(i.expires_at) })) });
 const mapStation = (s) => ({ id: s.id, name: s.name, location: s.location || "", activated_at: ms(s.activated_at), last_seen: ms(s.last_seen_at),
   version: s.software_version, admin_claimed_at: ms(s.admin_claimed_at), code: null, code_expires: ms(s.code_expires_at),
-  revoked: !!s.revoked_at, created: ms(s.created_at) || Date.now(), contract_id: s.contract_id || null });
+  revoked: !!s.revoked_at, created: ms(s.created_at) || Date.now(), contract_id: s.contract_id || null, replaced: ms(s.replaced_at) || null });
 const live = {
   async load() {
     const [cs, fleet, lg, team, hw] = await Promise.all([rpc("platform_customers"), rpc("platform_fleet"), rpc("platform_log", { p_limit: 300 }),
@@ -1000,6 +1023,14 @@ const liveApi = {
     try { await rpc("platform_revoke_station", { p_station: stId }); } catch (e) { toast(nice(e)); }
     await live.refresh(orgId).catch(() => {});
   },
+  async removeStation(orgId, stId) {
+    let r; try { r = await rpc("platform_remove_station", { p_station: stId }); } catch (e) { return { ok: false, error: nice(e) }; }
+    await live.refresh(orgId).catch(() => {}); return { ok: !!r.ok, error: r.error };
+  },
+  async replaceStation(orgId, stId, unitId) {
+    let r; try { r = await rpc("platform_replace_station", { p_station: stId, p_unit: unitId || null }); } catch (e) { return { ok: false, error: nice(e) }; }
+    await live.refresh(orgId).catch(() => {}); return { ok: !!r.ok, code: r.activation_code, unit: r.unit || null, error: HW_ERR[r.error] || r.error };
+  },
   async saveHardware(p) {
     let r; try { r = await rpc("platform_save_hardware", { p }); } catch (e) { return { ok: false, error: nice(e) }; }
     if (!r.ok) return { ok: false, error: HW_ERR[r.error] || r.error };
@@ -1039,7 +1070,9 @@ const liveApi = {
   },
 };
 const HW_ERR = { serial_taken: "That unit ID is already used.", serial_required: "Give it a unit ID.", station_mismatch: "That station belongs to a different customer.",
-  not_found: "That unit or customer no longer exists.", bad_status: "Pick a status.", bad_kind: "Pick a type." };
+  not_found: "That unit or customer no longer exists.", bad_status: "Pick a status.", bad_kind: "Pick a type.",
+  unit_not_in_stock: "That unit isn't free to send. Pick one that's ready or returned.", unit_not_found: "That unit no longer exists.", same_unit: "That unit is already on this station.",
+  removed: "That station was removed." };
 const TEAM_ERR = { last_owner: "There has to be at least one owner.", already_operator: "That person is already on your team.", bad_email: "Enter a full email address.",
   bad_role: "Pick Owner or Operator.", not_operator: "They're no longer on the team." };
 
@@ -1396,15 +1429,23 @@ function vCustomer() {
             <td style="text-align:right;white-space:nowrap">${cf === "code:" + s.id
               ? `<span class="confirm" style="padding:5px 8px">${s.activated_at ? "Disconnects the Pi now. " : ""}New code? <button class="btn sm danger" data-act="doCode" data-id="${s.id}">Yes</button><button class="btn sm" data-act="noConfirm">No</button></span>`
               : cf === "revoke:" + s.id ? `<span class="confirm" style="padding:5px 8px">Disconnect for good? <button class="btn sm danger" data-act="doRevoke" data-id="${s.id}">Disconnect</button><button class="btn sm" data-act="noConfirm">No</button></span>`
-              : `<button class="btn sm" data-act="askCode" data-id="${s.id}">New code</button> <button class="btn sm danger" data-act="askRevoke" data-id="${s.id}">Disconnect</button>`}</td></tr>`; })}
+              : cf === "replace:" + s.id ? `<span class="confirm" style="padding:5px 8px;flex-wrap:wrap">New box for ${esc(s.name)}:
+                  <select class="field" id="replUnit" aria-label="Replacement unit" style="width:auto;padding:4px 8px">${(DB.hw || []).filter((u) => inStock(u, c)).map((u) => `<option value="${esc(u.id)}">${esc(u.serial)} (${esc(HW_STATUS[u.status][0].toLowerCase())})</option>`).join("")}<option value="">One I'm not tracking</option></select>
+                  <button class="btn sm danger" data-act="doReplace" data-id="${s.id}">Replace</button><button class="btn sm" data-act="noConfirm">Cancel</button></span>`
+              : `<button class="btn sm" data-act="askCode" data-id="${s.id}">New code</button> <button class="btn sm" data-act="askReplace" data-id="${s.id}">Replace</button> <button class="btn sm danger" data-act="askRevoke" data-id="${s.id}">Disconnect</button>`}</td></tr>`; })}
         </tbody></table></div>` : `<div class="empty">No stations yet.</div>`}
         ${S.lastCode ? `<div class="panel-b" style="border-top:1px solid var(--line);display:flex;flex-direction:column;gap:10px">
           <b>Activation code for ${esc(S.lastCode.name)}</b><div class="codebox" aria-label="Activation code">${esc(S.lastCode.code)}</div>
+          ${S.lastCode.replaced ? `<p style="margin:0">${S.lastCode.unit ? `Ship <b class="mono">${esc(S.lastCode.unit)}</b> with this code.` : "Set up the new box with this code."} The old box is marked for repair on the Hardware page. The station keeps its name, ${esc(c.terms?.contract?.toLowerCase() || "contract")} and history.</p>` : ""}
           <p class="muted" style="margin:0;font-size:13.5px">Works once, for 7 days. Write it on the quick-start card in the box (or send it to them). Ship a blank admin tag with the station.</p>
           <div class="actions"><button class="btn" data-copy="${esc(S.lastCode.code)}">Copy code</button><button class="btn" data-act="hideCode">Done</button></div></div>` : ""}
         <form class="panel-b inline-form" data-form="addStation" style="border-top:1px solid var(--line)"><input class="field" name="name" placeholder="New station, like Bag Room" aria-label="New station name" maxlength="60" required>
           <button class="btn primary">Add station</button>${c.station_limit != null && live.length >= c.station_limit ? `<span class="muted" style="font-size:13px">Over their limit of ${c.station_limit}. You can still add one; they can't.</span>` : ""}</form>
-        ${gone.length ? `<div class="panel-b muted" style="border-top:1px solid var(--line);font-size:13px">Disconnected: ${gone.map((s) => esc(s.name)).join(", ")}</div>` : ""}
+        ${gone.length ? `<div class="panel-b" style="border-top:1px solid var(--line)"><b style="font-size:13.5px">Disconnected</b>
+          <div class="list">${gone.map((s) => `<div class="row gone-row"><span class="dot"></span><span>${esc(s.name)}<span class="sub">No longer works. New code to use it again, or remove it for good.</span></span>
+            <span style="white-space:nowrap">${cf === "code:" + s.id ? `<span class="confirm" style="padding:5px 8px">New code? <button class="btn sm danger" data-act="doCode" data-id="${s.id}">Yes</button><button class="btn sm" data-act="noConfirm">No</button></span>`
+              : cf === "remove:" + s.id ? `<span class="confirm" style="padding:5px 8px">Remove for good? Their taps stay in history. <button class="btn sm danger" data-act="doRemove" data-id="${s.id}">Remove</button><button class="btn sm" data-act="noConfirm">No</button></span>`
+              : `<button class="btn sm" data-act="askCode" data-id="${s.id}">New code</button> <button class="btn sm danger" data-act="askRemove" data-id="${s.id}">Remove</button>`}</span></div>`).join("")}</div></div>` : ""}
       </section>
 
       ${DB.hw ? (() => { const mine = DB.hw.filter((u) => u.org_id === c.id); return `${contractsPanel(c)}
@@ -1880,6 +1921,11 @@ document.addEventListener("click", async (e) => {
   if (a === "doCode") { const stName = c.stations.find((s) => s.id === t.dataset.id).name; const r = await api.stationCode(c.id, t.dataset.id); S.confirm = null; if (!r.ok) { toast(r.error || "Couldn't make a code"); return render(); } S.lastCode = { name: stName, code: r.code }; toast("New code made"); return render(); }
   if (a === "doRevoke") { await api.revokeStation(c.id, t.dataset.id); S.confirm = null; toast("Station disconnected"); return render(); }
   if (a === "hideCode") { S.lastCode = null; return render(); }
+  if (a === "askReplace") { S.confirm = "replace:" + t.dataset.id; return render(); }
+  if (a === "askRemove") { S.confirm = "remove:" + t.dataset.id; return render(); }
+  if (a === "doReplace") { const stName = c.stations.find((s) => s.id === t.dataset.id).name; const r = await api.replaceStation(c.id, t.dataset.id, $("#replUnit")?.value || null); S.confirm = null;
+    if (!r.ok) { toast(r.error || "Couldn't replace it"); return render(); } S.lastCode = { name: stName, code: r.code, unit: r.unit, replaced: true }; toast("Replacement ready"); return render(); }
+  if (a === "doRemove") { const stName = c.stations.find((s) => s.id === t.dataset.id)?.name || "Station"; const r = await api.removeStation(c.id, t.dataset.id); S.confirm = null; toast(r.ok ? stName + " removed" : r.error); return render(); }
   if (a === "resend") { const r = await api.inviteOwner(c.id, t.dataset.email); if (!r.ok) { toast(r.error); return render(); } S.lastInvite = r; toast(r.mailErr ? "Invite made, but the email didn't send. Copy the link below." : "Invite sent again"); return render(); }
   if (a === "addStationRow") { readNewForm(t.closest("form")); S.newForm.stations.push(""); render(); $(`[data-station="${S.newForm.stations.length - 1}"]`)?.focus(); return; }
   if (a === "rmStation") { readNewForm(t.closest("form")); S.newForm.stations.splice(+t.dataset.i, 1); return render(); }

@@ -103,6 +103,19 @@ const change = async (el, v) => { if (typeof v === "boolean") el.checked = v; el
   E(`openDrawer('shiftForm', DB.shifts.find(x => x.name === 'Overnight').id)`); await sleep(20);
   await submit('[data-form^="shift:"]', { contract: "daw" });
   check(E("DB.shifts.find(x => x.name === 'Overnight').contract") === "daw", "a shift belongs to a contract");
+  // Remove a station for good; replaced stations say so
+  const vs3 = doc.querySelector("#viewSel"); if (vs3) { vs3.value = ""; vs3.dispatchEvent(new dom.window.Event("change", { bubbles: true })); await sleep(20); }
+  const st2 = E("DB.stations[1].id"), st2n = E("DB.stations[1].name");
+  E(`openDrawer('station', '${st2}')`); await sleep(20);
+  check(!doc.querySelector('[data-act="askRemoveStation"]'), "a working station can't be removed (disconnect it first)");
+  E(`api.revokeStation('${st2}'); render()`); E(`openDrawer('station', '${st2}')`); await sleep(20);
+  await click('[data-act="askRemoveStation"]'); check(/Remove .* for good\? It leaves your station list\. Its taps stay in Activity/.test(drawer()), "removing a disconnected station asks first");
+  await click('[data-act="doRemoveStation"]'); await go("stations");
+  check(!E(`api.stations().some(x => x.id === '${st2}')`) && E(`DB.stations.find(x => x.id === '${st2}').removed`) && !page().includes(st2n) && !doc.querySelector("details.gone-st"),
+        "removed: gone from Stations (and the Disconnected group), kept for history");
+  check(E(`api.activity().some(a => a.station === '${st2}')`) === E(`DB.txns.some(t => t.station === '${st2}')`), "its taps stay in Activity");
+  E("DB.stations[0].replaced = Date.now() - 86400000"); E(`openDrawer('station', DB.stations[0].id)`); await sleep(20);
+  check(/Replaced.*New hardware, same station and history/.test(drawer()), "a replaced station says when", drawer().slice(0, 300));
   check(errors.length === 0, "no script errors " + errors.join(";"));
   process.exit();
 })();

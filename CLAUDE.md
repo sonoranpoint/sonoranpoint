@@ -16,8 +16,8 @@ See README.md for the full product description.
 - Push to `main` → GitHub Actions runs `tests/run.sh db` + `ui`, then deploys app + console to Cloudflare Pages
   (projects `sonoranpoint-app`, `sonoranpoint-console`).
 - Database changes are NOT automatic. Add a new migration file (never edit one already run on the live
-  project), then tell Dez to run it in the Supabase SQL editor. Migrations 1–18 have been run (checked 2026-10-21;
-  ask if unsure). Alert emails are live (Resend key in Vault, first send
+  project), then tell Dez to run it in the Supabase SQL editor. Migrations 1–18 have been run (checked 2026-10-21); 19–20 handed over
+  (ask if unsure). Alert emails are live (Resend key in Vault, first send
   confirmed 2026-10-20).
 - Station changes reach the Pis by copying `deploy/dist/station` onto each Pi (not automatic yet).
 
@@ -31,6 +31,12 @@ See README.md for the full product description.
   groups above; things with no contract always show; owners see all). Enforced in RLS (`private.can_see`,
   `can_see_equipment`, `can_see_txn`) and in every dashboard function; alert emails follow it. The dashboard's
   "Show" switcher (`S.view`, `wrapViews`) filters further on screen only.
+
+## Stations
+- Removing a station (`remove_station` / `platform_remove_station`, migration 20) sets `removed_at` (and `revoked_at`); the row stays so
+  history keeps its name. Lists leave removed stations out (`api.stations()`, `platform_fleet`, `platform_customer`); its hardware goes to "returned".
+- Replacing (`platform_replace_station(station, unit)`) keeps the station, gives a new code, sets `replaced_at`; old unit -> "repair",
+  new unit (must be a ready/returned station unit) -> assigned and "ready".
 
 ## Email
 - Sign-in and invite emails: Supabase Auth sends through Resend SMTP (smtp.resend.com, from no-reply@sonoranpoint.com,

@@ -1103,6 +1103,46 @@ select pg_temp.ok(private.send_trial_reminders() = 0, 'nothing for a trial that'
 select pg_temp.ok(private.send_emails() = 0, 'send_emails runs the reminders without a Resend key');
 update organizations set status = 'active', trial_ends_at = null, contact_email = null where slug = 'demo';
 
+\echo '--- Removing and replacing stations'
+reset role;
+insert into stations (org_id, name, activated_at, last_seen_at) values ('00000000-0000-0000-0000-00000000d3e0', 'Old Room', now(), now()) returning id as oldst \gset
+insert into private.hardware_units (serial, kind, status, org_id, station_id) values ('SP-T1', 'station', 'installed', '00000000-0000-0000-0000-00000000d3e0', :'oldst');
+insert into private.hardware_units (serial, kind, status) values ('SP-T2', 'station', 'ready'), ('SP-T3', 'station', 'building');
+select id as t1 from private.hardware_units where serial = 'SP-T1' \gset
+select id as t2 from private.hardware_units where serial = 'SP-T2' \gset
+select id as t3 from private.hardware_units where serial = 'SP-T3' \gset
+set role authenticated;
+select set_config('request.jwt.claim.sub', 'aaaaaaaa-0000-0000-0000-000000000001', false) \g /dev/null
+select pg_temp.ok(pg_temp.raises($$select platform_replace_station('$$ || :'oldst' || $$')$$), 'customers can''t swap hardware');
+select set_config('request.jwt.claim.sub', '99999999-0000-0000-0000-000000000009', false) \g /dev/null
+select pg_temp.ok(platform_replace_station(:'oldst', :'t3')->>'error' = 'unit_not_in_stock', 'only a unit that''s ready (or returned) can go out');
+select platform_replace_station(:'oldst', :'t2') as rep \gset
+select pg_temp.ok((:'rep'::jsonb->>'ok')::boolean and length(:'rep'::jsonb->>'activation_code') = 9 and :'rep'::jsonb->>'unit' = 'SP-T2', 'replace: new code for the new box');
+reset role;
+select pg_temp.ok((select status = 'repair' and station_id is null from private.hardware_units where serial = 'SP-T1')
+                  and (select status = 'ready' and station_id = :'oldst' from private.hardware_units where serial = 'SP-T2'), 'old box goes to repair, new one is assigned');
+select pg_temp.ok((select name = 'Old Room' and replaced_at is not null and activated_at is null and revoked_at is null from stations where id = :'oldst'),
+                  'same station, waiting for the new box');
+select pg_temp.ok(exists (select 1 from private.hardware_events where unit_id = :'t1' and action = 'status: repair' and details->>'station' = 'Old Room'), 'the old box''s history says where it came from');
+set role authenticated;
+select pg_temp.ok(platform_replace_station(:'oldst', :'t1')->>'error' = 'unit_not_in_stock', 'a box in repair can''t be sent out');
+select set_config('request.jwt.claim.sub', 'cccccccc-0000-0000-0000-000000000003', false) \g /dev/null
+select pg_temp.ok(pg_temp.raises($$select remove_station('$$ || :'oldst' || $$')$$), 'viewers can''t remove a station');
+select set_config('request.jwt.claim.sub', 'aaaaaaaa-0000-0000-0000-000000000001', false) \g /dev/null
+select pg_temp.ok((remove_station(:'oldst')->>'ok')::boolean, 'an admin removes it');
+select pg_temp.ok(pg_temp.raises($$select reset_station_activation('$$ || :'oldst' || $$')$$), 'a removed station can''t get a new code');
+reset role;
+select pg_temp.ok((select removed_at is not null and revoked_at is not null from stations where id = :'oldst'), 'removed (and disconnected), but kept for history');
+select pg_temp.ok((select status = 'returned' and station_id is null and org_id is null from private.hardware_units where serial = 'SP-T2'), 'its box shows as returned');
+set role authenticated;
+select set_config('request.jwt.claim.sub', '99999999-0000-0000-0000-000000000009', false) \g /dev/null
+select pg_temp.ok(not exists (select 1 from jsonb_array_elements(platform_fleet()) f where f->>'id' = :'oldst')
+                  and not exists (select 1 from jsonb_array_elements(platform_customer('00000000-0000-0000-0000-00000000d3e0')->'stations') f where f->>'id' = :'oldst'),
+                  'gone from the console lists');
+select pg_temp.ok(platform_station_code(:'oldst')->>'error' = 'removed' and platform_replace_station(:'oldst', :'t2')->>'error' = 'removed', 'and from the console it stays removed');
+select pg_temp.ok((platform_customer('00000000-0000-0000-0000-00000000d3e0')->'log'->0->>'action') = 'removed station', 'the customer''s console log notes it');
+reset role;
+
 \echo '--- Deleting a company removes all its data'
 delete from organizations where slug = 'demo';
 select pg_temp.ok((select count(*) from equipment) = 0 and (select count(*) from transactions) = 0, 'company delete cascades cleanly');

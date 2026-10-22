@@ -71,7 +71,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   P.click(`[data-act="askCode"][data-id="${sid}"]`); await sleep(30); P.click(`[data-act="doCode"][data-id="${sid}"]`);
   check(await P.until(() => /Activation code for Ramp Office/.test(P.text())), "new code for a station");
   P.click(`[data-act="askRevoke"][data-id="${sid}"]`); await sleep(30); P.click(`[data-act="doRevoke"][data-id="${sid}"]`);
-  check(await P.until(() => b.psql(`select revoked_at is not null from stations where id = '${sid}'`) === "t" && /Disconnected: Ramp Office/.test(P.text())), "disconnect a station");
+  check(await P.until(() => b.psql(`select revoked_at is not null from stations where id = '${sid}'`) === "t" && /Disconnected.*Ramp Office/.test(P.text()) && !!P.doc.querySelector(`[data-act="askRemove"][data-id="${sid}"]`)), "disconnect a station");
+  P.click(`[data-act="askRemove"][data-id="${sid}"]`); await sleep(30); P.click(`[data-act="doRemove"][data-id="${sid}"]`);
+  check(await P.until(() => b.psql(`select removed_at is not null from stations where id = '${sid}'`) === "t" && !P.doc.querySelector(`[data-id="${sid}"]`)), "remove it for good (live)");
   // resend invite
   P.type('[data-form="invite"] [name=email]', "second@cactusair.example"); P.submit('[data-form="invite"]');
   check(await P.until(() => /Invite for second@cactusair.example/.test(P.text()) && b.outbox.some((m) => m.email === "second@cactusair.example")), "invite another owner (email sent)");

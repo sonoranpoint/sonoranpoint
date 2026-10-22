@@ -73,7 +73,7 @@ const submit = async (sel) => { doc.querySelector(sel).dispatchEvent(new dom.win
   await click(`[data-act="askCode"][data-id="${sid}"]`); await click(`[data-act="doCode"][data-id="${sid}"]`);
   check(E(`custOf('${id}').stations[0].code`) !== old, "new code for a station");
   await click(`[data-act="askRevoke"][data-id="${sid}"]`); await click(`[data-act="doRevoke"][data-id="${sid}"]`);
-  check(/Disconnected: /.test(page()), "disconnect a station");
+  check(!!doc.querySelector(`[data-act="askRemove"][data-id="${sid}"]`), "disconnect a station");
   await type('[data-form="invite"] [name=email]', "nope"); await submit('[data-form="invite"]');
   check(/full email/.test(page()), "bad invite email");
   await type('[data-form="invite"] [name=email]', "second@cactusair.example"); await submit('[data-form="invite"]');
@@ -175,6 +175,23 @@ const submit = async (sel) => { doc.querySelector(sel).dispatchEvent(new dom.win
   check(doc.querySelectorAll("tbody tr.gone").length === E("api.fleet(true).filter(s => s.revoked).length") && /Copper State Cargo · 3 stations, 1 disconnected/.test(page()), "disconnected stations are listed under All, greyed out");
   await click('[data-seg="fleet:online"]');
   check(doc.querySelectorAll("tbody tr.gone").length === 0, "...but not under Online");
+  // Remove a disconnected station for good
+  const cc = E("DB.customers.find(c => c.name === 'Copper State Cargo').id"), goneId = E(`custOf('${cc}').stations[0].id`), goneName = E(`custOf('${cc}').stations[0].name`);
+  E(`DB.hw.push({ id: "hwgone", serial: "SP-0901", kind: "station", status: "installed", org_id: "${cc}", station_id: "${goneId}", events: [] })`);
+  await go("customer/" + cc); check(/Disconnected/.test(page()) && page().includes(goneName), "disconnected stations are listed on the customer page");
+  await click(`[data-act="askRemove"][data-id="${goneId}"]`); check(/Remove for good\? Their taps stay in history/.test(page()), "removing asks first");
+  await click(`[data-act="doRemove"][data-id="${goneId}"]`);
+  check(!E(`custOf('${cc}').stations.some(s => s.id === '${goneId}')`) && !E(`api.fleet(true).some(s => s.id === '${goneId}')`), "removed: gone from the customer and the Stations page");
+  check(E(`(() => { const u = DB.hw.find(x => x.id === "hwgone"); return u.status === "returned" && !u.station_id && !u.org_id && u.events[0].details.reason === "station removed"; })()`), "its box shows as returned");
+  // Replace a station's hardware
+  const live1 = E(`custOf('${cc}').stations.find(s => !s.revoked).id`);
+  E(`DB.hw.push({ id: "hwold", serial: "SP-0902", kind: "station", status: "installed", org_id: "${cc}", station_id: "${live1}", events: [] }, { id: "hwnew", serial: "SP-0903", kind: "station", status: "ready", org_id: null, station_id: null, events: [] })`);
+  await go("customer/" + cc); await click(`[data-act="askReplace"][data-id="${live1}"]`);
+  check([...doc.querySelectorAll("#replUnit option")].some((o) => o.value === "hwnew") && ![...doc.querySelectorAll("#replUnit option")].some((o) => o.value === "hwold"), "replace offers units in stock only");
+  doc.querySelector("#replUnit").value = "hwnew"; await click(`[data-act="doReplace"][data-id="${live1}"]`); await sleep(20);
+  check(/Ship SP-0903 with this code/.test(page()) && /old box is marked for repair/.test(page()) && /^[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(E("S.lastCode.code")), "replace gives a code to ship with the new box");
+  check(E(`(() => { const o = DB.hw.find(x => x.id === "hwold"), n = DB.hw.find(x => x.id === "hwnew"), s = custOf('${cc}').stations.find(x => x.id === '${live1}');
+    return o.status === "repair" && !o.station_id && n.station_id === s.id && n.org_id === '${cc}' && !s.activated_at && !!s.replaced; })()`), "old box to repair, new box on the same station, waiting for setup");
   check(errors.length === 0, "no script errors " + errors.join(";"));
   process.exit();
 })();

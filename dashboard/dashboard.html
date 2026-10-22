@@ -850,7 +850,7 @@ const api = {
       last: DB.txns.filter((t) => t.emp === e.id).reduce((m, t) => Math.max(m, t.at), 0) || null }));
   },
   /* station_overview view */
-  stations() { return DB.stations.map((s) => ({ ...s, online: !s.revoked && Date.now() - s.last_seen < 5 * MIN })); },
+  stations() { return DB.stations.filter((s) => !s.removed).map((s) => ({ ...s, online: !s.revoked && Date.now() - s.last_seen < 5 * MIN })); },
   /* shift_reports (saved by the server after each shift) + shift_report(shift, date) for one in progress */
   shiftReports() {
     const out = [];
@@ -893,6 +893,8 @@ const api = {
   },
   /* rpc revoke_station */
   revokeStation(id) { Object.assign(DB.stations.find((s) => s.id === id), { revoked: true }); },
+  /* rpc remove_station: gone from the lists for good; its taps stay in history */
+  removeStation(id) { Object.assign(DB.stations.find((s) => s.id === id), { revoked: true, removed: true, pending: false, code: null }); },
   /* rpc reset_station_activation */
   newCode(id) { const s = DB.stations.find((x) => x.id === id); s.revoked = false; s.pending = true; s.code = api.createStation._code(); s.expires = Date.now() + 7 * 86400000; return s.code; },
   /* employees.active */
@@ -1571,7 +1573,7 @@ function vStations() {
       : `<form class="inline-form" data-form="station"><input class="field" name="name" aria-label="Station name" placeholder="Station name, like Equipment Room 02" required maxlength="60">
          <input class="field" name="location" aria-label="Location" placeholder="Location (optional)" maxlength="60"><button class="btn primary">Create code</button><button class="btn" type="button" data-act="cancelStation">Cancel</button></form>`}</div></section>` : "") +
     stationCards(api.stations().filter((s) => !s.revoked), stat) + (api.stations().some((s) => s.revoked) ? `<details class="gone-st"><summary>Disconnected (${api.stations().filter((s) => s.revoked).length})</summary>
-      <p class="muted" style="margin:6px 0 12px;font-size:13.5px">These no longer work. To use one again, open it and make a new activation code.</p>${stationCards(api.stations().filter((s) => s.revoked), stat)}</details>` : "");
+      <p class="muted" style="margin:6px 0 12px;font-size:13.5px">These no longer work. To use one again, open it and make a new activation code. Won't need it again? Open it and remove it for good.</p>${stationCards(api.stations().filter((s) => s.revoked), stat)}</details>` : "");
 }
 function stationCards(list, stat) {
   if (!list.length) return `<div class="empty">No stations yet.${can("admin") ? " Add one to get an activation code." : ""}</div>`;
@@ -1839,7 +1841,7 @@ function dStation(id) {
   const c = S.confirm; const k = stationStats()(id);
   return drawerHead(esc(s.name), esc(s.location || ""), `<div style="margin-top:8px">${s.revoked ? `<span class="chip quiet">Disconnected</span>` : s.pending ? `<span class="chip info">Waiting for setup</span>` : s.online ? `<span class="chip ok">Online</span>` : `<span class="chip warn">Offline</span>`}</div>`) + `<div class="drawer-b">
     <div class="sect"><dl class="kv"><dt>Last seen</dt><dd>${s.last_seen ? esc(ago(s.last_seen)) : "Never"}</dd><dt>Software</dt><dd>${esc(s.version || "—")}</dd>
-      <dt>Taps today</dt><dd>${k.taps}</dd><dt>Items out</dt><dd>${k.out}</dd><dt>Taps (7 days)</dt><dd>${taps.length}</dd><dt>Added</dt><dd>${esc(fmtWhen(s.added))}</dd>${s.pending ? `<dt>Activation code</dt><dd${s.code ? ` class="mono"` : ""}>${s.code ? esc(s.code) : "Not shown again after it's made. Use New activation code below if it's lost."}</dd>` : ""}</dl></div>
+      <dt>Taps today</dt><dd>${k.taps}</dd><dt>Items out</dt><dd>${k.out}</dd><dt>Taps (7 days)</dt><dd>${taps.length}</dd><dt>Added</dt><dd>${esc(fmtWhen(s.added))}</dd>${s.replaced ? `<dt>Replaced</dt><dd>${esc(fmtWhen(s.replaced))}<span class="muted" style="display:block;font-weight:400;font-size:13px">New hardware, same station and history</span></dd>` : ""}${s.pending ? `<dt>Activation code</dt><dd${s.code ? ` class="mono"` : ""}>${s.code ? esc(s.code) : "Not shown again after it's made. Use New activation code below if it's lost."}</dd>` : ""}</dl></div>
     ${!s.online && !s.revoked && !s.pending ? `<div class="notice">Offline stations keep working: taps are saved on the station and sync when it reconnects. Check its power and Wi-Fi.</div>` : ""}
     ${can("admin") && !s.revoked ? `<div class="sect"><h3>Name and location</h3><form class="inline-form" data-form="stationEdit:${s.id}">
       <input class="field" name="name" aria-label="Station name" required maxlength="60" value="${esc(s.name)}">
@@ -1849,8 +1851,10 @@ function dStation(id) {
       <p class="muted" style="margin:8px 0 0;font-size:13px">The station shows its new name within a minute.</p></div>` : ""}
     ${!can("admin") ? "" : `<div class="sect"><h3>Access</h3>${c === "revoke" ? `<div class="confirm">Disconnect ${esc(s.name)}? It stops working right away. Use this if a station is lost or stolen.
         <button class="btn sm danger" data-act="doRevoke">Disconnect</button><button class="btn sm" data-act="noConfirm">Cancel</button></div>`
-      : `<div class="actions">${s.revoked ? "" : `<button class="btn danger" data-act="askRevoke">Disconnect station</button>`}<button class="btn" data-act="newCode">New activation code</button></div>
-        <p class="muted" style="margin:8px 0 0;font-size:13px">A new code is for replacing or re-setting up this station. The old connection stops working.</p>`}</div>`}
+      : c === "remove" ? `<div class="confirm">Remove ${esc(s.name)} for good? It leaves your station list${s.revoked ? "" : " and stops working right away"}. Its taps stay in Activity.
+        <button class="btn sm danger" data-act="doRemoveStation">Remove</button><button class="btn sm" data-act="noConfirm">Cancel</button></div>`
+      : `<div class="actions">${s.revoked ? "" : `<button class="btn danger" data-act="askRevoke">Disconnect station</button>`}<button class="btn" data-act="newCode">New activation code</button>${s.revoked || s.pending ? `<button class="btn danger" data-act="askRemoveStation">Remove for good</button>` : ""}</div>
+        <p class="muted" style="margin:8px 0 0;font-size:13px">A new code is for replacing or re-setting up this station. The old connection stops working.${s.revoked || s.pending ? " Remove a station you won't use again." : ""}</p>`}</div>`}
   </div>`;
 }
 function dEqForm(id) {
@@ -1999,6 +2003,8 @@ document.addEventListener("click", async (e) => {
   if (a === "doStatus") { api.setStatus(D.id, t.dataset.s); S.confirm = null; toast({ lost: "Marked lost", maintenance: "Sent to maintenance", available: "Back in service" }[t.dataset.s]); return render(); }
   if (a === "doActive") { api.setActive(D.id, t.dataset.v === "1"); S.confirm = null; toast(t.dataset.v === "1" ? "Reactivated" : "Deactivated. Their badge no longer works."); return render(); }
   if (a === "doRevoke") { api.revokeStation(D.id); S.confirm = null; toast("Station disconnected"); return render(); }
+  if (a === "askRemoveStation") { S.confirm = "remove"; return renderLayer(); }
+  if (a === "doRemoveStation") { const nm = DB.stations.find((x) => x.id === D.id)?.name || "Station"; api.removeStation(D.id); S.confirm = null; S.drawer = null; toast(nm + " removed"); return render(); }
   if (a === "newCode") { try { const code = await api.newCode(D.id); toast("New code: " + code); } catch (err) { toast(LIVE ? niceErr(err) : String(err)); } return render(); }
   if (a === "ackStart") { S.f.acking = t.dataset.id; render(); $(`[data-form="ack:${t.dataset.id}"] input`)?.focus(); return; }
   if (a === "addStation") { S.f.newStation = { code: null }; render(); $('[data-form="station"] input')?.focus(); return; }
@@ -2233,7 +2239,7 @@ const live = {
       shifts: shifts.map((s) => ({ id: s.id, name: s.name, start: hhmm(s.start_time), end: hhmm(s.end_time), grace: s.grace_minutes, early: s.early_checkout_minutes, contract: s.contract_id || null,
         days: s.days_of_week && s.days_of_week.length < 7 ? s.days_of_week : null, active: s.active })),
       stations: stations.map((s) => ({ id: s.id, name: s.name, location: s.location || "", version: s.software_version, last_seen: ms(s.last_seen_at) || 0, revoked: !!s.revoked_at,
-        added: ms(s.created_at), pending: !s.activated_at && !s.revoked_at, code: (DB.stations || []).find((x) => x.id === s.id)?.code || null, contract: s.contract_id || null })),
+        added: ms(s.created_at), pending: !s.activated_at && !s.revoked_at, removed: !!s.removed_at, replaced: ms(s.replaced_at) || null, code: (DB.stations || []).find((x) => x.id === s.id)?.code || null, contract: s.contract_id || null })),
       txns: txns.map((t) => ({ id: t.id, at: ms(t.occurred_at), eq: t.equipment_id, emp: t.employee_id, prev: t.previous_employee_id, action: t.action, station: t.station_id,
         source: t.source, flags: t.flags || [], notes: t.notes })),
       alerts: alerts.map((a) => ({ id: a.id, eq: a.equipment_id, emp: a.employee_id, kind: a.kind, out_at: ms(a.checked_out_at), threshold_at: ms(a.threshold_at), raised_at: ms(a.raised_at),
@@ -2312,6 +2318,7 @@ const REMOTE = {
   ackAlert: ([id, note]) => rpc("acknowledge_alert", { p_alert: id, p_notes: note || null }),
   ackReport: ([key, note]) => rpc("acknowledge_shift_report", { p_report: key, p_notes: note || null }),
   revokeStation: ([id]) => rpc("revoke_station", { p_station: id }),
+  removeStation: ([id]) => rpc("remove_station", { p_station: id }),
   saveStation: async ([id]) => { const st = DB.stations.find((x) => x.id === id); let loc = null;
     if (st.location) { const found = await q(sb.from("locations").select("id").eq("org_id", ORG()).eq("name", st.location).limit(1));
       loc = found[0]?.id || (await q(sb.from("locations").insert({ org_id: ORG(), name: st.location }).select("id").single())).id; }
