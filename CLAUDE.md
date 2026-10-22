@@ -16,14 +16,15 @@ See README.md for the full product description.
 - Push to `main` → GitHub Actions runs `tests/run.sh db` + `ui`, then deploys app + console to Cloudflare Pages
   (projects `sonoranpoint-app`, `sonoranpoint-console`).
 - Database changes are NOT automatic. Add a new migration file (never edit one already run on the live
-  project), then tell Dez to run it in the Supabase SQL editor. Migrations 1–22 have been run (checked 2026-10-22); 23–25 handed over
-  (ask if unsure). Alert emails are live (Resend key in Vault, first send
+  project), then tell Dez to run it in the Supabase SQL editor. Migrations 1–25 have been run (checked 2026-10-22;
+  ask if unsure). Alert emails are live (Resend key in Vault, first send
   confirmed 2026-10-20).
 - Station changes reach the Pis by themselves: every deploy publishes `app.sonoranpoint.com/station-release/latest.json` + a zip
   (version = `VERSION` in station.html + a content hash, so only station changes count). `station/pi/station_updater.py` on each
   Pi serves the app at http://localhost/, downloads/verifies/stages new versions, and the page switches when idle
   (`updater` in station.html; rollback if the page doesn't POST /update/ok within 5 min). Pis set up before the updater was
   installed still need the folder copied by hand once.
+- No physical station hardware yet (as of 2026-10-22): the Pi side (updater, NFC service, Wi-Fi helper) is tested only in simulation.
 
 ## Contracts
 - A company's work is split into contracts (customer's own word: `terminology.contract`), a tree in `public.contracts`.
