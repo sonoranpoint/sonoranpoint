@@ -422,10 +422,6 @@ a.kpi:hover { border-color: var(--brand); transform: translateY(-1px); }
 
 .side { position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; gap: 22px; padding: 22px 14px 16px; color: #dfe8f7;
   background: radial-gradient(120% 50% at 0% 0%, rgba(47, 155, 255, .10), transparent 60%), linear-gradient(180deg, #0c2550 0%, #081c3c 55%, #061630 100%); z-index: 30; }
-.brandmark { display: flex; align-items: center; gap: 11px; padding: 2px 8px 6px; color: #fff; text-decoration: none; }
-.brandmark img { width: 40px; height: 40px; flex: none; }
-.brandmark span { font-family: var(--display); font-weight: 600; font-size: 19px; line-height: .95; letter-spacing: .09em; text-transform: uppercase; }
-.brandmark span i { font-style: normal; color: #4fb3ff; display: block; }
 .snav { display: flex; flex-direction: column; gap: 3px; overflow-y: auto; }
 .snav a { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 10px; color: rgba(223, 232, 247, .86); text-decoration: none; font-weight: 700; font-size: 15px; }
 .snav a svg { width: 19px; height: 19px; flex: none; opacity: .9; }
@@ -434,17 +430,19 @@ a.kpi:hover { border-color: var(--brand); transform: translateY(-1px); }
 .snav a.on svg { color: #4fb3ff; opacity: 1; }
 .snav .n { margin-left: auto; background: var(--sp-sun); color: #2a1300; border-radius: 99px; font-size: 12px; padding: 1px 8px; font-weight: 700; }
 .snav hr { border: 0; border-top: 1px solid rgba(223, 232, 247, .1); margin: 8px 6px; }
-.company { margin-top: auto; position: relative; border-top: 1px solid rgba(223, 232, 247, .12); padding-top: 14px; }
-.company > button, .company > div.cbox { width: 100%; display: flex; align-items: center; gap: 11px; background: none; border: 0; color: inherit; text-align: left; padding: 8px; border-radius: 10px; }
+.company { position: relative; }
+.company > button, .company > a.cbox { width: 100%; display: flex; align-items: center; gap: 8px; background: none; border: 0; color: #fff; text-align: left; padding: 4px; border-radius: 10px; text-decoration: none; }
+.powered { margin-top: auto; border-top: 1px solid rgba(223, 232, 247, .12); padding: 16px 6px 2px; display: flex; justify-content: center; }
+.powered img { display: block; width: 100%; max-width: 200px; height: auto; filter: drop-shadow(0 0 .6px rgba(255, 255, 255, .9)) drop-shadow(0 0 8px rgba(79, 179, 255, .28)); }  /* keeps the navy lettering readable on the navy sidebar */
 .company > button:hover { background: rgba(255, 255, 255, .06); }
 .company b { display: block; font-size: 14.5px; color: #fff; line-height: 1.2; }
 .company small { display: block; font-size: 12.5px; color: rgba(223, 232, 247, .66); }
-.cmark { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; background: #fff; border-radius: 10px; padding: 8px 12px; min-height: 54px; }
-.cmark img { display: block; max-width: 100%; max-height: 46px; object-fit: contain; }
-.cmark b { display: none; } .cmark.nologo { background: none; padding: 0; min-height: 0; justify-content: flex-start; }
-.cmark.nologo b { display: block; font-size: 15px; overflow-wrap: anywhere; }
+.cmark { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; }
+.cmark img { display: block; max-width: 100%; max-height: 64px; object-fit: contain; border-radius: 6px; }
+.cmark b { display: none; } .cmark.nologo { justify-content: flex-start; }
+.cmark.nologo b { display: block; font-family: var(--display); font-size: 19px; line-height: 1.15; overflow-wrap: anywhere; padding: 4px; }
 .company svg.chev { width: 16px; height: 16px; margin-left: auto; flex: none; opacity: .7; }
-.side .demo-pill { margin: 0 8px 6px; display: inline-block; }
+.side .demo-pill { margin: 8px 4px 0; display: inline-block; }
 .pop { position: absolute; z-index: 40; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); padding: 6px; min-width: 220px; }
 .pop[hidden] { display: none; }
 .pop button, .pop a { display: flex; width: 100%; align-items: center; gap: 10px; background: none; border: 0; border-radius: 8px; padding: 9px 10px; text-align: left; font-weight: 700; font-size: 14px; color: inherit; text-decoration: none; }
@@ -458,7 +456,7 @@ a.kpi:hover { border-color: var(--brand); transform: translateY(-1px); }
 .themes small { display: block; padding: 6px 10px 2px; color: var(--muted); font-size: 12.5px; font-weight: 700; }
 .pop .themes button { font-weight: 400; } .pop .themes button[aria-pressed="true"] { font-weight: 700; }
 .pop svg.tick { margin-left: auto; color: var(--brand); }
-.company .pop { bottom: calc(100% + 6px); left: 0; right: 0; }
+.company .pop { top: calc(100% + 6px); left: 0; right: 0; }
 
 .topbar { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 12px; padding: 14px max(28px, env(safe-area-inset-right, 0px)) 14px 28px;
   background: color-mix(in srgb, var(--bg) 86%, transparent); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
@@ -1221,12 +1219,11 @@ function render() {
   $("#app").className = "app" + (S.navOpen ? " navopen" : "");
   $("#app").innerHTML = `
     <aside class="side" aria-label="Main menu">
-      <a class="brandmark" href="#overview" aria-label="Sonoran Point, dashboard home"><img src="brand/mark-180.png" alt=""><span>Sonoran<i>Point</i></span></a>
-      <nav class="snav" aria-label="Sections">${nav.map((n) => n === "-" ? "<hr>" : `<a href="#${n[0]}" class="${S.route === n[0] ? "on" : ""}" ${S.route === n[0] ? 'aria-current="page"' : ""}>${ic(n[2])}${n[1]}${n[3] ? `<span class="n" aria-label="${n[3]} need attention">${n[3]}</span>` : ""}</a>`).join("")}</nav>
-      <div class="company">${LIVE ? "" : `<span class="demo-pill">Demo data</span>`}
-        ${many ? `<button type="button" data-act="orgMenu" aria-haspopup="true" aria-expanded="${S.pop === "org"}">${companyMark()}${ic("chevUpDown", "chev")}</button>
+      <div class="company">${many ? `<button type="button" data-act="orgMenu" aria-haspopup="true" aria-expanded="${S.pop === "org"}" aria-label="${esc(DB.org.name)}: switch company">${companyMark()}${ic("chevUpDown", "chev")}</button>
           <div class="pop" role="menu" ${S.pop === "org" ? "" : "hidden"}><label>Company<select id="switchOrg" aria-label="Switch company">${L.companies.map((c) => `<option value="${c.org_id}" ${c.org_id === L.org ? "selected" : ""}>${esc(c.name)}</option>`).join("")}</select></label></div>`
-          : `<div class="cbox">${companyMark()}</div>`}</div>
+          : `<a class="cbox" href="#overview" aria-label="${esc(DB.org.name)}, dashboard home">${companyMark()}</a>`}${LIVE ? "" : `<span class="demo-pill">Demo data</span>`}</div>
+      <nav class="snav" aria-label="Sections">${nav.map((n) => n === "-" ? "<hr>" : `<a href="#${n[0]}" class="${S.route === n[0] ? "on" : ""}" ${S.route === n[0] ? 'aria-current="page"' : ""}>${ic(n[2])}${n[1]}${n[3] ? `<span class="n" aria-label="${n[3]} need attention">${n[3]}</span>` : ""}</a>`).join("")}</nav>
+      <div class="powered"><img src="brand/logo.png" srcset="brand/logo.png 1x, brand/logo@2x.png 2x" alt="Sonoran Point Technologies"></div>
     </aside>
     ${S.navOpen ? `<div class="navscrim" data-act="navClose"></div>` : ""}
     <main class="main">
