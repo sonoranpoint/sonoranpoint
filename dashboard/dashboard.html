@@ -420,28 +420,42 @@ a.kpi:hover { border-color: var(--brand); transform: translateY(-1px); }
 :root[data-theme="dark"] { --bg: #07111f; --line: #1d3254; --card-shadow: none; }
 .app { grid-template-columns: var(--side-w) minmax(0, 1fr); }
 
-.side { position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; gap: 22px; padding: 22px 14px 16px; color: #dfe8f7;
-  background: radial-gradient(120% 50% at 0% 0%, rgba(47, 155, 255, .10), transparent 60%), linear-gradient(180deg, #0c2550 0%, #081c3c 55%, #061630 100%); z-index: 30; }
+.side { position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; gap: 22px; padding: 22px 14px 16px; z-index: 30;
+  /* Dark blue when the company has a light logo for it; light (.side.light) when it doesn't. */
+  --s-bg: radial-gradient(120% 50% at 0% 0%, rgba(47, 155, 255, .10), transparent 60%), linear-gradient(180deg, #0c2550 0%, #081c3c 55%, #061630 100%);
+  --s-ink: #dfe8f7; --s-link: rgba(223, 232, 247, .86); --s-strong: #fff; --s-hover: rgba(255, 255, 255, .06); --s-on: rgba(79, 179, 255, .16);
+  --s-on-ring: rgba(79, 179, 255, .12); --s-on-icon: #4fb3ff; --s-line: rgba(223, 232, 247, .12); --s-edge: transparent;
+  background: var(--s-bg); color: var(--s-ink); box-shadow: inset -1px 0 0 var(--s-edge); }
+.side.light { --s-bg: #ffffff; --s-ink: #1b2433; --s-link: #3a4659; --s-strong: #0c2550; --s-hover: #f1f4f8; --s-on: #e8f1ff; --s-on-ring: transparent;
+  --s-on-icon: #1d5fd1; --s-line: #e3e8ef; --s-edge: #dde3ec; }
+:root[data-theme="dark"] .side.light { --s-bg: #0b1a30; --s-ink: #dfe8f7; --s-link: rgba(223, 232, 247, .86); --s-strong: #fff; --s-hover: rgba(255, 255, 255, .06);
+  --s-on: rgba(79, 179, 255, .16); --s-on-ring: rgba(79, 179, 255, .12); --s-on-icon: #4fb3ff; --s-line: rgba(223, 232, 247, .12); --s-edge: transparent; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .side.light { --s-bg: #0b1a30; --s-ink: #dfe8f7; --s-link: rgba(223, 232, 247, .86); --s-strong: #fff;
+  --s-hover: rgba(255, 255, 255, .06); --s-on: rgba(79, 179, 255, .16); --s-on-ring: rgba(79, 179, 255, .12); --s-on-icon: #4fb3ff; --s-line: rgba(223, 232, 247, .12); --s-edge: transparent; } }
 .snav { display: flex; flex-direction: column; gap: 3px; overflow-y: auto; }
-.snav a { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 10px; color: rgba(223, 232, 247, .86); text-decoration: none; font-weight: 700; font-size: 15px; }
+.snav a { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 10px; color: var(--s-link); text-decoration: none; font-weight: 700; font-size: 15px; }
 .snav a svg { width: 19px; height: 19px; flex: none; opacity: .9; }
-.snav a:hover { background: rgba(255, 255, 255, .06); color: #fff; }
-.snav a.on { background: rgba(79, 179, 255, .16); color: #fff; box-shadow: inset 0 0 0 1px rgba(79, 179, 255, .12); }
-.snav a.on svg { color: #4fb3ff; opacity: 1; }
+.snav a:hover { background: var(--s-hover); color: var(--s-strong); }
+.snav a.on { background: var(--s-on); color: var(--s-strong); box-shadow: inset 0 0 0 1px var(--s-on-ring); }
+.snav a.on svg { color: var(--s-on-icon); opacity: 1; }
 .snav .n { margin-left: auto; background: var(--sp-sun); color: #2a1300; border-radius: 99px; font-size: 12px; padding: 1px 8px; font-weight: 700; }
-.snav hr { border: 0; border-top: 1px solid rgba(223, 232, 247, .1); margin: 8px 6px; }
+.snav hr { border: 0; border-top: 1px solid var(--s-line); margin: 8px 6px; }
 .company { position: relative; }
-.company > button, .company > a.cbox { width: 100%; display: flex; align-items: center; gap: 8px; background: none; border: 0; color: #fff; text-align: left; padding: 4px; border-radius: 10px; text-decoration: none; }
-.powered { margin-top: auto; border-top: 1px solid rgba(223, 232, 247, .12); padding: 16px 6px 2px; display: flex; justify-content: center; }
-.powered img { display: block; width: 100%; max-width: 200px; height: auto; filter: drop-shadow(0 0 .6px rgba(255, 255, 255, .9)) drop-shadow(0 0 8px rgba(79, 179, 255, .28)); }  /* keeps the navy lettering readable on the navy sidebar */
-.company > button:hover { background: rgba(255, 255, 255, .06); }
-.company b { display: block; font-size: 14.5px; color: #fff; line-height: 1.2; }
-.company small { display: block; font-size: 12.5px; color: rgba(223, 232, 247, .66); }
+.company > button, .company > a.cbox { width: 100%; display: flex; align-items: center; gap: 8px; background: none; border: 0; color: var(--s-strong); text-align: left; padding: 4px; border-radius: 10px; text-decoration: none; }
+.company > button:hover { background: var(--s-hover); }
 .cmark { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; }
 .cmark img { display: block; max-width: 100%; max-height: 64px; object-fit: contain; border-radius: 6px; }
 .cmark b { display: none; } .cmark.nologo { justify-content: flex-start; }
-.cmark.nologo b { display: block; font-family: var(--display); font-size: 19px; line-height: 1.15; overflow-wrap: anywhere; padding: 4px; }
+.cmark.nologo b { display: block; font-family: var(--display); font-size: 19px; line-height: 1.15; overflow-wrap: anywhere; padding: 4px; color: var(--s-strong); }
+/* In dark mode a company without a light logo keeps its normal one, on a small white tile. */
+:root[data-theme="dark"] .side.light .cmark img { background: #fff; padding: 6px 10px; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .side.light .cmark img { background: #fff; padding: 6px 10px; } }
 .company svg.chev { width: 16px; height: 16px; margin-left: auto; flex: none; opacity: .7; }
+.sp-foot { margin-top: auto; border-top: 1px solid var(--s-line); padding: 16px 6px 2px; display: flex; justify-content: center; }
+.sp-foot img { display: block; width: 100%; max-width: 200px; height: auto; }
+.sp-foot .on-light, .side.light .sp-foot .on-dark { display: none; } .side.light .sp-foot .on-light { display: block; }
+:root[data-theme="dark"] .side.light .sp-foot .on-light { display: none; } :root[data-theme="dark"] .side.light .sp-foot .on-dark { display: block; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .side.light .sp-foot .on-light { display: none; } :root:not([data-theme="light"]) .side.light .sp-foot .on-dark { display: block; } }
 .side .demo-pill { margin: 8px 4px 0; display: inline-block; }
 .pop { position: absolute; z-index: 40; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); padding: 6px; min-width: 220px; }
 .pop[hidden] { display: none; }
@@ -612,7 +626,7 @@ function buildDemo() {
   const rnd = mulberry32(1015);
   const now = Date.now();
   const tz = "America/Phoenix";
-  const org = { name: "Demo Air Services", primary: "#1F4E79", accent: "#F2A900", timezone: tz, extended_hours: 9,
+  const org = { name: "Demo Air Services", logo_url: "", logo_dark_url: null, primary: "#1F4E79", accent: "#F2A900", timezone: tz, extended_hours: 9,
     settings: { allow_return_by_other: true, allow_checkout_while_held: false },
     terminology: { equipment: "Equipment", employee: "Employee" }, modules: ["shifts"] };
   const categories = [
@@ -1218,12 +1232,12 @@ function render() {
   const many = LIVE && L.companies.length > 1;
   $("#app").className = "app" + (S.navOpen ? " navopen" : "");
   $("#app").innerHTML = `
-    <aside class="side" aria-label="Main menu">
+    <aside class="side ${DB.org.logo_dark_url ? "" : "light"}" aria-label="Main menu">
       <div class="company">${many ? `<button type="button" data-act="orgMenu" aria-haspopup="true" aria-expanded="${S.pop === "org"}" aria-label="${esc(DB.org.name)}: switch company">${companyMark()}${ic("chevUpDown", "chev")}</button>
           <div class="pop" role="menu" ${S.pop === "org" ? "" : "hidden"}><label>Company<select id="switchOrg" aria-label="Switch company">${L.companies.map((c) => `<option value="${c.org_id}" ${c.org_id === L.org ? "selected" : ""}>${esc(c.name)}</option>`).join("")}</select></label></div>`
           : `<a class="cbox" href="#overview" aria-label="${esc(DB.org.name)}, dashboard home">${companyMark()}</a>`}${LIVE ? "" : `<span class="demo-pill">Demo data</span>`}</div>
       <nav class="snav" aria-label="Sections">${nav.map((n) => n === "-" ? "<hr>" : `<a href="#${n[0]}" class="${S.route === n[0] ? "on" : ""}" ${S.route === n[0] ? 'aria-current="page"' : ""}>${ic(n[2])}${n[1]}${n[3] ? `<span class="n" aria-label="${n[3]} need attention">${n[3]}</span>` : ""}</a>`).join("")}</nav>
-      <div class="powered"><img src="brand/logo.png" srcset="brand/logo.png 1x, brand/logo@2x.png 2x" alt="Sonoran Point Technologies"></div>
+      <div class="sp-foot"><img class="on-dark" src="brand/logo-light.png" srcset="brand/logo-light.png 1x, brand/logo-light@2x.png 2x" alt="Sonoran Point Technologies"><img class="on-light" src="brand/logo.png" srcset="brand/logo.png 1x, brand/logo@2x.png 2x" alt="Sonoran Point Technologies"></div>
     </aside>
     ${S.navOpen ? `<div class="navscrim" data-act="navClose"></div>` : ""}
     <main class="main">
@@ -1273,10 +1287,11 @@ async function uploadLogo(file) {
   if (error) throw new Error(/row-level|not allowed|unauthor/i.test(error.message) ? "Only admins can change the logo." : error.message);
   return sb.storage.from("logos").getPublicUrl(path).data.publicUrl;
 }
-// The company's own mark at the bottom of the menu: their logo, or initials on their accent color.
-// The company's logo on a white plate; its name in text when there's no logo (or it doesn't load).
+// The company at the top of the menu: their light logo on the dark sidebar, their normal logo on the light one,
+// or their name when there's no logo (or it doesn't load).
 function companyMark() {
-  return `<span class="cmark ${DB.org.logo_url ? "" : "nologo"}">${DB.org.logo_url ? `<img src="${esc(DB.org.logo_url)}" alt="${esc(DB.org.name)}" onerror="this.parentNode.classList.add('nologo'); this.remove()">` : ""}<b>${esc(DB.org.name)}</b></span>`;
+  const src = DB.org.logo_dark_url || DB.org.logo_url;
+  return `<span class="cmark ${src ? "" : "nologo"}">${src ? `<img src="${esc(src)}" alt="${esc(DB.org.name)}" onerror="this.parentNode.classList.add('nologo'); this.remove()">` : ""}<b>${esc(DB.org.name)}</b></span>`;
 }
 // Search across equipment and people from the top bar.
 function searchResults(q) {
@@ -1617,6 +1632,10 @@ function vSettings() {
       <span class="logo-row"><span class="logo-prev" style="background:${esc(o.primary)}">${o.logo_url ? `<img src="${esc(o.logo_url)}" alt="Your logo">` : `<b class="nm" style="color:${o.primary && parseInt(o.primary.slice(1), 16) > 0x999999 ? "#14181d" : "#fff"}">${esc(o.name)}</b><small>No logo yet: stations show your name</small>`}</span>
         <span class="actions"><label class="btn sm ${S.logoBusy ? "disabled" : ""}">${S.logoBusy ? "Uploading…" : o.logo_url ? "Replace logo" : "Upload logo"}<input type="file" id="logoFile" accept="image/png,image/jpeg,image/svg+xml,image/webp" hidden ${S.logoBusy ? "disabled" : ""}></label>
         ${o.logo_url ? `<button type="button" class="btn sm danger" data-act="rmLogo">Remove</button>` : ""}</span></span>
+      ${o.logo_dark_url === undefined ? "" : `<label>Light logo<small>Optional: a white or light version of your logo. With one, this menu is dark blue with it on top; without one, the menu is white with your normal logo.</small></label>
+      <span class="logo-row"><span class="logo-prev" style="background:#0c2550">${o.logo_dark_url ? `<img src="${esc(o.logo_dark_url)}" alt="Your light logo">` : `<b class="nm" style="color:#fff">${esc(o.name)}</b><small>No light logo: the menu stays white</small>`}</span>
+        <span class="actions"><label class="btn sm ${S.logoBusy ? "disabled" : ""}">${S.logoBusy ? "Uploading…" : o.logo_dark_url ? "Replace light logo" : "Upload light logo"}<input type="file" id="logoDarkFile" accept="image/png,image/jpeg,image/svg+xml,image/webp" hidden ${S.logoBusy ? "disabled" : ""}></label>
+        ${o.logo_dark_url ? `<button type="button" class="btn sm danger" data-act="rmLogoDark">Remove</button>` : ""}</span></span>`}
       <label for="sPrimary">Main color<small>Station top bar and buttons</small></label><span class="colorpick"><input type="color" id="sPrimary" name="primary" value="${esc(o.primary)}"><span class="mono">${esc(o.primary.toUpperCase())}</span></span>
       <label for="sAccent">Accent color<small>Highlights on the station, like the manager badge</small></label><span class="colorpick"><input type="color" id="sAccent" name="accent" value="${esc(o.accent)}"><span class="mono">${esc(o.accent.toUpperCase())}</span></span>
       <label for="sExt">Out-too-long alert<small>Hours, for any item. Categories and items can override.</small></label>
@@ -1974,6 +1993,7 @@ document.addEventListener("click", async (e) => {
   const a = t.dataset.act, D = S.drawer;
   if (a === "acctMenu" || a === "orgMenu") { const k = a === "acctMenu" ? "acct" : "org"; S.pop = S.pop === k ? null : k; const pop = t.nextElementSibling; pop.hidden = S.pop !== k;
     t.setAttribute("aria-expanded", String(S.pop === k)); if (S.pop) pop.querySelector("button, a, select")?.focus(); return; }
+  if (a === "rmLogoDark") { api.saveSettings({ logo_dark_url: null }); toast("Light logo removed. The menu is white again."); return render(); }
   if (a === "rmLogo") { api.saveSettings({ logo_url: null }); toast("Logo removed. Stations show Sonoran Point's."); return render(); }
   if (a === "clearDay") { S.f.actDay = ""; return render(); }
   if (a === "endLoan") { api.endLoan(D.id); toast("The loan is over"); return render(); }
@@ -2051,6 +2071,9 @@ document.addEventListener("change", (e) => {
   if (t.id === "actDay") { S.f.actDay = t.value; S.f.actShow = 150;
     if (LIVE && t.value && live.loadDay) { S.dayLoading = true; render(); live.loadDay(t.value).catch((err) => toast(niceErr(err))).finally(() => { S.dayLoading = false; render(); }); return; }
     return render(); }
+  if (t.id === "logoDarkFile" && t.files?.[0]) { const file = t.files[0]; S.logoBusy = true; render();
+    uploadLogo(file).then((url) => { api.saveSettings({ logo_dark_url: url }); toast("Light logo added. The menu is dark blue now."); })
+      .catch((err) => toast(err.message)).finally(() => { S.logoBusy = false; render(); }); return; }
   if (t.id === "logoFile" && t.files?.[0]) { const file = t.files[0]; S.logoBusy = true; render();
     uploadLogo(file).then((url) => { api.saveSettings({ logo_url: url }); toast("Logo updated. Stations show it within a minute."); })
       .catch((err) => toast(err.message)).finally(() => { S.logoBusy = false; render(); }); return; }
@@ -2254,7 +2277,7 @@ const live = {
     const pinSet = new Set(pins || []);
     Object.assign(DB, {
       org: { id: o.id, name: o.name, primary: o.primary_color, accent: o.accent_color, timezone: o.timezone, extended_hours: o.extended_checkout_hours == null ? null : Number(o.extended_checkout_hours),
-        settings: o.settings || {}, terminology: o.terminology || {}, modules: o.enabled_modules || [], logo_url: o.logo_url, status: o.status, trial_ends: ms(o.trial_ends_at) },
+        settings: o.settings || {}, terminology: o.terminology || {}, modules: o.enabled_modules || [], logo_url: o.logo_url, logo_dark_url: o.logo_dark_url, status: o.status, trial_ends: ms(o.trial_ends_at) },
       categories: cats.map((c) => ({ id: c.id, name: c.name, rule: c.time_limit_type, hours: c.default_checkout_hours == null ? null : Number(c.default_checkout_hours),
         extended: c.extended_alert_hours == null ? null : Number(c.extended_alert_hours), sort: c.sort_order })),
       equipment: eq.map((x) => ({ id: x.id, cat: x.category_id, name: x.name, tag: x.nfc_uid, asset: x.asset_tag, notes: x.notes, status: x.status, mode: x.time_limit_mode,
@@ -2359,7 +2382,7 @@ const REMOTE = {
   endLoan: ([eq]) => okRpc("end_equipment_loan", { p_equipment: eq }),
   setActive: ([id, active]) => upd("employees", id, { active }),
   saveSettings: () => { const o = DB.org;
-    return upd("organizations", o.id, { name: o.name, logo_url: o.logo_url || null, primary_color: o.primary.toUpperCase(), accent_color: o.accent.toUpperCase(), extended_checkout_hours: o.extended_hours, settings: o.settings, terminology: o.terminology }); },
+    return upd("organizations", o.id, { name: o.name, logo_url: o.logo_url || null, ...(o.logo_dark_url !== undefined ? { logo_dark_url: o.logo_dark_url || null } : {}), primary_color: o.primary.toUpperCase(), accent_color: o.accent.toUpperCase(), extended_checkout_hours: o.extended_hours, settings: o.settings, terminology: o.terminology }); },
   saveCategory: ([id]) => { const c = catOf(id); if (!c) return;
     return upd("equipment_categories", id, { name: c.name, time_limit_type: c.rule, default_checkout_hours: c.hours, extended_alert_hours: c.extended }); },
   addCategory: async ([d]) => { const c = DB.categories.find((x) => x.name.toLowerCase() === (d.name || "").trim().toLowerCase()); if (!c) return;

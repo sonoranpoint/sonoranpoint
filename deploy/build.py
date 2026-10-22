@@ -44,7 +44,7 @@ def build():
         (out / "_headers").write_text(HEADERS)
         (out / "robots.txt").write_text("User-agent: *\nDisallow: /\n")
         (out / "brand").mkdir()
-        for f in ["logo.png", "logo@2x.png", "mark-64.png", "mark-180.png", "mark-512.png", "favicon.ico", "apple-touch-icon.png", "app-icon-512.png"]:
+        for f in ["logo.png", "logo@2x.png", "logo-light.png", "logo-light@2x.png", "mark-64.png", "mark-180.png", "mark-512.png", "favicon.ico", "apple-touch-icon.png", "app-icon-512.png"]:
             shutil.copy(ROOT / "brand" / f, out / "brand" / f)
     st = DIST / "station"; st.mkdir(parents=True)
     (st / "index.html").write_text(page(ROOT / "station" / "station.html"))

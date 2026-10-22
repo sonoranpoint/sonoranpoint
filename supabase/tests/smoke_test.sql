@@ -1181,6 +1181,16 @@ select pg_temp.ok(pg_temp.raises($$insert into station_events (org_id, station_i
 update stations set name = 'Gate Room C' where id = :'gate';
 reset role;
 select pg_temp.ok((select by_name from station_events where station_id = :'gate' order by id desc limit 1) = 'owner-a@example.com', 'a dashboard rename is logged with who did it');
+\echo '--- Light logo for dark backgrounds'
+set role authenticated;
+select set_config('request.jwt.claim.sub', 'aaaaaaaa-0000-0000-0000-000000000001', false) \g /dev/null
+update organizations set logo_dark_url = 'https://example.test/light.png' where id = '00000000-0000-0000-0000-00000000d3e0';
+select set_config('request.jwt.claim.sub', '99999999-0000-0000-0000-000000000009', false) \g /dev/null
+select pg_temp.ok((platform_customer('00000000-0000-0000-0000-00000000d3e0')->'organization'->>'logo_dark_url') = 'https://example.test/light.png', 'an owner sets their light logo; the console sees it');
+select platform_update_customer('00000000-0000-0000-0000-00000000d3e0', '{"logo_dark_url": ""}') \g /dev/null
+select pg_temp.ok((platform_customer('00000000-0000-0000-0000-00000000d3e0')->'organization'->>'logo_dark_url') is null, 'and you can clear it from the console');
+reset role;
+
 \echo '--- Deleting a company removes all its data'
 delete from organizations where slug = 'demo';
 select pg_temp.ok((select count(*) from equipment) = 0 and (select count(*) from transactions) = 0, 'company delete cascades cleanly');

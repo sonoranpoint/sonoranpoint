@@ -14,6 +14,7 @@ const click = async (sel) => { const el = doc.querySelector(sel); if (!el) throw
 const page = () => doc.querySelector(".main").textContent.replace(/\s+/g, " ");
 const type = async (sel, v) => { const el = doc.querySelector(sel); el.value = v; el.dispatchEvent(new dom.window.Event("input", { bubbles: true })); await sleep(10); };
 const submit = async (sel) => { doc.querySelector(sel).dispatchEvent(new dom.window.Event("submit", { bubbles: true, cancelable: true })); await sleep(20); };
+const api_set = async (id) => { E(`api.updateCustomer('${id}', { logo_dark_url: 'data:image/png;base64,AAA' }); render()`); await sleep(30); };
 (async () => {
   await sleep(100);
   check(/Customers/.test(page()) && /Demo Air Services/.test(page()) && /Copper State Cargo/.test(page()), "customer list");
@@ -210,6 +211,13 @@ const submit = async (sel) => { doc.querySelector(sel).dispatchEvent(new dom.win
   check(!!doc.querySelector(`[data-form="stEdit:${dst}"] select[name=contract_id]`) && /past taps stay with the one it had/.test(doc.querySelector("tr.editrow").textContent), "customers with contracts get a contract picker, with what a move means");
   doc.querySelector(`[data-form="stEdit:${dst}"] [name=contract_id]`).value = "uaw"; await submit(`[data-form="stEdit:${dst}"]`);
   check(E(`custOf('${da}').stations.find(x => x.id === '${dst}').contract_id`) === "uaw" && /to United AW/.test(E(`stEventText(api.stationHistory('${da}', '${dst}')[0])`)), "move a station to another contract");
+  // Light logo from the console
+  await go("customer/" + da);
+  check(/Light logo/.test(page()) && !!doc.querySelector("#logoDarkFile"), "customer page offers a light logo");
+  await api_set(da);
+  check(!!doc.querySelector('[data-act="rmLogoDark"]'), "it shows once set");
+  await click('[data-act="rmLogoDark"]'); await sleep(20);
+  check(E(`custOf('${da}').logo_dark_url`) === "" && !doc.querySelector('[data-act="rmLogoDark"]'), "and can be removed");
   check(errors.length === 0, "no script errors " + errors.join(";"));
   process.exit();
 })();

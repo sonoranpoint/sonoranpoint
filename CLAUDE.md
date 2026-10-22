@@ -8,7 +8,7 @@ See README.md for the full product description.
 - `platform/console.html` — operator console, console.sonoranpoint.com (customers, stations, hardware, team, activity)
 - `station/station.html` — the kiosk screen on each Pi; `station/pi/` — PN532 reader service, Wi-Fi helper
 - `supabase/migrations/` — database, applied in filename order; `supabase/tests/smoke_test.sql` — DB tests
-- `brand/` — logos (`source-logo.png` is the official logo; `logo.png`/`logo@2x.png` are made from it — no SVG), icons, `sp-theme.css` (injected between `SP-THEME:start/end` in dashboard + console)
+- `brand/` — logos (`source-logo.png` is the official logo; `logo.png`/`logo@2x.png` are made from it; `logo-light*.png` are the same with the navy SONORAN/TECHNOLOGIES lettering made white, for dark backgrounds — no SVG), icons, `sp-theme.css` (injected between `SP-THEME:start/end` in dashboard + console)
 - `deploy/build.py` — builds `deploy/dist/{app,console,station}`; `deploy/email-templates/` — Supabase auth emails
 - `tests/run.sh` — runs everything; `tests/ui/` — jsdom screen tests
 
@@ -16,8 +16,8 @@ See README.md for the full product description.
 - Push to `main` → GitHub Actions runs `tests/run.sh db` + `ui`, then deploys app + console to Cloudflare Pages
   (projects `sonoranpoint-app`, `sonoranpoint-console`).
 - Database changes are NOT automatic. Add a new migration file (never edit one already run on the live
-  project), then tell Dez to run it in the Supabase SQL editor. Migrations 1–21 have been run (checked 2026-10-21;
-  ask if unsure). Alert emails are live (Resend key in Vault, first send
+  project), then tell Dez to run it in the Supabase SQL editor. Migrations 1–21 have been run (checked 2026-10-21); 22 handed over
+  (ask if unsure). Alert emails are live (Resend key in Vault, first send
   confirmed 2026-10-20).
 - Station changes reach the Pis by copying `deploy/dist/station` onto each Pi (not automatic yet).
 
@@ -41,6 +41,10 @@ See README.md for the full product description.
   removed, renamed, moved location/contract) plus `private.station_event()` for new codes; `by_name` is "Sonoran Point" for operators.
   Console edits go through `platform_update_station`. Taps store `station_contract_id` at insert, so moving a station
   doesn't move its past taps (RLS: `private.can_see_tap`). `station_overview` must be recreated when `stations` gets columns.
+
+## Dashboard sidebar
+- Dark blue with the company's light logo (`organizations.logo_dark_url`, migration 22) when they have one; otherwise `.side.light`
+  (white, their normal logo or name). Dark appearance keeps it dark either way. Sonoran Point's logo sits at the bottom (`.sp-foot`).
 
 ## Email
 - Sign-in and invite emails: Supabase Auth sends through Resend SMTP (smtp.resend.com, from no-reply@sonoranpoint.com,

@@ -126,6 +126,18 @@ const change = async (el, v) => { if (typeof v === "boolean") el.checked = v; el
   const t0 = E(`DB.txns.find(t => t.station === '${st1}' && !['ubw'].includes(eqOf(t.eq)?.contract) && !['ubw'].includes(empOf(t.emp)?.contract))?.id`);
   if (t0) { E(`DB.txns.find(t => t.id === '${t0}').stc = 'ubw'`); check(E(`txnInView(DB.txns.find(t => t.id === '${t0}'))`) === true, "a tap counts for the contract its station had then"); }
   E("S.view = null");
+  // Sidebar: white with the normal logo (or name), dark blue once there's a light logo
+  E("DB.org.logo_url = ''; DB.org.logo_dark_url = null; render()"); await sleep(20);
+  check(doc.querySelector("aside.side").classList.contains("light") && /Demo Air Services/.test(doc.querySelector(".company").textContent), "no light logo: white menu with the company name");
+  E("DB.org.logo_url = 'data:image/png;base64,AAA'; render()"); await sleep(20);
+  check(doc.querySelector(".company img")?.getAttribute("src") === "data:image/png;base64,AAA" && doc.querySelector("aside.side").classList.contains("light"), "their normal logo on the white menu");
+  await go("settings");
+  check(/Light logo/.test(page()) && !!doc.querySelector("#logoDarkFile"), "Settings offers a light logo");
+  E("api.saveSettings({ logo_dark_url: 'data:image/png;base64,BBB' }); render()"); await sleep(20);
+  check(!doc.querySelector("aside.side").classList.contains("light") && doc.querySelector(".company img").getAttribute("src") === "data:image/png;base64,BBB", "with a light logo the menu is dark blue, with it on top");
+  await click('[data-act="rmLogoDark"]');
+  check(doc.querySelector("aside.side").classList.contains("light") && E("DB.org.logo_dark_url") === null, "removing it turns the menu white again");
+  check(!!doc.querySelector('.sp-foot img.on-dark[src="brand/logo-light.png"]') && !!doc.querySelector('.sp-foot img.on-light[src="brand/logo.png"]'), "our logo has a light version for the dark menu");
   check(errors.length === 0, "no script errors " + errors.join(";"));
   process.exit();
 })();

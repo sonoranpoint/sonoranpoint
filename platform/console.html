@@ -593,7 +593,7 @@ function buildDemo() {
   const waiting = (name, location, daysAgo) => st(name, location, { activated_at: null, last_seen: null, version: null, admin_claimed_at: null,
     code: newCode(), code_expires: now - daysAgo * DAY + 7 * DAY, created: now - daysAgo * DAY });
   const C = (o) => ({ id: uid("org"), logo_url: "", timezone: "America/Phoenix", terms: { ...DEFAULT_TERMS }, modules: [], station_limit: null,
-    trial_ends: null, notes: "", invites: [], log: [], contracts: [], locations: [], events: [], ...o });
+    trial_ends: null, notes: "", invites: [], log: [], contracts: [], locations: [], events: [], logo_dark_url: "", ...o });
   const demoContracts = [{ id: "bw", parent_id: null, name: "BW" }, { id: "aw", parent_id: null, name: "AW", share: true, move: true },
     { id: "dbw", parent_id: "bw", name: "Delta BW" }, { id: "ubw", parent_id: "bw", name: "United BW" }, { id: "daw", parent_id: "aw", name: "Delta AW" }, { id: "uaw", parent_id: "aw", name: "United AW" }];
   const customers = [
@@ -700,7 +700,7 @@ function changeText(d) {
     station_limit: (v) => v == null ? "No station limit" : `Station limit: ${v}`,
     trial_ends_at: (v) => v ? `Trial ends ${day(v)}` : "No trial end date", trial_ends: (v) => v ? `Trial ends ${day(v)}` : "No trial end date",
     name: (v) => `Name: ${v}`, primary_color: (v) => `Main color ${v}`, primary: (v) => `Main color ${v}`, accent_color: (v) => `Accent color ${v}`, accent: (v) => `Accent color ${v}`,
-    logo_url: (v) => v ? "New logo" : "Logo removed", terminology: () => "Their words for things", terms: () => "Their words for things",
+    logo_url: (v) => v ? "New logo" : "Logo removed", logo_dark_url: (v) => v ? "New light logo" : "Light logo removed", terminology: () => "Their words for things", terms: () => "Their words for things",
     enabled_modules: (v) => `Modules: ${(v || []).map((m) => MODULES.find((x) => x.id === m)?.name || m).join(", ") || "none"}`,
     modules: (v) => `Modules: ${(v || []).map((m) => MODULES.find((x) => x.id === m)?.name || m).join(", ") || "none"}`,
     contact_name: (v) => `Contact: ${v}`, contact_email: (v) => `Contact email: ${v}`, contact_phone: (v) => `Contact phone: ${v}`,
@@ -986,7 +986,7 @@ const live = {
     const r = await rpc("platform_customer", { p_org: id }); const c = custOf(id); if (!r.ok || !c) return;
     const o = r.organization;
     Object.assign(c, { detail: true, terms: { ...DEFAULT_TERMS, ...(o.terminology || {}) }, timezone: o.timezone, contact_phone: o.contact_phone || "", notes: o.notes || "",
-      logo_url: o.logo_url || "", stations: r.stations.map(mapStation), contracts: r.contracts || [], locations: r.locations || [],
+      logo_url: o.logo_url || "", ...("logo_dark_url" in o ? { logo_dark_url: o.logo_dark_url || "" } : {}), stations: r.stations.map(mapStation), contracts: r.contracts || [], locations: r.locations || [],
       events: (r.station_events || []).map((e) => ({ station: e.station_id, at: ms(e.at), kind: e.kind, details: e.details || {}, by: e.by })),
       members: r.members.map((m) => ({ email: m.email, name: m.name || "", role: m.role, last_sign_in: ms(m.last_sign_in_at) })),
       invites: r.invites.map((i) => ({ id: i.id, email: i.email, role: i.role, expires: ms(i.expires_at) })) });
@@ -1027,7 +1027,7 @@ const liveApi = {
     if ("name" in patch && !patch.name.trim()) return { ok: false, error: "Enter the company name." };
     if (("primary" in patch && !hex(patch.primary)) || ("accent" in patch && !hex(patch.accent))) return { ok: false, error: "Colors must look like #1F4E79." };
     if ("contact_email" in patch && patch.contact_email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(patch.contact_email)) return { ok: false, error: "That contact email doesn't look right." };
-    const map = { name: "name", primary: "primary_color", accent: "accent_color", logo_url: "logo_url", terms: "terminology", modules: "modules", status: "status", plan: "plan",
+    const map = { name: "name", primary: "primary_color", accent: "accent_color", logo_url: "logo_url", logo_dark_url: "logo_dark_url", terms: "terminology", modules: "modules", status: "status", plan: "plan",
       station_limit: "station_limit", contact_name: "contact_name", contact_email: "contact_email", contact_phone: "contact_phone", notes: "notes", timezone: "timezone" };
     const p = {};
     for (const [k, v] of Object.entries(patch)) if (map[k]) p[map[k]] = k === "primary" || k === "accent" ? v.toUpperCase() : v;
@@ -1558,6 +1558,10 @@ function vCustomer() {
               <span class="actions"><label class="btn sm ${S.logoBusy ? "disabled" : ""}">${S.logoBusy ? "Uploading…" : c.logo_url ? "Replace logo" : "Upload logo"}<input type="file" id="logoFile" accept="image/png,image/jpeg,image/svg+xml,image/webp" hidden ${S.logoBusy ? "disabled" : ""}></label>
               ${c.logo_url ? `<button type="button" class="btn sm danger" data-act="rmLogo">Remove</button>` : ""}</span></span>
             <input type="hidden" name="logo_url" value="${esc(c.logo_url || "")}"></div>
+          ${c.logo_dark_url === undefined ? "" : `<div class="full"><b style="font-size:13.5px">Light logo</b><small style="display:block;color:var(--muted);font-size:12.5px;margin:2px 0 8px">Optional white or light version. With one, their dashboard menu is dark blue with it on top; without one, the menu is white with their normal logo.</small>
+            <span class="logo-row"><span class="logo-prev" style="background:#0c2550">${c.logo_dark_url ? `<img src="${esc(c.logo_dark_url)}" alt="Their light logo">` : `<b class="nm" style="color:#fff">${esc(c.name)}</b><small>No light logo: their menu is white</small>`}</span>
+              <span class="actions"><label class="btn sm ${S.logoBusy ? "disabled" : ""}">${S.logoBusy ? "Uploading…" : c.logo_dark_url ? "Replace light logo" : "Upload light logo"}<input type="file" id="logoDarkFile" accept="image/png,image/jpeg,image/svg+xml,image/webp" hidden ${S.logoBusy ? "disabled" : ""}></label>
+              ${c.logo_dark_url ? `<button type="button" class="btn sm danger" data-act="rmLogoDark">Remove</button>` : ""}</span></span></div>`}
           <details class="full"><summary style="cursor:pointer;font-weight:700;font-size:13.5px">Their words for things</summary>
             <div class="fgrid" style="margin-top:10px">${TERMS.map(([k, l, ph]) => `<label>${l}<input class="field" name="t_${k}" maxlength="24" value="${esc(c.terms[k])}" placeholder="${ph}"></label>`).join("")}</div></details>
           <div class="err full" role="alert">${S.formErr?.form === "brand" ? esc(S.formErr.text) : ""}</div>
@@ -1921,6 +1925,9 @@ document.addEventListener("input", (e) => {
 });
 document.addEventListener("change", async (e) => {
   const t = e.target;
+  if (t.id === "logoDarkFile" && t.files?.[0]) { const cc = custOf(S.id), file = t.files[0]; S.logoBusy = true; render();
+    try { const url = await uploadLogo(cc.id, file); const r = await api.updateCustomer(cc.id, { logo_dark_url: url }, "updated look"); toast(r.ok ? "Light logo saved. Their dashboard menu is dark blue now." : r.error); }
+    catch (err) { toast(err.message); } S.logoBusy = false; return render(); }
   if (t.id === "logoFile" && t.files?.[0]) { const cc = custOf(S.id), file = t.files[0]; S.logoBusy = true; render();
     try { const url = await uploadLogo(cc.id, file); const r = await api.updateCustomer(cc.id, { logo_url: url }, "updated look"); toast(r.ok ? "Logo saved. Their stations show it within a minute." : r.error); }
     catch (err) { toast(err.message); } S.logoBusy = false; return render(); }
@@ -1960,6 +1967,7 @@ document.addEventListener("click", async (e) => {
   if (a === "bellMenu") { S.pop = S.pop === "bell" ? null : "bell"; const pop = t.nextElementSibling; pop.hidden = S.pop !== "bell"; t.setAttribute("aria-expanded", String(S.pop === "bell"));
     const ap = $(".account .pop"); if (ap && S.pop === "bell") ap.hidden = true; if (S.pop) pop.querySelector("button, a")?.focus(); return; }
   if (a === "acctMenu") { S.pop = S.pop === "acct" ? null : "acct"; const pop = t.nextElementSibling; pop.hidden = S.pop !== "acct"; t.setAttribute("aria-expanded", String(!!S.pop)); if (S.pop) pop.querySelector("a, button")?.focus(); return; }
+  if (a === "rmLogoDark") { const r = await api.updateCustomer(c.id, { logo_dark_url: "" }, "updated look"); toast(r.ok ? "Light logo removed. Their dashboard menu is white." : r.error); return render(); }
   if (a === "rmLogo") { const r = await api.updateCustomer(c.id, { logo_url: "" }, "updated look"); toast(r.ok ? "Logo removed. Their stations show Sonoran Point's." : r.error); return render(); }
   if (a === "theme") { applyTheme(t.dataset.v); return render(); }
   if (a === "navOpen") { S.navOpen = true; render(); $(".snav a.on")?.focus(); return; }
