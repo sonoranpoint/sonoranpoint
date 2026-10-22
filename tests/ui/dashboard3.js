@@ -55,14 +55,14 @@ const setChecks = (name, vals) => doc.querySelectorAll(`.drawer input[name="${na
   E("DB.me.role = 'supervisor'; render()"); await go("shifts");
   check(!doc.querySelector('[data-open="shiftForm:"]'), "supervisor: no Add a shift");
   await click('[data-open="shiftForm:s2"]');
-  check(doc.querySelector('.drawer [name="name"]').matches(':disabled') && /An admin changes its times/.test(drawer()), "supervisor: times locked");
+  check(doc.querySelector('.drawer [name="name"]').matches(':disabled') && /A manager changes its times/.test(drawer()), "supervisor: times locked");
   setChecks("crew", ["e5", "e6"]);
   await submit('[data-form="shift:s2"]', {});
   check(E("DB.employees.filter(e => e.shifts.includes('s2')).map(e => e.id).join()") === "e5,e6" && E("DB.shifts[1].name") === "PM", "supervisor can change crew; times unchanged");
   // viewer
   E("DB.me.role = 'viewer'; render()"); await go("shifts");
   await click('[data-open="shiftForm:s2"]');
-  check(!doc.querySelector('.drawer button.primary') && /View only/.test(drawer()), "viewer: read only");
+  check(!doc.querySelector('.drawer button.primary') && /View Only/.test(drawer()), "viewer: read only");
   check(errors.length === 0, "no script errors " + errors.join(";"));
   process.exit();
 })();

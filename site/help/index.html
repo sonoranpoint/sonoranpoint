@@ -9,12 +9,13 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira:wght@500;600&family=Atkinson+Hyperlegible:wght@400;700&display=swap">
 <link rel="stylesheet" href="../site.css">
+<script src="../theme.js"></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
 <header class="top light"><div class="wrap">
-  <a class="logo" href="/" aria-label="Sonoran Point Technologies, home"><picture><source srcset="../brand/logo-light.png 1x, ../brand/logo-light@2x.png 2x" media="(prefers-color-scheme: dark)"><img src="../brand/logo.png" srcset="../brand/logo.png 1x, ../brand/logo@2x.png 2x" alt="Sonoran Point Technologies" width="168" height="83"></picture></a>
-  <nav aria-label="Main"><a href="/#how">How it works</a><a href="/help/" aria-current="page">Help</a><a href="https://app.sonoranpoint.com/">Sign in</a><a href="/try/">Try it</a></nav>
+  <a class="logo" href="/" aria-label="Sonoran Point Technologies, home"><img class="day" src="../brand/logo.png" srcset="../brand/logo.png 1x, ../brand/logo@2x.png 2x" alt="Sonoran Point Technologies" width="168" height="83"><img class="night" src="../brand/logo-light.png" srcset="../brand/logo-light.png 1x, ../brand/logo-light@2x.png 2x" alt="Sonoran Point Technologies" width="168" height="83"></a>
+  <nav aria-label="Main"><a href="/#how">How it works</a><a href="/help/" aria-current="page">Help</a><a href="https://app.sonoranpoint.com/">Sign in</a><a href="/try/">Try it</a><button class="theme-btn" type="button" data-theme-toggle aria-label="Switch to dark mode"><svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg><svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></button></nav>
 </div></header>
 
 <div class="wrap doc">
@@ -78,7 +79,7 @@
     <p>At the end of each shift the dashboard saves a report: what went out, what came back, and what's still missing and with whom. A supervisor signs it off with a note.</p>
 
     <h3 id="contracts">Departments and who sees what</h3>
-    <p>Admins set up the company's groups under <span class="ui">Settings</span>, as many levels deep as needed, and pick the word for them (department, site, team, contract). Each group can share badges and items with its neighbours or stay separate. Under <span class="ui">Team access</span>, each manager can be limited to their own groups.</p>
+    <p>Managers and admins set up the company's groups under <span class="ui">Settings</span>, as many levels deep as needed, and pick the word for them (department, site, team, contract). Each group can share badges and items with its neighbors or stay separate. Under <span class="ui">Team access</span>, each manager can be limited to their own groups.</p>
 
     <h3 id="export">Downloading lists</h3>
     <p>Activity, Equipment and shift reports each have <span class="ui">Download CSV</span>, which opens in Excel or Google Sheets.</p>
@@ -91,7 +92,7 @@
     <p>The tag reader inside the station isn't answering. Restart the station by unplugging it for ten seconds. If it keeps happening, email us. In the meantime, items can be checked out from the dashboard.</p>
 
     <h3 id="code">The activation code doesn't work</h3>
-    <p>Codes work once and expire after 7 days. An admin can make a new one in the dashboard under <span class="ui">Stations</span>: open the station, then <span class="ui">New activation code</span>.</p>
+    <p>Codes work once and expire after 7 days. A manager or admin can make a new one in the dashboard under <span class="ui">Stations</span>: open the station, then <span class="ui">New activation code</span>.</p>
 
     <h3 id="lost-badge">A badge is lost</h3>
     <p>A manager can replace it at the station (admin menu, <span class="ui">Employees</span>), or a supervisor can change it in the dashboard. The old badge stops working right away.</p>

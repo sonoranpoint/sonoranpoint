@@ -5,10 +5,15 @@
   --display: "Saira", "Arial Narrow", sans-serif;
   --body: "Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", sans-serif;
   --wrap: 1120px;
+  --chip-ink: var(--blue); --logo-day: block; --logo-night: none; color-scheme: light;
 }
+/* Dark: follows the device unless someone picked a mode with the switch in the header (theme.js sets data-theme). */
 @media (prefers-color-scheme: dark) {
-  :root { --paper: #07111f; --surface: #0d1b31; --ink: #e8effb; --muted: #9aaccb; --line: #1d3254; --link: #8cc0ff; color-scheme: dark; }
+  :root:not([data-theme="light"]) { --paper: #07111f; --surface: #0d1b31; --ink: #e8effb; --muted: #9aaccb; --line: #1d3254; --link: #8cc0ff;
+    --chip-ink: #8cc0ff; --logo-day: none; --logo-night: block; color-scheme: dark; }
 }
+:root[data-theme="dark"] { --paper: #07111f; --surface: #0d1b31; --ink: #e8effb; --muted: #9aaccb; --line: #1d3254; --link: #8cc0ff;
+  --chip-ink: #8cc0ff; --logo-day: none; --logo-night: block; color-scheme: dark; }
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
@@ -45,6 +50,16 @@ p { margin: 0; }
 .top.light { background: var(--surface); border-bottom: 1px solid var(--line); }
 .top.light nav a { color: var(--ink); }
 .top .btn { min-height: 40px; padding: 0 16px; font-size: 15px; }
+.top .logo .day { display: var(--logo-day); } .top .logo .night { display: var(--logo-night); }
+.top.dark .logo img { display: block; }
+/* Light/dark switch */
+.theme-btn { width: 40px; height: 40px; display: inline-grid; place-items: center; padding: 0; border-radius: 50%; cursor: pointer;
+  background: transparent; color: inherit; border: 1.5px solid var(--line); }
+.theme-btn:hover { border-color: var(--blue); }
+.theme-btn svg { width: 20px; height: 20px; }
+.theme-btn .sun { display: var(--logo-night); } .theme-btn .moon { display: var(--logo-day); }
+.top.light .theme-btn { color: var(--ink); }
+.top.dark .theme-btn { color: #fff; border-color: rgba(231, 239, 255, .4); } .top.dark .theme-btn:hover { border-color: #fff; }
 
 /* Hero: night sky over the ridge, with the sun coming up behind it (the one loud moment) */
 .hero { position: relative; color: #e7efff; overflow: hidden; isolation: isolate;
@@ -97,8 +112,8 @@ footer.foot a { color: var(--muted); }
 .orgtree li { padding: 6px 0 0; position: relative; }
 .orgtree ul ul > li::before { content: ""; position: absolute; left: -18px; top: 18px; width: 12px; border-top: 2px solid var(--line); }
 .orgtree b { font-family: var(--display); font-weight: 600; font-size: 18px; }
-.orgtree span { display: inline-block; margin-left: 8px; font-size: 13.5px; font-weight: 700; color: var(--blue); background: color-mix(in srgb, var(--blue) 10%, transparent); padding: 1px 9px; border-radius: 99px; }
-@media (prefers-color-scheme: dark) { .orgtree span { color: #8cc0ff; } }
+.orgtree span { display: inline-block; margin-left: 8px; font-size: 13.5px; font-weight: 700; color: var(--chip-ink); background: color-mix(in srgb, var(--blue) 10%, transparent); padding: 1px 9px; border-radius: 99px; }
+.orgtree small { color: var(--muted); font-size: 14px; margin-left: 8px; }
 
 .uses { list-style: none; padding: 0; margin: 28px 0 0; display: flex; flex-wrap: wrap; gap: 10px; }
 .uses li { border: 1px solid var(--line); background: var(--surface); border-radius: 99px; padding: 8px 16px; font-weight: 700; font-size: 15.5px; }

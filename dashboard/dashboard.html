@@ -641,6 +641,7 @@ function buildDemo() {
   const rnd = mulberry32(1015);
   const now = Date.now();
   const tz = "America/Phoenix";
+  const DEMO_MAIL = window.SP_DEMO ? "northwind.example" : "demoair.example";
   const org = { name: window.SP_DEMO ? "Northwind Logistics" : "Demo Air Services", logo_url: "", logo_dark_url: null, primary: "#1F4E79", accent: "#F2A900", timezone: tz, extended_hours: 9,
     settings: { allow_return_by_other: true, allow_checkout_while_held: false },
     terminology: { equipment: "Equipment", employee: "Employee", ...(window.SP_DEMO ? { contract: "Department", contract_plural: "Departments" } : {}) }, modules: ["shifts"] };
@@ -744,7 +745,7 @@ function buildDemo() {
       if (threshold > now) return;
       const a = { id: "a" + (++aid), eq: q.id, emp: t.emp, kind, out_at: t.at, threshold_at: threshold, raised_at: threshold, resolved_at: resolved, ack_by: null, ack_at: null, notes: null };
       if (resolved && rnd() < 0.55) Object.assign(a, { ack_by: "Dana Brooks", ack_at: Math.min(resolved, threshold + (20 + rnd() * 90) * MIN),
-        notes: ["Called them, bringing it back.", "Was left in the van. Returned.", "Still on the ramp, ok'd.", "Spoke with lead."][Math.floor(rnd() * 4)] });
+        notes: ["Called them, bringing it back.", "Was left in the van. Returned.", "Still out on a job, ok'd.", "Spoke with lead."][Math.floor(rnd() * 4)] });
       alerts.push(a);
     };
     if (end - t.at > ext) mk("extended_checkout", t.at + ext);
@@ -757,12 +758,12 @@ function buildDemo() {
   audit.push({ at: now - 5 * 86400000, actor: "Morgan Reyes", text: "made Dana Brooks a manager" });
   const reportAcks = {};
   const members = [
-    { id: "u1", name: "Morgan Reyes", email: "morgan.reyes@demoair.example", role: "owner", joined: now - 40 * 86400000, last: now - 10 * MIN },
-    { id: "u2", name: "Dana Brooks", email: "dana.brooks@demoair.example", role: "admin", joined: now - 35 * 86400000, last: now - 2 * HOUR },
-    { id: "u3", name: "Kelly Park", email: "kelly.park@demoair.example", role: "supervisor", joined: now - 20 * 86400000, last: now - 26 * HOUR },
-    { id: "u4", name: "Ops Office", email: "ops-office@demoair.example", role: "viewer", joined: now - 9 * 86400000, last: now - 3 * 86400000 },
+    { id: "u1", name: "Morgan Reyes", email: "morgan.reyes@" + DEMO_MAIL, role: "owner", joined: now - 40 * 86400000, last: now - 10 * MIN },
+    { id: "u2", name: "Dana Brooks", email: "dana.brooks@" + DEMO_MAIL, role: "admin", joined: now - 35 * 86400000, last: now - 2 * HOUR },
+    { id: "u3", name: "Kelly Park", email: "kelly.park@" + DEMO_MAIL, role: "supervisor", joined: now - 20 * 86400000, last: now - 26 * HOUR },
+    { id: "u4", name: "Ops Office", email: "ops-office@" + DEMO_MAIL, role: "viewer", joined: now - 9 * 86400000, last: now - 3 * 86400000 },
   ];
-  const invites = [{ id: "i1", email: "station-lead@demoair.example", role: "viewer", created: now - 1 * 86400000, expires: now + 13 * 86400000 }];
+  const invites = [{ id: "i1", email: "station-lead@" + DEMO_MAIL, role: "viewer", created: now - 1 * 86400000, expires: now + 13 * 86400000 }];
   // Reported problems: reasons are the company's own list (Settings).
   const reasons = [["Damaged", false], ["Not charging", false], ["Missing part", false], ["Other", false]]
     .map(([label, blocks], i) => ({ id: "r" + (i + 1), label, blocks, sort: i + 1 }));
@@ -788,7 +789,7 @@ function buildDemo() {
   stations[0].contract = "dbw"; stations[1].contract = "ubw";
   members.find((m) => m.id === "u3").contracts = ["dbw"];
   shifts.forEach((x) => { x.contract = { AM: "dbw", PM: "ubw" }[x.name] || null; });
-  const loans = [{ id: "ln1", eq: equipment.find((q) => q.name === "Battery 06").id, from: "ubw", to: "dbw", at: now - 5 * HOUR, by: "Dana Brooks", notes: "Delta's chargers are down" }];
+  const loans = [{ id: "ln1", eq: equipment.find((q) => q.name === "Battery 06").id, from: "ubw", to: "dbw", at: now - 5 * HOUR, by: "Dana Brooks", notes: window.SP_DEMO ? "Shipping's chargers are down" : "Delta's chargers are down" }];
   const emailPrefs = { u1: ["problem"], u2: ["problem", "overdue"], u3: ["overdue", "shift_report"], u4: [] };
   const outages = [{ station: "st1", start: now - 30 * HOUR, end: now - 30 * HOUR + 18 * MIN }, { station: "st1", start: now - 3 * DAY, end: now - 3 * DAY + 52 * MIN }];
   const stationEvents = [
@@ -796,15 +797,16 @@ function buildDemo() {
     { station: "st1", at: now - 29 * 86400000, kind: "set_up", details: {}, by: "Dana Brooks" },
     { station: "st2", at: now - 12 * 86400000, kind: "added", details: {}, by: "Morgan Reyes" },
     { station: "st2", at: now - 12 * 86400000 + 2 * HOUR, kind: "set_up", details: {}, by: "Dana Brooks" },
-    { station: "st2", at: now - 6 * 86400000, kind: "moved_contract", details: { from: "Delta BW", to: "United BW" }, by: "Morgan Reyes" },
+    { station: "st2", at: now - 6 * 86400000, kind: "moved_contract", details: window.SP_DEMO ? { from: "Shipping", to: "Maintenance" } : { from: "Delta BW", to: "United BW" }, by: "Morgan Reyes" },
   ];
   return { now, org, categories, equipment, employees, shifts, stations, txns, alerts, audit, reportAcks, occs, members, invites, reasons, problems, emailPrefs, contracts, loans, stationEvents, outages,
-           me: { id: "u1", name: "Morgan Reyes", role: "owner", email: "morgan.reyes@demoair.example" } };
+           me: { id: "u1", name: "Morgan Reyes", role: "owner", email: "morgan.reyes@" + DEMO_MAIL } };
 }
 const DB = buildDemo();
 /* Dashboard roles (org_members.role). Mirrors the database's row-level security. */
 const RANK = { viewer: 0, supervisor: 1, admin: 2, owner: 3 };
-const ROLE_NAME = { viewer: "View only", supervisor: "Supervisor", admin: "Admin", owner: "Owner" };
+// Shown names for dashboard roles (the stored values stay viewer/supervisor/admin/owner).
+const ROLE_NAME = { viewer: "View Only", supervisor: "Supervisor", admin: "Manager", owner: "Admin" };
 const can = (need) => RANK[DB.me.role] >= RANK[need];
 // Contracts the signed-in person covers (null = all). The database applies the same limit.
 const myScopeIds = () => DB.me.role === "owner" || !(DB.me.contracts || []).length ? null : DB.me.contracts;
@@ -1041,7 +1043,7 @@ const api = {
   invite(email, role) {
     email = (email || "").trim().toLowerCase();
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return { ok: false, error: "Enter a full email address." };
-    if (!canManageRole(role)) return { ok: false, error: "Only an owner can add owners." };
+    if (!canManageRole(role)) return { ok: false, error: "Only an admin can add admins." };
     if (DB.members.some((m) => m.email === email)) return { ok: false, error: "That person is already on the team." };
     DB.invites = DB.invites.filter((i) => i.email !== email);
     DB.invites.unshift({ id: "i" + Date.now(), email, role, created: Date.now(), expires: Date.now() + 14 * 86400000 });
@@ -1049,21 +1051,21 @@ const api = {
   },
   setMemberRole(id, role) {
     const m = DB.members.find((x) => x.id === id);
-    if (!canManageRole(m.role) || !canManageRole(role)) return { ok: false, error: "Only an owner can change owners." };
-    if (m.role === "owner" && role !== "owner" && DB.members.filter((x) => x.role === "owner").length === 1) return { ok: false, error: "The company needs at least one owner. Make someone else an owner first." };
+    if (!canManageRole(m.role) || !canManageRole(role)) return { ok: false, error: "Only an admin can change admins." };
+    if (m.role === "owner" && role !== "owner" && DB.members.filter((x) => x.role === "owner").length === 1) return { ok: false, error: "The company needs at least one admin. Make someone else an admin first." };
     m.role = role; if (m.id === DB.me.id) DB.me.role = role; return { ok: true };
   },
   removeMember(id) {
     const m = DB.members.find((x) => x.id === id);
-    if (!canManageRole(m.role)) return { ok: false, error: "Only an owner can remove owners." };
-    if (m.role === "owner" && DB.members.filter((x) => x.role === "owner").length === 1) return { ok: false, error: "The company needs at least one owner." };
+    if (!canManageRole(m.role)) return { ok: false, error: "Only an admin can remove admins." };
+    if (m.role === "owner" && DB.members.filter((x) => x.role === "owner").length === 1) return { ok: false, error: "The company needs at least one admin." };
     DB.members = DB.members.filter((x) => x.id !== id); return { ok: true };
   },
   cancelInvite(id) { DB.invites = DB.invites.filter((i) => i.id !== id); },
   /* rpc set_member_contracts (admins): which contracts someone covers; none = everything */
   setMemberContracts(id, ids) {
     const m = DB.members.find((x) => x.id === id);
-    if (m.role === "owner" && ids.length) return { ok: false, error: "Owners always see everything." };
+    if (m.role === "owner" && ids.length) return { ok: false, error: "Admins always see everything." };
     m.contracts = ids; if (id === DB.me.id) DB.me.contracts = ids; return { ok: true };
   },
   /* rpc lend_equipment / end_equipment_loan (supervisors) */
@@ -1130,7 +1132,7 @@ const api = {
   /* notification_prefs: what each person gets emailed about */
   emailPrefs(userId) { return (DB.emailPrefs || {})[userId] || []; },
   setEmailPrefs(userId, kinds) {
-    if (userId !== DB.me.id && !can("admin")) return { ok: false, error: "Only admins can change someone else's emails." };
+    if (userId !== DB.me.id && !can("admin")) return { ok: false, error: "Only managers and admins can change someone else's emails." };
     DB.emailPrefs[userId] = kinds; return { ok: true };
   },
 };
@@ -1322,7 +1324,7 @@ async function uploadLogo(file) {
   if (!LIVE) return await new Promise((ok) => { const r = new FileReader(); r.onload = () => ok(r.result); r.readAsDataURL(png); });
   const path = `${DB.org.id}/logo-${Date.now()}.png`;
   const { error } = await sb.storage.from("logos").upload(path, png, { contentType: "image/png", cacheControl: "31536000", upsert: false });
-  if (error) throw new Error(/row-level|not allowed|unauthor/i.test(error.message) ? "Only admins can change the logo." : error.message);
+  if (error) throw new Error(/row-level|not allowed|unauthor/i.test(error.message) ? "Only managers and admins can change the logo." : error.message);
   return sb.storage.from("logos").getPublicUrl(path).data.publicUrl;
 }
 // A paused or closed account says so on every page.
@@ -1604,7 +1606,7 @@ function vShifts() {
   const crewN = (id) => DB.employees.filter((e) => e.active && e.shifts.includes(id)).length;
   const shiftList = DB.shifts.filter((x) => inView(x.contract));
   return head("Shifts", "Who works when, and what each crew hadn't returned by the end of their shift.", `<span class="actions"><button class="btn" data-act="csvReports">${ic("download")}Download reports</button>${can("admin") ? `<button class="btn primary" data-open="shiftForm:">Add a shift</button>` : ""}</span>`) +
-    `<section class="panel"><div class="panel-h"><h2>Shifts</h2>${can("supervisor") ? "" : `<span class="muted" style="font-size:13px">View only</span>`}</div><div class="tablewrap"><table class="tbl">
+    `<section class="panel"><div class="panel-h"><h2>Shifts</h2>${can("supervisor") ? "" : `<span class="muted" style="font-size:13px">View Only</span>`}</div><div class="tablewrap"><table class="tbl">
       <thead><tr><th>Shift</th><th>Time</th><th>Days</th><th>Grace</th><th>Crew</th><th></th></tr></thead><tbody>
       ${shiftList.map((x) => `<tr ${x.active ? "" : 'style="opacity:.6"'}><td><b>${esc(x.name)}</b>${x.active ? "" : ` <span class="chip quiet">Not in use</span>`}${x.contract ? `<span class="sub">${esc(contractName(x.contract))}</span>` : ""}</td>
         <td>${fmtClock(x.start)} to ${fmtClock(x.end)}${x.end < x.start ? ` <span class="muted">(next day)</span>` : ""}</td><td>${esc(daysText(x.days))}</td>
@@ -1670,7 +1672,7 @@ function stationCards(list, stat) {
 function vSettings() {
   const o = DB.org;
   const ro = !can("admin");
-  return head("Settings", "Changes reach every station within a minute.") + (ro ? `<div class="readonly-note">You have ${esc(ROLE_NAME[DB.me.role])} access. Ask an admin to change settings.</div>` : "") + `<fieldset ${ro ? "disabled" : ""} style="border:0;padding:0;margin:0;display:flex;flex-direction:column;gap:22px;min-width:0">
+  return head("Settings", "Changes reach every station within a minute.") + (ro ? `<div class="readonly-note">You have ${esc(ROLE_NAME[DB.me.role])} access. Ask a manager or admin to change settings.</div>` : "") + `<fieldset ${ro ? "disabled" : ""} style="border:0;padding:0;margin:0;display:flex;flex-direction:column;gap:22px;min-width:0">
     <section class="panel"><div class="panel-h"><h2>Company</h2></div><form class="panel-b form-grid" data-form="company">
       <label for="sName">Company name</label><input class="field" id="sName" name="name" value="${esc(o.name)}" maxlength="80">
       <label>Logo<small>Your normal logo. It sits on a white bar at the top of your stations and this menu. PNG, JPG or SVG.</small></label>
@@ -1738,7 +1740,7 @@ function vContracts() {
   const sw = (id, k, on, label) => `<label class="mini-switch"><span class="switch"><input type="checkbox" data-contract="${id}" data-k="${k}" ${on ? "checked" : ""}><span></span></span>${label}</label>`;
   const adding = S.f.addContract;
   return `<section class="panel" id="contracts"><div class="panel-h"><h2>${esc(T.many)}</h2></div>
-    <div class="panel-b muted" style="font-size:13.5px;padding-bottom:0">Split your stations, people and equipment into ${esc(T.many.toLowerCase())}, like Delta BW and United BW.
+    <div class="panel-b muted" style="font-size:13.5px;padding-bottom:0">Split your stations, people and equipment into ${esc(T.many.toLowerCase())}, like ${window.SP_DEMO ? "Shipping and Maintenance" : "Delta BW and United BW"}.
       A station only serves its own ${esc(T.one.toLowerCase())}, unless the group they're in shares. People and items with none work everywhere.</div>
     <div class="panel-b ctree">
       ${tree.length ? "" : `<p class="muted" style="margin:0">No ${esc(T.many.toLowerCase())} yet: every station serves everyone.</p>`}
@@ -1750,7 +1752,7 @@ function vContracts() {
         <span class="cflags">${c.hasKids ? sw(c.id, "share", c.share, `Share across the ${esc(T.many.toLowerCase())} under it`) + sw(c.id, "move", c.move, "Items move to where they're returned") : ""}</span>
         <span class="cact">${conf ? `<span class="confirm" style="padding:4px 8px">Delete ${esc(c.name)}? <button class="btn sm danger" type="button" data-act="doDelContract" data-id="${c.id}">Delete</button><button class="btn sm" type="button" data-act="noConfirm">Cancel</button></span>`
           : `<button class="btn sm" type="button" data-act="addContract" data-id="${c.id}">Add under it</button><button class="btn sm danger" type="button" data-act="askDelContract" data-id="${c.id}">Delete</button>`}</span></div>
-        ${adding === c.id ? `<form class="inline-form crow add" style="--d:${c.depth + 1}" data-form="newContract:${c.id}"><input class="field" name="name" aria-label="New ${esc(T.one.toLowerCase())} name" placeholder="Name, like Delta BW" maxlength="60" required><button class="btn primary sm">Add</button><button class="btn sm" type="button" data-act="cancelContract">Cancel</button></form>` : ""}`; }).join("")}
+        ${adding === c.id ? `<form class="inline-form crow add" style="--d:${c.depth + 1}" data-form="newContract:${c.id}"><input class="field" name="name" aria-label="New ${esc(T.one.toLowerCase())} name" placeholder="Name, like ${window.SP_DEMO ? "Shipping" : "Delta BW"}" maxlength="60" required><button class="btn primary sm">Add</button><button class="btn sm" type="button" data-act="cancelContract">Cancel</button></form>` : ""}`; }).join("")}
     </div>
     <form class="panel-b inline-form" data-form="newContract:" style="border-top:1px solid var(--line)">
       <input class="field" name="name" aria-label="New top-level ${esc(T.one.toLowerCase())}" placeholder="New ${esc(T.one.toLowerCase())}, like BW" maxlength="60" style="max-width:260px">
@@ -1797,9 +1799,9 @@ function vTeam() {
       <div class="row" style="grid-template-columns:minmax(0,1fr) auto auto"><span><b>${esc(i.email)}</b><span class="sub">Invited ${esc(ago(i.created))} · link expires ${esc(fmtWhen(i.expires))}</span></span>
         <span class="chip brand">${ROLE_NAME[i.role]}</span>${canManageRole(i.role) ? `<button class="btn sm" data-act="cancelInv" data-id="${i.id}">Cancel invite</button>` : ""}</div>`).join("")}</div></section>` : ""}
     <section class="panel"><div class="panel-h"><h2>What each role can do</h2></div><div class="tablewrap"><table>
-      <thead><tr><th></th><th>View only</th><th>Supervisor</th><th>Admin</th><th>Owner</th></tr></thead>
+      <thead><tr><th></th><th>View Only</th><th>Supervisor</th><th>Manager</th><th>Admin</th></tr></thead>
       <tbody>${[["See everything: equipment, activity, alerts, reports", 0], ["Add and edit employees, deactivate badges", 1], ["Mark items lost or in maintenance", 1], ["Mark alerts seen, sign off shift reports", 1],
-        ["Add and edit equipment and categories, time limits", 2], ["Stations, company settings, checkout rules", 2], ["Station fob roles and PINs", 2], ["Invite and manage the team (except owners)", 2], ["Manage owners", 3]]
+        ["Add and edit equipment and categories, time limits", 2], ["Stations, company settings, checkout rules", 2], ["Station fob roles and PINs", 2], ["Invite and manage the team (except admins)", 2], ["Manage admins", 3]]
         .map(([t, n]) => `<tr><td>${t}</td>${[0, 1, 2, 3].map((i) => `<td aria-label="${i >= n ? "Yes" : "No"}">${i >= n ? "✓" : "<span class='muted'>–</span>"}</td>`).join("")}</tr>`).join("")}</tbody></table></div></section>`;
 }
 const VIEWS = { overview: vOverview, equipment: vEquipment, employees: vEmployees, activity: vActivity, alerts: vAlerts, shifts: vShifts, stations: vStations, settings: vSettings, team: vTeam };
@@ -1912,7 +1914,7 @@ function dReport(key) {
       : `<p class="muted" style="margin:0">Everything the ${esc(r.shift.name)} crew took was back on time.</p>`}</div>
     ${r.inProgress ? `<div class="notice">This shift is still going. The report is saved 15 minutes after it ends.</div>`
       : r.ack ? `<div class="notice">Signed off by ${esc(r.ack.by)} ${esc(fmtWhen(r.ack.at))}${r.ack.note ? `: “${esc(r.ack.note)}”` : ""}</div>`
-      : !can("supervisor") ? `<div class="readonly-note">Not signed off yet. A supervisor or admin can sign it off.</div>`
+      : !can("supervisor") ? `<div class="readonly-note">Not signed off yet. A supervisor or manager can sign it off.</div>`
       : `<div class="sect"><h3>Sign off</h3><form class="inline-form" data-form="report:${esc(r.key)}"><input class="field" name="note" aria-label="Note" placeholder="Note, like: PDA 02 found in van 4" maxlength="200">
         <button class="btn primary">Sign off</button></form></div>`}
   </div>`;
@@ -2000,7 +2002,7 @@ function dShiftForm(id) {
   const days = x.days || [1, 2, 3, 4, 5, 6, 7];
   const people = DB.employees.filter((e) => e.active || e.shifts.includes(id)).sort((a, b) => a.name.localeCompare(b.name));
   return drawerHead(id ? (sup ? `Edit ${esc(x.name)} shift` : `${esc(x.name)} shift`) : "Add a shift", id ? `${fmtClock(x.start)} to ${fmtClock(x.end)} · ${esc(daysText(x.days))}` : "Times are in the company's time zone.") + `<div class="drawer-b">
-    ${!sup ? `<div class="readonly-note">You have View only access.</div>` : !admin ? `<div class="readonly-note">Supervisors can change who's on the shift. An admin changes its times.</div>` : ""}
+    ${!sup ? `<div class="readonly-note">You have View Only access.</div>` : !admin ? `<div class="readonly-note">Supervisors can change who's on the shift. A manager changes its times.</div>` : ""}
     <form class="fgrid" data-form="shift:${id || ""}"><fieldset ${admin ? "" : "disabled"} class="full fgrid" style="border:0;padding:0;margin:0;min-width:0">
       <label class="full">Name<input class="field" name="name" required maxlength="40" value="${esc(x.name)}" placeholder="AM, PM, Overnight"></label>
       ${DB.contracts?.length ? `<label class="full">${esc(CTERM().one)}<small>Who works this shift. Its reports go to that ${esc(CTERM().one.toLowerCase())}'s supervisors.</small>

@@ -19,7 +19,7 @@ const api_set = async (id) => { E(`api.updateCustomer('${id}', { logo_dark_url: 
   await sleep(100);
   check(/Customers/.test(page()) && /Demo Air Services/.test(page()) && /Copper State Cargo/.test(page()), "customer list");
   check(/Needs attention/.test(page()) && /Bag Room offline/.test(page()) && /Trial 5 days left/.test(page()) && /Commissary: activation code expired/.test(page()), "needs attention: offline station, trial ending, expired code");
-  check(/Stations online/.test(page()) && /Trials ending soon/.test(page()) && /Owner invites/.test(page()) && /System health/.test(page()) && /New customers/.test(page()), "overview cards, health and charts");
+  check(/Stations online/.test(page()) && /Trials ending soon/.test(page()) && /Admin invites/.test(page()) && /System health/.test(page()) && /New customers/.test(page()), "overview cards, health and charts");
   await click("tr[data-preview]"); check(/Quick actions/.test(doc.querySelector("#layer").textContent) && /Open customer/.test(doc.querySelector("#layer").textContent), "clicking a customer opens its preview");
   await click('[data-act="pvAskPause"]'); await click('[data-act="pvPause"]'); const pcust = E("S.preview");
   check(E(`custOf('${pcust}').status`) === "paused" && /Resume account/.test(doc.querySelector("#layer").textContent), "pause from the preview");
@@ -47,7 +47,7 @@ const api_set = async (id) => { E(`api.updateCustomer('${id}', { logo_dark_url: 
   await type('[data-new="t_equipment"]', "Radio");
   check(/Radio/.test(doc.querySelector(".pv-steps").textContent), "preview uses their word");
   await submit('[data-form="new"]');
-  check(/owner's email/.test(page()), "needs owner email");
+  check(/admin's email/.test(page()), "needs owner email");
   await type('[data-new="slug"]', "demo"); await type('[data-new="owner_email"]', "Boss@CactusAir.example");
   await submit('[data-form="new"]');
   check(/already used/.test(page()), "short ID taken");
@@ -67,7 +67,7 @@ const api_set = async (id) => { E(`api.updateCustomer('${id}', { logo_dark_url: 
 
   // customer page
   await go("customer/" + id);
-  check(/Waiting for setup/.test(page()) && /Owner invite sent/.test(page()), "customer page: stations waiting, invite pending");
+  check(/Waiting for setup/.test(page()) && /Admin invite sent/.test(page()), "customer page: stations waiting, invite pending");
   await type('[data-form="addStation"] [name=name]', "Bag Room"); await submit('[data-form="addStation"]');
   check(/Activation code for Bag Room/.test(page()) && E(`custOf('${id}').stations.length`) === 3, "add a station -> code shown");
   const sid = E(`custOf('${id}').stations[0].id`); const old = E(`custOf('${id}').stations[0].code`);

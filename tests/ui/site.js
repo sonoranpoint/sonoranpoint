@@ -28,5 +28,15 @@ const open = (file, pre, url) => new JSDOM("<!doctype html><html><body>" + pre +
     }
   }
   check(!missing.length, "every link and image on the site exists" + (missing.length ? ": " + missing.join(", ") : ""));
+  // Light/dark switch: follows the device until clicked, then remembers (same key as the dashboard).
+  const home = new JSDOM(fs.readFileSync(path.join(site, "index.html"), "utf8").replace('<script src="theme.js"></script>', "<script>" + fs.readFileSync(path.join(site, "theme.js"), "utf8") + "</script>"),
+    { runScripts: "dangerously", url: "https://sonoranpoint.com/", beforeParse(w) { w.matchMedia = () => ({ matches: true, addEventListener() {} }); } });
+  await sleep(50);
+  const hw = home.window, btn = hw.document.querySelector("[data-theme-toggle]");
+  check(!hw.document.documentElement.dataset.theme && btn.getAttribute("aria-label") === "Switch to light mode", "theme: follows a dark device until someone picks");
+  btn.click();
+  check(hw.document.documentElement.dataset.theme === "light" && hw.localStorage.getItem("sp.theme") === "light" && btn.getAttribute("aria-label") === "Switch to dark mode", "theme: the switch picks light and remembers it");
+  btn.click();
+  check(hw.document.documentElement.dataset.theme === "dark" && hw.localStorage.getItem("sp.theme") === "dark", "theme: and back to dark");
   process.exit();
 })();

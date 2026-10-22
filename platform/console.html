@@ -639,7 +639,7 @@ function buildDemo() {
   customers.forEach((c) => { c.members = c.members.map(([email, role, ago]) => ({ email, name: NAMES[email] || "", role, last_sign_in: now - ago })); });
   const log = [];
   const L = (c, at, action, details = "") => log.push({ id: uid("lg"), at, by: OPERATOR.name, org: c.id, customer: c.name, action, details });
-  customers.forEach((c) => { L(c, c.created, "created customer", `${c.stations.length} station${c.stations.length === 1 ? "" : "s"}, owner invite to ${c.contact_email}`); });
+  customers.forEach((c) => { L(c, c.created, "created customer", `${c.stations.length} station${c.stations.length === 1 ? "" : "s"}, admin invite to ${c.contact_email}`); });
   L(customers[0], now - 12 * DAY, "added station", "Bag Room");
   L(customers[1], now - 6 * DAY, "updated customer", "Station limit 4");
   L(customers[3], now - 9 * DAY, "status: paused", "Unpaid invoice");
@@ -700,7 +700,7 @@ const custOf = (id) => DB.customers.find((c) => c.id === id);
 // Turns what changed into a readable line: "Status: Trial, Trial ends Nov 16, 2026, Contact: Tasha".
 function changeText(d) {
   if (!d || typeof d !== "object") return d || "";
-  if (d.stations != null && d.owner) return `${d.stations} station${d.stations === 1 ? "" : "s"}, owner invite to ${d.owner}`;
+  if (d.stations != null && d.owner) return `${d.stations} station${d.stations === 1 ? "" : "s"}, admin invite to ${d.owner}`;
   const day = (v) => fmtDate(typeof v === "number" ? v : Date.parse(v));
   const F = {
     status: (v) => `Status: ${STATUS[v]?.[0] || v}`, plan: (v) => `Plan: ${planName(v)}`,
@@ -756,7 +756,7 @@ const api = {
     if (!/^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$/.test(slug)) return { ok: false, error: "Short ID: letters, numbers and dashes only.", field: "slug" };
     if (DB.customers.some((c) => c.slug === slug)) return { ok: false, error: `The short ID "${slug}" is already used.`, field: "slug" };
     if (!hex(d.primary) || !hex(d.accent)) return { ok: false, error: "Colors must look like #1F4E79.", field: "primary" };
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return { ok: false, error: "Enter the owner's email address.", field: "owner_email" };
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return { ok: false, error: "Enter their admin's email address.", field: "owner_email" };
     const stations = (d.stations || []).map((s) => s.trim()).filter(Boolean);
     if (!stations.length) return { ok: false, error: "Add at least one station to ship.", field: "stations" };
     const now = Date.now();
@@ -770,7 +770,7 @@ const api = {
     for (const n of stations) c.stations.push({ id: uid("st"), name: n, location: "", activated_at: null, last_seen: null, version: null, admin_claimed_at: null,
       code: newCode(), code_expires: now + 7 * DAY, revoked: false, created: now });
     DB.customers.push(c);
-    log(c, "created customer", `${stations.length} station${stations.length === 1 ? "" : "s"}, owner invite to ${email}`);
+    log(c, "created customer", `${stations.length} station${stations.length === 1 ? "" : "s"}, admin invite to ${email}`);
     return { ok: true, id: c.id, invite: { email, token }, stations: c.stations.map((s) => ({ id: s.id, name: s.name, code: s.code, expires: s.code_expires })) };
   },
   /* rpc platform_update_customer(org, jsonb) — only the keys sent are changed */
@@ -1025,7 +1025,7 @@ const live = {
     else if (id || S.id) await live.detail(id || S.id).catch(() => {});
   },
 };
-const ERR = { slug_taken: ["That short ID is already used.", "slug"], bad_slug: ["Short ID: letters, numbers and dashes only.", "slug"], bad_email: ["Enter the owner's email address.", "owner_email"],
+const ERR = { slug_taken: ["That short ID is already used.", "slug"], bad_slug: ["Short ID: letters, numbers and dashes only.", "slug"], bad_email: ["Enter their admin's email address.", "owner_email"],
   name_required: ["Enter the company name.", "name"], already_member: ["That person is already on their team.", "email"], not_found: ["That customer or station no longer exists.", null] };
 const demoCreate = api.createCustomer;
 const liveApi = {
@@ -1291,7 +1291,7 @@ function attention() {
       if (st.key === "expired") out.push({ kind: "expired", tone: "bad", c, text: `${s.name}: activation code expired`, sub: "Make a new code from the customer page and send it to them." });
       if (st.key === "waiting" && now - s.created > 3 * DAY) out.push({ kind: "waiting", tone: "warn", c, text: `${s.name} not set up after ${ago(s.created, true)}`, sub: `Code expires ${fmtDate(s.code_expires)}. Check it arrived.` });
     }
-    if (!(c.has_owner ?? c.members.some((m) => m.role === "owner")) && c.status !== "paused") out.push({ kind: "owner", tone: "info", c, text: "Owner hasn't signed in yet", sub: c.invites.length ? `Invite sent to ${c.invites[0].email}` : c.detail || !LIVE ? "No invite sent. Invite an owner." : "Open the customer to see or resend the invite." });
+    if (!(c.has_owner ?? c.members.some((m) => m.role === "owner")) && c.status !== "paused") out.push({ kind: "owner", tone: "info", c, text: "Admin hasn't signed in yet", sub: c.invites.length ? `Invite sent to ${c.invites[0].email}` : c.detail || !LIVE ? "No invite sent. Invite an admin." : "Open the customer to see or resend the invite." });
   }
   return out.sort((a, b) => ({ bad: 0, warn: 1, info: 2 }[a.tone] - { bad: 0, warn: 1, info: 2 }[b.tone]));
 }
@@ -1375,7 +1375,7 @@ function vCustomers() {
       <a class="stat" href="#fleet"><span class="ic green">${ic("station")}</span><div><span>Stations online</span><b>${online}<em> / ${set.length}</em></b><small>${offline ? `${offline} offline` : set.length ? `${pct(online, set.length)}% online` : "None set up yet"}</small></div></a>
       <a class="stat" href="#customers" data-seg="status:trial"><span class="ic orange">${ic("clock")}</span><div><span>Trials ending soon</span><b>${ending.length}</b><small>In the next 14 days</small></div></a>
       <a class="stat" href="#customers"><span class="ic red">${ic("alert")}</span><div><span>Needs attention</span><b>${att.filter((x) => x.tone !== "info").length}</b><small>Stations or accounts</small></div></a>
-      <a class="stat" href="#customers"><span class="ic purple">${ic("userPlus")}</span><div><span>Owner invites</span><b>${noOwner.length}</b><small>Owner hasn't signed in yet</small></div></a>
+      <a class="stat" href="#customers"><span class="ic purple">${ic("userPlus")}</span><div><span>Admin invites</span><b>${noOwner.length}</b><small>Admin hasn't signed in yet</small></div></a>
     </div>
     <div class="ov">
       <div class="stack">
@@ -1457,7 +1457,7 @@ function vPreview() {
     <section class="panel"><div class="panel-h"><h2>Company</h2></div><div class="panel-b"><dl class="kv">
       <dt>Contact</dt><dd>${esc(c.contact_name || "—")}</dd><dt>Email</dt><dd>${c.contact_email ? `<a href="mailto:${esc(c.contact_email)}" style="color:var(--t-blue)">${esc(c.contact_email)}</a>` : "—"}</dd>
       <dt>Phone</dt><dd>${esc(c.contact_phone || "—")}</dd><dt>Short ID</dt><dd class="mono">${esc(c.slug)}</dd><dt>Customer since</dt><dd>${esc(fmtDate(c.created))}</dd>
-      <dt>Owner</dt><dd>${owner ? "Signed in" : c.invites.length ? `Invite sent to ${esc(c.invites[0].email)}` : "Not invited yet"}</dd></dl></div></section>
+      <dt>Admin</dt><dd>${owner ? "Signed in" : c.invites.length ? `Invite sent to ${esc(c.invites[0].email)}` : "Not invited yet"}</dd></dl></div></section>
     <section class="panel"><div class="panel-h"><h2>Plan and status</h2></div><div class="panel-b"><dl class="kv">
       <dt>Plan</dt><dd>${planChip(c.plan)}</dd><dt>Status</dt><dd>${statusDot(c.status)}</dd>
       ${c.status === "trial" && c.trial_ends ? `<dt>Trial ends</dt><dd style="color:${d < 3 ? "var(--bad)" : "var(--t-orange)"}">${esc(fmtDate(c.trial_ends))} (${esc(untilText(c.trial_ends))})</dd>` : ""}
@@ -1467,7 +1467,7 @@ function vPreview() {
     <section class="panel"><div class="panel-h"><h2>Quick actions</h2></div><div class="qa">
       <a class="btn primary" href="#customer/${c.id}" data-act="closePreview">${ic("ext")}Open customer</a>
       <a class="btn" href="#customer/${c.id}" data-act="closePreview">${ic("station")}Stations and activation codes</a>
-      <a class="btn" href="#customer/${c.id}" data-act="closePreview">${ic("mail")}${owner ? "Invite another owner" : "Invite or resend to owner"}</a>
+      <a class="btn" href="#customer/${c.id}" data-act="closePreview">${ic("mail")}${owner ? "Invite another admin" : "Invite or resend to admin"}</a>
       ${c.status === "paused" ? `<button class="btn" data-act="pvResume">${ic("play")}Resume account</button>`
         : S.confirm === "pvpause" ? `<span class="confirm">Pause ${esc(c.name)}? Their stations stop recording right away. <button class="btn sm danger" data-act="pvPause">Pause</button><button class="btn sm" data-act="noConfirm">Cancel</button></span>`
         : `<button class="btn danger" data-act="pvAskPause">${ic("pause")}Pause account</button>`}
@@ -1589,14 +1589,14 @@ function vCustomer() {
           || `<div class="empty">Nothing shipped to them yet. Open a unit on the Hardware page to ship it.</div>`}</div></section>`; })() : ""}
 
       <section class="panel"><div class="panel-h"><h2>Their team</h2><span class="muted" style="font-size:13px">They add the rest of their people themselves</span></div>
-        <div class="list">${c.members.map((m) => `<div class="row"><span class="dot ${m.role === "owner" ? "ok" : ""}"></span><span>${m.name ? `<b>${esc(m.name)}</b><span class="sub">${esc(m.email)}</span>` : esc(m.email)}<span class="sub">${esc({ owner: "Owner", admin: "Admin", supervisor: "Supervisor", viewer: "View only" }[m.role])} · ${m.last_sign_in ? "signed in " + esc(ago(m.last_sign_in)) : "hasn't signed in yet"}</span></span><span></span></div>`).join("")}
-          ${c.invites.map((i) => `<div class="row"><span class="dot info"></span><span>${esc(i.email)}<span class="sub">Owner invite sent · expires ${esc(fmtDate(i.expires))}</span></span><button class="btn sm" data-act="resend" data-email="${esc(i.email)}">Resend</button></div>`).join("")}
-          ${!c.members.length && !c.invites.length ? `<div class="empty">Nobody yet. Invite their owner.</div>` : ""}</div>
+        <div class="list">${c.members.map((m) => `<div class="row"><span class="dot ${m.role === "owner" ? "ok" : ""}"></span><span>${m.name ? `<b>${esc(m.name)}</b><span class="sub">${esc(m.email)}</span>` : esc(m.email)}<span class="sub">${esc({ owner: "Admin", admin: "Manager", supervisor: "Supervisor", viewer: "View Only" }[m.role])} · ${m.last_sign_in ? "signed in " + esc(ago(m.last_sign_in)) : "hasn't signed in yet"}</span></span><span></span></div>`).join("")}
+          ${c.invites.map((i) => `<div class="row"><span class="dot info"></span><span>${esc(i.email)}<span class="sub">Admin invite sent · expires ${esc(fmtDate(i.expires))}</span></span><button class="btn sm" data-act="resend" data-email="${esc(i.email)}">Resend</button></div>`).join("")}
+          ${!c.members.length && !c.invites.length ? `<div class="empty">Nobody yet. Invite their admin.</div>` : ""}</div>
         ${S.lastInvite ? `<div class="panel-b" style="border-top:1px solid var(--line);display:flex;flex-direction:column;gap:8px"><b>Invite for ${esc(S.lastInvite.email)}</b>
           <p class="muted" style="margin:0;font-size:13.5px">The live site emails this link. It works once, for 14 days, and only for that email address.</p>
           <div class="inline-form"><span class="linkbox">${esc(inviteLink(S.lastInvite.token))}</span><button class="btn" data-copy="${esc(inviteLink(S.lastInvite.token))}">Copy link</button></div></div>` : ""}
-        <form class="panel-b inline-form" data-form="invite" style="border-top:1px solid var(--line)"><input class="field" name="email" type="email" placeholder="owner@theircompany.com" aria-label="Owner email" required>
-          <button class="btn">${owners.length ? "Invite another owner" : "Invite owner"}</button><div class="err" id="invErr" role="alert" style="flex-basis:100%"></div></form>
+        <form class="panel-b inline-form" data-form="invite" style="border-top:1px solid var(--line)"><input class="field" name="email" type="email" placeholder="admin@theircompany.com" aria-label="Admin email" required>
+          <button class="btn">${owners.length ? "Invite another admin" : "Invite admin"}</button><div class="err" id="invErr" role="alert" style="flex-basis:100%"></div></form>
       </section>
 
       <section class="panel"><div class="panel-h"><h2>Usage</h2></div><div class="panel-b"><dl class="kv">
@@ -1661,7 +1661,7 @@ function vNew() {
   const tzs = ["America/Phoenix", "America/Los_Angeles", "America/Denver", "America/Chicago", "America/New_York", "America/Anchorage", "Pacific/Honolulu"];
   const sec = (n, title, body) => `<section class="panel"><div class="panel-h"><h2>${n}. ${title}</h2></div><div class="panel-b fgrid">${body}</div></section>`;
   return `<div><a class="back" href="#customers">‹ All customers</a></div>
-    <div class="head"><div><h1>New customer</h1><p>Sets up their company, invites their owner and makes an activation code for each station you'll ship.</p></div></div>
+    <div class="head"><div><h1>New customer</h1><p>Sets up their company, invites their admin and makes an activation code for each station you'll ship.</p></div></div>
     <form data-form="new" class="cols" novalidate><div class="stack">
       ${sec(1, "Company", `<label class="full">Company name<input class="field" name="name" required maxlength="80" value="${esc(f.name)}" placeholder="Desert Ground Handling" data-new="name"></label>
         <label>Short ID<small>Letters, numbers, dashes. Used in support and links.</small><input class="field mono" name="slug" maxlength="40" value="${esc(f.slug)}" data-new="slug" placeholder="desertground"></label>
@@ -1676,7 +1676,7 @@ function vNew() {
         <label>Plan<select class="field" name="plan" data-new="plan">${PLANS.map((p) => `<option value="${p.id}" ${f.plan === p.id ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select></label>
         <label>Station limit<small>Blank = no limit</small><input class="field" type="number" min="0" max="500" name="station_limit" value="${esc(f.station_limit)}" data-new="station_limit"></label>
         <div class="full">${MODULES.map((m) => `<div class="modrow"><span><b>${esc(m.name)}</b><small>${esc(m.desc)}</small></span><span class="switch"><input type="checkbox" data-newmod="${m.id}" ${f.modules.includes(m.id) ? "checked" : ""} aria-label="${esc(m.name)}"><span></span></span></div>`).join("")}</div>`)}
-      ${sec(4, "Their owner", `<label class="full">Owner's email<small>They get an invite to the dashboard and can add the rest of their team.</small><input class="field" type="email" name="owner_email" value="${esc(f.owner_email)}" placeholder="manager@theircompany.com" data-new="owner_email"></label>
+      ${sec(4, "Their admin", `<label class="full">Admin's email<small>They get an invite to the dashboard and can add the rest of their team.</small><input class="field" type="email" name="owner_email" value="${esc(f.owner_email)}" placeholder="manager@theircompany.com" data-new="owner_email"></label>
         <label>Contact name<input class="field" name="contact_name" maxlength="60" value="${esc(f.contact_name)}" data-new="contact_name"></label>
         <label>Contact phone<input class="field" name="contact_phone" maxlength="30" value="${esc(f.contact_phone)}" data-new="contact_phone"></label>
         <label class="full">Your notes<small>Only you see these</small><textarea class="field" name="notes" maxlength="2000" data-new="notes">${esc(f.notes)}</textarea></label>`)}
@@ -1689,7 +1689,7 @@ function vNew() {
       <section class="panel"><div class="panel-h"><h2>Their station will look like</h2></div><div class="panel-b">${stationPreview(f, f.terms)}</div></section>
       <section class="panel"><div class="panel-b" style="display:flex;flex-direction:column;gap:10px">
         <dl class="kv" id="newSum"><dt>Company</dt><dd>${esc(f.name || "—")}</dd><dt>Plan</dt><dd>${esc(planName(f.plan))} · ${f.status === "trial" ? `${esc(f.trial_days)}-day trial` : "Active"}</dd>
-          <dt>Owner</dt><dd>${esc(f.owner_email || "—")}</dd><dt>Stations</dt><dd>${f.stations.filter((s) => s.trim()).length}</dd></dl>
+          <dt>Admin</dt><dd>${esc(f.owner_email || "—")}</dd><dt>Stations</dt><dd>${f.stations.filter((s) => s.trim()).length}</dd></dl>
         <div class="err" role="alert" id="newErr">${e ? esc(e.text) : ""}</div>
         <button class="btn primary" style="justify-content:center;padding:10px">Create customer</button></div></section>
     </div></form>`;
@@ -1699,7 +1699,7 @@ function vMade() {
   return `<div class="noprint"><a class="back" href="#customer/${c.id}">‹ ${esc(c.name)}</a></div>
     <div class="head"><div><h1>${esc(c.name)} is set up</h1><p>Pack one box per station. Codes work once and expire ${esc(fmtDate(m.stations[0].expires))}.</p></div>
       <div class="actions noprint"><button class="btn" data-act="print">Print setup sheets</button><a class="btn primary" href="#customer/${c.id}">Open customer</a></div></div>
-    <section class="panel noprint"><div class="panel-h"><h2>Owner invite</h2></div><div class="panel-b" style="display:flex;flex-direction:column;gap:8px">
+    <section class="panel noprint"><div class="panel-h"><h2>Admin invite</h2></div><div class="panel-b" style="display:flex;flex-direction:column;gap:8px">
       <span>${!LIVE ? `Sent to <b>${esc(m.invite.email)}</b>. On the live site this is emailed for you; here's the link if you want to send it yourself.`
         : m.invite.mailErr ? `<b>The email to ${esc(m.invite.email)} didn't send</b> (${esc(m.invite.mailErr)}). Send them this link yourself:`
         : `Emailed to <b>${esc(m.invite.email)}</b>. Here's the same link if you want to send it yourself.`}</span>
@@ -2003,7 +2003,7 @@ document.addEventListener("input", (e) => {
     // Update the preview and summary in place (re-drawing the form would close an open color picker).
     const nf = S.newForm; t.form.querySelector(".pv").outerHTML = stationPreview(nf, nf.terms);
     $("#newSum").innerHTML = `<dt>Company</dt><dd>${esc(nf.name || "—")}</dd><dt>Plan</dt><dd>${esc(planName(nf.plan))} · ${nf.status === "trial" ? `${esc(nf.trial_days)}-day trial` : "Active"}</dd>
-      <dt>Owner</dt><dd>${esc(nf.owner_email || "—")}</dd><dt>Stations</dt><dd>${nf.stations.filter((x) => x.trim()).length}</dd>`;
+      <dt>Admin</dt><dd>${esc(nf.owner_email || "—")}</dd><dt>Stations</dt><dd>${nf.stations.filter((x) => x.trim()).length}</dd>`;
     if (t.dataset.new === "primary" && hex(t.value)) t.form.querySelector('[data-pair="primary"]').value = t.value;
     return;
   }

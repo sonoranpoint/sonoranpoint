@@ -50,7 +50,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   check(org && b.psql(`select count(*) from stations where org_id = '${org}'`) === "2", "company + 2 stations exist in the database");
   // customer page loads detail
   P.dom.window.location.hash = "customer/" + org;
-  check(await P.until(() => /Owner invite sent/.test(P.text()) && /Ramp Office/.test(P.text())), "customer page loads stations and the pending invite", P.text());
+  check(await P.until(() => /Admin invite sent/.test(P.text()) && /Ramp Office/.test(P.text())), "customer page loads stations and the pending invite", P.text());
   // pause / resume
   P.click('[data-act="askPause"]'); await sleep(30); P.click('[data-act="doPause"]');
   check(await P.until(() => b.psql(`select status from organizations where id = '${org}'`) === "paused" && /This station is paused/.test(P.text())), "pause saves to the database");

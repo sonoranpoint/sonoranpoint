@@ -68,7 +68,7 @@ const drawer = () => doc.querySelector(".drawer")?.textContent.replace(/\s+/g, "
   check(!/Team access/.test(doc.querySelector(".snav").textContent) && E("S.route") === "overview", "View only: no Team access page");
   await go("equipment"); check(!doc.querySelector('[data-act="newEq"]'), "View only: no Add equipment");
   await click('[data-open^="equipment:"]'); check(!/Mark lost|Edit details|Limits for this item/.test(drawer()), "View only: item panel has no actions"); await click('.drawer [data-act="close"]');
-  await go("settings"); check(doc.querySelector("fieldset").disabled && /Ask an admin/.test(doc.body.textContent), "View only: settings are read-only");
+  await go("settings"); check(doc.querySelector("fieldset").disabled && /Ask a manager or admin/.test(doc.body.textContent), "View only: settings are read-only");
   await go("alerts"); check(!doc.querySelector('[data-act="ackStart"]'), "View only: can't mark alerts seen");
   va.value = "supervisor"; doc.querySelector("#viewAs").value = "supervisor"; doc.querySelector("#viewAs").dispatchEvent(new dom.window.Event("change", { bubbles: true })); await sleep(20);
   await go("employees"); check(!!doc.querySelector('[data-act="newEmp"]'), "Supervisor: can add employees");

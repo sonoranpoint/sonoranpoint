@@ -12,6 +12,8 @@ See README.md for the full product description.
 - `site/` — sonoranpoint.com (home, help, try): pitched broadly as asset checkout/tracking, not airport-only. The build adds demo
   copies of the station and dashboard under `try/` (no console: customers never see it). `window.SP_DEMO` forces demo data and
   swaps in a neutral company (Northwind Logistics, departments); `window.SP_TRY` starts the station set up. No real names or emails there.
+  The home page's company tree mirrors the demo's departments and stations. Light/dark switch: `site/theme.js` (data-theme, saved as
+  `sp.theme`, the dashboard's key; nothing saved = follow the device).
 - `deploy/build.py` — builds `deploy/dist/{app,console,station,site}`; `deploy/email-templates/` — Supabase auth emails
 - `tests/run.sh` — runs everything; `tests/ui/` — jsdom screen tests
 
@@ -64,6 +66,12 @@ See README.md for the full product description.
   made from it (`private.barcode_uid`: "B0C0DE" + hex of the code), so station functions take scans unchanged. Station: a
   scanner types like a keyboard; `scanToUid` maps the code to the record's NFC uid via the cache (offline too), else
   `barcodeUid`. Dashboard hides made-up IDs (`realTag`) and shows the barcode; `DB.hasBarcode` hides the fields before 24 runs.
+
+## Dashboard roles
+- Stored as viewer/supervisor/admin/owner (`org_members.role`, RLS, functions) but shown as View Only / Supervisor / Manager / Admin
+  (`ROLE_NAME` in the dashboard; the console's customer pages say "admin" for the customer's top role). Copy follows the shown names.
+  Station fob roles (employee/manager/admin) are separate. The trial-reminder email (migration 19) still says "owner or admin":
+  fix it in the next migration that touches email.
 
 ## Dashboard sidebar
 - Dark blue with the company's light logo (`organizations.logo_dark_url`, migration 22) when they have one; otherwise `.side.light`
