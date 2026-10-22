@@ -104,6 +104,12 @@ def build_site():
     out = DIST / "site"
     shutil.copytree(ROOT / "site", out, ignore=shutil.ignore_patterns("*.md"))
     (out / "_headers").write_text(SITE_HEADERS)
+    # Stamp the stylesheet and script with their content hash, so browsers never keep an old copy after a deploy.
+    for asset in ["site.css", "theme.js"]:
+        h = hashlib.sha256((out / asset).read_bytes()).hexdigest()[:10]
+        for page in out.rglob("*.html"):
+            t = page.read_text(); t2 = re.sub(r'((?:\.\./)*' + re.escape(asset) + r')"', r'\1?v=' + h + '"', t)
+            if t2 != t: page.write_text(t2)
     (out / "robots.txt").write_text("User-agent: *\nDisallow: /try/app/\nDisallow: /try/station/\nSitemap: https://sonoranpoint.com/sitemap.xml\n")
     brand = ["logo.png", "logo@2x.png", "logo-light.png", "logo-light@2x.png", "mark-64.png", "mark-180.png", "mark-512.png", "favicon.ico", "apple-touch-icon.png", "app-icon-512.png"]
     (out / "brand").mkdir(exist_ok=True)
