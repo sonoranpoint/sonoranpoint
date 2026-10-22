@@ -240,6 +240,17 @@ const api_set = async (id) => { E(`api.updateCustomer('${id}', { logo_dark_url: 
   await click('[data-seg="status:all"]');
   await go("customer/" + sky); await click('[data-act="reopen"]'); await sleep(20);
   check(E(`custOf("${sky}").status`) === "active", "reopen sets them back to active");
+  // Setup page: tie a unit to each station's box, then mark it shipped
+  const cx = E("DB.customers.find(c => c.name === 'Copper State Cargo').id"), sx = E(`api.addStation('${cx}', 'Box Test Room').station.id`);
+  E(`DB.hw.push({ id: "hwbox", serial: "SP-0960", kind: "station", status: "ready", org_id: null, station_id: null, events: [] })`);
+  await go("new"); E(`S.made = { id: '${cx}', invite: { email: 'x@y.co', token: 't'.repeat(48) }, stations: [{ id: '${sx}', name: custOf('${cx}').stations.find(s => s.id === '${sx}').name, code: 'ABCD-EFGH', expires: Date.now() + 7 * 86400000 }] }; render()`); await sleep(20);
+  const pick = doc.querySelector(`[data-shipunit="${sx}"]`);
+  check(!!pick && [...pick.options].some((o) => o.value === "hwbox"), "the setup page offers in-stock units for each station's box");
+  pick.value = "hwbox"; pick.dispatchEvent(new dom.window.Event("change", { bubbles: true })); await sleep(30);
+  check(E(`DB.hw.find(u => u.id === "hwbox").station_id`) === sx && /Unit SP-0960/.test(page()), "picking one ties it to that station");
+  await click(`[data-act="askShipBox"][data-id="${sx}"]`);
+  doc.querySelector('[data-form="shipbox:hwbox"] [name=tracking]').value = "1Z999AA10000000099"; await submit('[data-form="shipbox:hwbox"]'); await sleep(20);
+  check(E(`DB.hw.find(u => u.id === "hwbox").status`) === "shipped" && E(`DB.hw.find(u => u.id === "hwbox").tracking`) === "1Z999AA10000000099" && /Shipped/.test(page()), "mark it shipped with its tracking number");
   check(errors.length === 0, "no script errors " + errors.join(";"));
   process.exit();
 })();

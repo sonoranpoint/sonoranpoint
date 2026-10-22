@@ -196,6 +196,7 @@ label.btn { cursor: pointer; } label.btn.disabled { opacity: .55; cursor: defaul
 .check input { width: 18px; height: 18px; margin-top: 2px; flex: none; }
 .ship { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
 .shipcard { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; }
+.shipunit { display: flex; flex-direction: column; gap: 6px; font-size: 14px; } .shipunit label { display: flex; flex-direction: column; gap: 4px; font-weight: 700; font-size: 13.5px; }
 .shipcard h3 { margin: 0; font-family: var(--display); font-size: 24px; line-height: 1.05; }
 .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(22px + env(safe-area-inset-bottom, 0px)); background: var(--ink); color: var(--bg); padding: 10px 18px; border-radius: 10px; font-weight: 700; z-index: 40; box-shadow: var(--shadow); max-width: calc(100% - 32px); }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
@@ -1665,12 +1666,27 @@ function vMade() {
       <div class="inline-form"><span class="linkbox">${esc(inviteLink(m.invite.token))}</span><button class="btn" data-copy="${esc(inviteLink(m.invite.token))}">Copy link</button></div></div></section>
     <div class="ship">${m.stations.map((s) => `<div class="shipcard"><span class="muted" style="font-size:12.5px;letter-spacing:.08em;text-transform:uppercase;font-weight:700">${esc(c.name)}</span>
       <h3>${esc(s.name)}</h3><div class="codebox">${esc(s.code)}</div>
+      ${DB.hw ? shipUnit(c, s) : ""}
       <div><b style="font-size:13.5px">In the box</b>
         ${["Station: Pi, touchscreen and case, labeled “" + s.name + "”", "NFC reader, plugged in", "Power supply", "Blank admin tag (the setup screen asks for it)", "Quick-start card with this code written in"]
           .map((t, i) => `<label class="check"><input type="checkbox" data-pack="${s.id}:${i}">${esc(t)}</label>`).join("")}</div>
       <button class="btn sm noprint" data-copy="${esc(s.code)}" style="align-self:flex-start">Copy code</button></div>`).join("")}</div>`;
 }
 
+// Ties a box to the station on the setup page: pick an in-stock unit, then mark it shipped with its tracking number.
+function shipUnit(c, s) {
+  const u = hwForStation(s.id), cf = S.confirm;
+  if (!u) {
+    const free = (DB.hw || []).filter((x) => inStock(x, c));
+    return `<div class="shipunit noprint"><label>Unit in this box<select class="field" data-shipunit="${s.id}"><option value="">${free.length ? "Pick an in-stock unit" : "No station units in stock"}</option>
+      ${free.map((x) => `<option value="${esc(x.id)}">${esc(x.serial)}${x.pi_serial ? " · Pi " + esc(x.pi_serial) : ""}</option>`).join("")}</select></label></div>`;
+  }
+  const shipped = u.status === "shipped" || u.status === "installed";
+  return `<div class="shipunit"><span>Unit <b class="mono">${esc(u.serial)}</b> · <span class="muted">${esc(HW_STATUS[u.status][0])}${u.tracking ? " · " + esc(u.carrier || "") + " " + esc(u.tracking) : ""}</span></span>
+    ${shipped ? "" : cf === "ship:" + s.id ? `<form class="inline-form noprint" data-form="shipbox:${u.id}" style="flex-wrap:wrap"><select class="field" name="carrier" aria-label="Carrier">${Object.keys(CARRIERS).map((k) => `<option>${esc(k)}</option>`).join("")}</select>
+        <input class="field mono" name="tracking" placeholder="Tracking number" aria-label="Tracking number" maxlength="60"><button class="btn sm primary">Mark shipped</button><button class="btn sm" type="button" data-act="noConfirm">Cancel</button></form>`
+      : `<span class="noprint" style="display:flex;gap:6px"><button class="btn sm" data-act="askShipBox" data-id="${s.id}">Mark shipped</button><button class="btn sm" data-act="unshipUnit" data-id="${u.id}">Use another unit</button></span>`}</div>`;
+}
 // Customers with their stations, the ones needing a look first.
 function byCustomer(rows) {
   const g = new Map(); for (const s of rows) { if (!g.has(s.org)) g.set(s.org, []); g.get(s.org).push(s); }
@@ -1969,6 +1985,8 @@ document.addEventListener("change", async (e) => {
   if (t.form?.dataset.form === "account" && t.name === "status") { const tr = $("#trialEnds"); if (tr) tr.hidden = t.value !== "trial"; }
   if (t.dataset.mod) { const c = custOf(S.id); const mods = new Set(c.modules); t.checked ? mods.add(t.dataset.mod) : mods.delete(t.dataset.mod);
     const mr = await api.updateCustomer(c.id, { modules: [...mods], _note: `${MODULES.find((m) => m.id === t.dataset.mod).name} ${t.checked ? "on" : "off"}` }); if (mr && !mr.ok) { toast(mr.error); return render(); } toast(`${MODULES.find((m) => m.id === t.dataset.mod).name} ${t.checked ? "on" : "off"}`); return render(); }
+  if (t.dataset.shipunit && t.value) { const c = custOf(S.made?.id); const r = await api.saveHardware({ id: t.value, org_id: c.id, station_id: t.dataset.shipunit });
+    toast(r.ok ? `${r.serial} goes in this box` : r.error); return render(); }
   if (t.matches("[data-hwcust]")) { if (S.hwAssign) S.hwAssign.org = t.value; const sel = t.form.elements.station_id; sel.innerHTML = stationOptions(t.value, null);
     if (t.form.dataset.form === "hwship" && t.form.elements.ship_to) { const c = custOf(t.value); t.form.elements.ship_to.value = c ? [c.contact_name, c.name].filter(Boolean).join(", ") : ""; } return; }
   if (t.dataset.oprole) { const r = await api.setOperatorRole(t.dataset.oprole, t.value); toast(r.ok ? "Role changed" : r.error); return render(); }
@@ -2012,6 +2030,8 @@ document.addEventListener("click", async (e) => {
   if (a === "pvPause" || a === "pvResume") { const pc = custOf(S.preview); const r = await api.updateCustomer(pc.id, { status: a === "pvPause" ? "paused" : "active" }); S.confirm = null;
     toast(!r.ok ? r.error : a === "pvPause" ? "Account paused" : "Account resumed. Their stations come back on their own."); return render(); }
   if (a === "noConfirm") { S.confirm = null; return render(); }
+  if (a === "askShipBox") { S.confirm = "ship:" + t.dataset.id; return render(); }
+  if (a === "unshipUnit") { const r = await api.saveHardware({ id: t.dataset.id, org_id: "", station_id: "" }); toast(r.ok ? `${r.serial} is back in stock` : r.error); return render(); }
   if (a === "askClose") { S.confirm = "close"; return render(); }
   if (a === "doClose") { const r = await api.closeCustomer(c.id); S.confirm = null; toast(r.ok ? `${c.name} closed out` : r.error); return render(); }
   if (a === "reopen") { const r = await api.updateCustomer(c.id, { status: "active" }); toast(r.ok ? "Account reopened. Give each station a new code to bring it back." : r.error); return render(); }
@@ -2077,6 +2097,8 @@ async function onSubmit(f, kind, fd, d) {
     if (!r.ok) { S.formErr = { form: "hwnew", text: r.error }; return render(); }
     S.formErr = null; toast(`Added ${r.serial}`); location.hash = "unit/" + r.id; return;
   }
+  if (kind.startsWith("shipbox:")) { const r = await api.saveHardware({ id: kind.slice(8), status: "shipped", carrier: d.carrier, tracking: d.tracking });
+    S.confirm = null; toast(r.ok ? `${r.serial} shipped` : r.error); return render(); }
   if (kind === "hwship") {
     if (!d.org_id) { S.formErr = { form: "hwship", text: "Pick the customer it's going to." }; return render(); }
     const r = await api.saveHardware({ id: S.id, status: "shipped", org_id: d.org_id, station_id: d.station_id || null, carrier: d.carrier, tracking: d.tracking, shipped_at: d.shipped_at, ship_to: d.ship_to });
