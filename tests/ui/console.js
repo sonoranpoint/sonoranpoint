@@ -101,7 +101,11 @@ const submit = async (sel) => { doc.querySelector(sel).dispatchEvent(new dom.win
   await go("fleet");
   check(/Needs a look/.test(page()) && /Bag Room/.test(page()) && /Commissary/.test(page()), "fleet: problems first");
   await click('[data-seg="fleet:all"]');
-  check(doc.querySelectorAll("tbody tr").length === E("api.fleet().length"), "fleet: all stations");
+  check(doc.querySelectorAll("tbody tr:not(.grp)").length === E("api.fleet().length"), "fleet: all stations");
+  check(doc.querySelectorAll("tbody tr.grp").length === new Set(E("api.fleet().map(s => s.org)")).size, "stations are grouped under each customer");
+  doc.querySelector("tbody tr:not(.grp)").click(); await sleep(30);
+  check(E("!!S.preview"), "clicking a station opens its customer's quick view");
+  E("S.preview = null; renderLayer()");
   await go("log");
   check(/created customer/.test(page()) && /Cactus Air Logistics/.test(page()) && /status: paused/.test(page()), "activity log");
   // customer page polish
@@ -151,6 +155,20 @@ const submit = async (sel) => { doc.querySelector(sel).dispatchEvent(new dom.win
   dom.window.location.hash = "customer/" + E("DB.customers.find(c => c.name === 'Demo Air Services').id"); await sleep(60);
   check([...doc.querySelectorAll("tr.grp")].map((r) => r.textContent.trim()).join("|") === "Delta BW|United BW", "a customer's stations are grouped by contract");
   check(/what's under it never crosses/.test(doc.body.textContent) && /shares badges and gear/.test(doc.body.textContent), "their contract tree shows with its sharing rules");
+  // The bell opens a short list
+  doc.querySelector("[data-act=bellMenu]").click(); await sleep(20);
+  check(!doc.querySelector(".bellpop").hidden && doc.querySelectorAll(".bellpop .bellrow").length > 0 && /offline/.test(doc.querySelector(".bellpop").textContent), "the bell opens a list of what needs attention");
+  doc.querySelector(".bellpop .bellrow").click(); await sleep(30);
+  check(E("!!S.preview") && doc.querySelector(".bellpop").hidden, "picking one opens that customer's quick view and closes the list");
+  E("S.preview = null; renderLayer()");
+  // Customer search finds stations and serials
+  await go("customers");
+  const sq = doc.querySelector('[data-f="q"]'); sq.value = "commissary"; sq.dispatchEvent(new dom.window.Event("input", { bubbles: true })); await sleep(20);
+  check(/Sky Harbor Catering/.test(doc.querySelector(".ctable").textContent) && doc.querySelectorAll(".ctable tbody tr[data-preview]").length === 1, "search finds a customer by one of their stations");
+  const serial = E("(DB.hw || []).find(u => u.org_id)?.serial"), owner = E("custOf((DB.hw || []).find(u => u.org_id).org_id).name");
+  const sq2 = doc.querySelector('[data-f="q"]'); sq2.value = serial; sq2.dispatchEvent(new dom.window.Event("input", { bubbles: true })); await sleep(20);
+  check(doc.querySelector(".ctable").textContent.includes(owner), "...or by a hardware serial (" + serial + ")");
+  const sq3 = doc.querySelector('[data-f="q"]'); sq3.value = ""; sq3.dispatchEvent(new dom.window.Event("input", { bubbles: true })); await sleep(20);
   check(errors.length === 0, "no script errors " + errors.join(";"));
   process.exit();
 })();

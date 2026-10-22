@@ -275,6 +275,7 @@ body { background: var(--bg); color: var(--ink); }
 }
 
 tr.grp td { background: var(--surface-2); font-weight: 700; font-size: 13px; padding: 8px 14px; }
+tr.grp .glink { color: var(--ink); font-family: var(--head); font-size: 14.5px; text-decoration: none; } tr.grp .glink:hover { color: var(--brand-text); text-decoration: underline; }
 /* ---- Page type ---- */
 .head h1 { font-family: var(--display); font-weight: 600; font-size: 36px; letter-spacing: -.01em; line-height: 1.05; color: var(--ink); }
 .head p { color: var(--muted); }
@@ -355,6 +356,12 @@ a.kpi:hover { border-color: var(--brand); transform: translateY(-1px); }
 .pop small.k { margin-left: auto; color: var(--muted); font-weight: 400; font-size: 12.5px; }
 .pop .none { padding: 12px 10px; color: var(--muted); font-size: 14px; }
 .pop .grp { padding: 8px 10px 2px; color: var(--muted); font-size: 12px; font-weight: 700; }
+.bellwrap { position: relative; } .bellpop { right: 0; top: 50px; width: 340px; max-width: calc(100vw - 32px); }
+@media (max-width: 640px) { .bellwrap { position: static; } .bellpop { position: fixed; left: 16px; right: 16px; top: 64px; width: auto; max-width: none; } }
+.pop .bellrow { align-items: flex-start; } .pop .bellrow small { display: block; color: var(--muted); font-weight: 400; font-size: 12.5px; }
+.pop .bellrow .tone { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; flex: none; background: var(--surface-2); }
+.pop .bellrow .tone.bad svg { color: var(--t-red); } .pop .bellrow .tone.warn svg { color: var(--t-orange); } .pop .bellrow .tone.info svg { color: var(--t-blue); }
+.pop .bellall { justify-content: center; color: var(--brand-text); border-top: 1px solid var(--line); border-radius: 0 0 8px 8px; margin-top: 4px; }
 .themes { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); margin: 4px 0; padding: 4px 0; }
 .pop .themes button { font-weight: 400; } .pop .themes button[aria-pressed="true"] { font-weight: 700; }
 .pop svg.tick { margin-left: auto; color: var(--t-blue); }
@@ -1191,6 +1198,18 @@ const statusDot = (st) => `<span class="chip dotted ${STATUS[st][1]}">${STATUS[s
 const planChip = (p) => `<span class="chip plan ${esc(p)}">${esc(planName(p))}</span>`;
 const daysLeft = (ms) => Math.ceil((ms - Date.now()) / DAY);
 const PAGE = 8;
+// The bell's list: the same things as Needs attention on the overview, newest problems first.
+function bellList() {
+  const att = attention();
+  if (!att.length) return `<div class="none">Nothing needs a look. Every customer and station is fine.</div>`;
+  const icon = { trial: "clock", offline: "wifiOff", expired: "alert", waiting: "clock", owner: "user" };
+  const row = (x) => `<button data-preview="${x.c.id}" data-act="bellPick" class="bellrow">
+      <span class="tone ${x.tone}">${ic(icon[x.kind] || "alert")}</span><span><b>${esc(x.text)}</b><small>${esc(x.c.name)}</small></span></button>`;
+  const now = att.filter((x) => x.tone !== "info"), later = att.filter((x) => x.tone === "info");
+  return (now.length ? `<div class="grp">Needs a look now (${now.length})</div>${now.slice(0, 6).map(row).join("")}` : "")
+    + (later.length ? `<div class="grp">Also</div>${later.slice(0, Math.max(2, 7 - now.length)).map(row).join("")}` : "")
+    + `<a href="#customers" data-act="bellPick" class="bellall">${att.length > 7 ? `See all ${att.length} on the overview` : "Open the overview"}</a>`;
+}
 function vCustomers() {
   const all = api.customers(), now = Date.now();
   const fleet = api.fleet().filter((s) => s.customer_status !== "paused" && s.customer_status !== "cancelled");
@@ -1202,7 +1221,9 @@ function vCustomers() {
   const noOwner = all.filter((c) => !(c.has_owner ?? c.members.some((m) => m.role === "owner")) && c.status !== "paused" && c.status !== "cancelled");
   const att = attention();
   const q = S.f.q.trim().toLowerCase();
-  const rows = all.filter((c) => (S.f.status === "all" || c.status === S.f.status) && (!q || (c.name + " " + c.slug + " " + (c.contact_name || "") + " " + (c.contact_email || "")).toLowerCase().includes(q)))
+  const hay = (c) => [c.name, c.slug, c.contact_name, c.contact_email, ...c.stations.map((s) => s.name),
+    ...(DB.hw || []).filter((u) => u.org_id === c.id).map((u) => u.serial)].filter(Boolean).join(" ").toLowerCase();
+  const rows = all.filter((c) => (S.f.status === "all" || c.status === S.f.status) && (!q || hay(c).includes(q)))
     .sort((a, b) => a.name.localeCompare(b.name));
   const pages = Math.max(1, Math.ceil(rows.length / PAGE)); const pg = Math.min(Math.max(1, S.f.page || 1), pages); S.f.page = pg;
   const shown = rows.slice((pg - 1) * PAGE, pg * PAGE);
@@ -1233,7 +1254,7 @@ function vCustomers() {
     <div class="ov">
       <div class="stack">
         <section class="panel"><div class="panel-h"><h2>Customers<small>Every company using ${esc(VENDOR.name)}: their stations and account status.</small></h2>
-          <div class="ctools"><label class="search">${ic("search")}<input class="field" type="search" data-f="q" placeholder="Search customers" aria-label="Search customers" value="${esc(S.f.q)}"></label>
+          <div class="ctools"><label class="search">${ic("search")}<input class="field" type="search" data-f="q" placeholder="Search name, station or serial" aria-label="Search customers by name, short ID, station or hardware serial" value="${esc(S.f.q)}"></label>
             <div class="seg" role="group" aria-label="Status">${[["all", "All"], ["active", "Active"], ["trial", "Trial"], ["paused", "Paused"]].map(([k, l]) => `<button data-seg="status:${k}" class="${S.f.status === k ? "on" : ""}" aria-pressed="${S.f.status === k}">${l}</button>`).join("")}</div>
             <a class="btn primary" href="#new">${ic("plus")}Add customer</a></div></div>
           <div class="tablewrap"><table class="ctable"><thead><tr><th>Company</th><th>Plan</th><th>Status</th><th>Stations</th><th>Trial ends</th><th aria-label="Actions"></th></tr></thead><tbody>
@@ -1511,6 +1532,13 @@ function vMade() {
       <button class="btn sm noprint" data-copy="${esc(s.code)}" style="align-self:flex-start">Copy code</button></div>`).join("")}</div>`;
 }
 
+// Customers with their stations, the ones needing a look first.
+function byCustomer(rows) {
+  const g = new Map(); for (const s of rows) { if (!g.has(s.org)) g.set(s.org, []); g.get(s.org).push(s); }
+  const worst = (l) => Math.min(...l.map((s) => ({ bad: 0, warn: 1, info: 2, quiet: 3, ok: 4 }[s.state.tone] ?? 4)));
+  return [...g.entries()].sort((a, b) => worst(a[1]) - worst(b[1]) || a[1][0].customer.localeCompare(b[1][0].customer));
+}
+const contractNameOf = (s) => (custOf(s.org)?.contracts || []).find((k) => k.id === s.contract_id)?.name || "";
 function vFleet() {
   const all = api.fleet(); const now = Date.now();
   const problem = (s) => ["offline", "expired"].includes(s.state.key) || (s.state.key === "waiting" && now - s.created > 3 * DAY);
@@ -1521,11 +1549,13 @@ function vFleet() {
   return `<div class="head"><div><h1>Stations</h1><p>Every station at every customer.</p></div></div>
     <section class="panel"><div class="panel-h"><div class="seg" role="group" aria-label="Show">${[["problems", "Needs a look"], ["online", "Online"], ["waiting", "Waiting for setup"], ["all", "All"]].map(([k, l]) => `<button data-seg="fleet:${k}" class="${S.f.fleet === k ? "on" : ""}" aria-pressed="${S.f.fleet === k}">${l} (${counts[k]})</button>`).join("")}</div>
       <span class="muted" style="font-size:13px">Software: ${Object.entries(versions).map(([v, n]) => `<span class="mono">${esc(v)}</span> × ${n}`).join(", ")}</span></div>
-      <div class="tablewrap"><table><thead><tr><th>Station</th><th>Customer</th><th>Status</th><th>Last seen</th><th>Software</th><th>Unit</th><th>Admin tag</th></tr></thead><tbody>
-      ${rows.map((s) => `<tr class="click" data-go="customer/${s.org}" tabindex="0"><td><b>${esc(s.name)}</b><span class="sub">${esc(s.location || "")}</span></td><td>${esc(s.customer)}</td>
+      <div class="tablewrap"><table><thead><tr><th>Station</th><th>Status</th><th>Last seen</th><th>Software</th><th>Unit</th><th>Admin tag</th></tr></thead><tbody>
+      ${byCustomer(rows).map(([org, list]) => `<tr class="grp"><td colspan="6"><a class="glink" href="#customer/${org}">${esc(list[0].customer)}</a>
+          <span class="muted" style="font-weight:400"> · ${list.length} station${list.length === 1 ? "" : "s"}${list[0].customer_status === "paused" ? ", account paused" : list.some((x) => x.state.tone === "bad" || x.state.tone === "warn") ? "" : ", all fine"}</span></td></tr>`
+        + list.map((s) => `<tr class="click" data-preview="${s.org}" tabindex="0"><td><b>${esc(s.name)}</b><span class="sub">${esc([s.location, contractNameOf(s)].filter(Boolean).join(" · "))}</span></td>
         <td><span class="chip ${s.state.tone}">${esc(s.state.label)}</span>${["waiting", "expired"].includes(s.state.key) ? `<span class="sub">Shipped ${esc(ago(s.created))}</span>` : ""}</td>
-        <td>${s.last_seen ? esc(fmtWhen(s.last_seen)) : "—"}</td><td class="mono">${esc(s.version || "—")}</td><td>${hwForStation(s.id) ? `<a class="mono" href="#unit/${hwForStation(s.id).id}" style="color:var(--brand-text)">${esc(hwForStation(s.id).serial)}</a>` : `<span class="muted">—</span>`}</td><td>${s.admin_claimed_at ? "Registered" : s.activated_at ? `<span class="muted">Skipped</span>` : "—"}</td></tr>`).join("")
-        || `<tr><td colspan="7" class="empty">${S.f.fleet === "problems" ? "Nothing needs a look. Every station is online or on its way." : "None."}</td></tr>`}
+        <td>${s.last_seen ? esc(fmtWhen(s.last_seen)) : "—"}</td><td class="mono">${esc(s.version || "—")}</td><td>${hwForStation(s.id) ? `<a class="mono" href="#unit/${hwForStation(s.id).id}" style="color:var(--brand-text)">${esc(hwForStation(s.id).serial)}</a>` : `<span class="muted">—</span>`}</td><td>${s.admin_claimed_at ? "Registered" : s.activated_at ? `<span class="muted">Skipped</span>` : "—"}</td></tr>`).join("")).join("")
+        || `<tr><td colspan="6" class="empty">${S.f.fleet === "problems" ? "Nothing needs a look. Every station is online or on its way." : "None."}</td></tr>`}
       </tbody></table></div></section>`;
 }
 function vLog() {
@@ -1725,7 +1755,8 @@ function render() {
         <div class="gsearch" role="search">${ic("search")}<input type="search" id="gsearch" placeholder="Search customers, stations, hardware or people…" aria-label="Search customers, stations, hardware or people" autocomplete="off" value="${esc(S.gq || "")}">
           <div class="pop" id="gsResults" ${S.gq ? "" : "hidden"}>${S.gq ? searchResults(S.gq) : ""}</div></div>
         <span class="spacer"></span>
-        <a class="iconbtn" href="#customers" aria-label="${att ? `${att} things need attention` : "Nothing needs attention"}">${ic("bell")}${att ? `<span class="badge">${att}</span>` : ""}</a>
+        <div class="bellwrap"><button type="button" class="iconbtn" data-act="bellMenu" aria-haspopup="true" aria-expanded="${S.pop === "bell"}" aria-label="${att ? `${att} things need attention` : "Nothing needs attention"}">${ic("bell")}${att ? `<span class="badge">${att}</span>` : ""}</button>
+          <div class="pop bellpop" role="menu" ${S.pop === "bell" ? "" : "hidden"}>${bellList()}</div></div>
         <div class="account me"><button type="button" data-act="acctMenu" aria-haspopup="true" aria-expanded="${S.pop === "acct"}"><span class="avatar" aria-hidden="true">${esc(initials(OPERATOR.name))}</span><span><b>${esc(OPERATOR.name)}</b><small>${esc(role)}</small></span>${ic("chevDown")}</button>
           <div class="pop" role="menu" ${S.pop === "acct" ? "" : "hidden"}>
             <div class="who"><b>${esc(OPERATOR.name)}</b><small>${esc(role)}${OPERATOR.email ? " · " + esc(OPERATOR.email) : ""}</small></div>
@@ -1813,7 +1844,9 @@ document.addEventListener("mouseover", (e) => { const t = e.target.closest("[dat
   if (!t) { tip?.remove(); return; } if (!tip) { tip = document.createElement("div"); tip.className = "tip"; document.body.appendChild(tip); } tip.textContent = t.dataset.tip;
   const r = t.getBoundingClientRect(); tip.style.left = Math.min(window.innerWidth - tip.offsetWidth - 8, Math.max(8, r.left + r.width / 2 - tip.offsetWidth / 2)) + "px"; tip.style.top = Math.max(8, r.top - tip.offsetHeight - 8) + "px"; });
 document.addEventListener("click", async (e) => {
-  if (S.pop && !e.target.closest(".pop") && !e.target.closest("[data-act=acctMenu]")) { S.pop = null; const pp = $(".account .pop"); if (pp) pp.hidden = true; $("[data-act=acctMenu]")?.setAttribute("aria-expanded", "false"); }
+  if (S.pop && ((!e.target.closest(".pop") && !e.target.closest("[data-act=acctMenu],[data-act=bellMenu]")) || e.target.closest("[data-act=bellPick]"))) {
+    S.pop = null; document.querySelectorAll(".account .pop, .bellpop").forEach((pp) => (pp.hidden = true));
+    document.querySelectorAll("[data-act=acctMenu],[data-act=bellMenu]").forEach((b) => b.setAttribute("aria-expanded", "false")); }
   if (S.gq && !e.target.closest(".gsearch")) { const r = $("#gsResults"); if (r) r.hidden = true; }
   if (e.target.closest("[data-act=gsPick]")) { S.gq = ""; const i = $("#gsearch"); if (i) i.value = ""; $("#gsResults").hidden = true; }
   const pv = e.target.closest("[data-preview]"); if (pv) { S.preview = pv.dataset.preview; S.confirm = null; if (LIVE) live.detail(S.preview).then(() => { if (S.preview) renderLayer(); }).catch(() => {}); renderLayer(); $(".preview .x")?.focus(); return; }
@@ -1824,6 +1857,8 @@ document.addEventListener("click", async (e) => {
   const cp = e.target.closest("[data-copy]"); if (cp) { try { await navigator.clipboard.writeText(cp.dataset.copy); toast("Copied"); } catch { toast("Select it and copy"); } return; }
   const t = e.target.closest("[data-act]"); if (!t) return;
   const a = t.dataset.act, c = S.id ? custOf(S.id) : null;
+  if (a === "bellMenu") { S.pop = S.pop === "bell" ? null : "bell"; const pop = t.nextElementSibling; pop.hidden = S.pop !== "bell"; t.setAttribute("aria-expanded", String(S.pop === "bell"));
+    const ap = $(".account .pop"); if (ap && S.pop === "bell") ap.hidden = true; if (S.pop) pop.querySelector("button, a")?.focus(); return; }
   if (a === "acctMenu") { S.pop = S.pop === "acct" ? null : "acct"; const pop = t.nextElementSibling; pop.hidden = S.pop !== "acct"; t.setAttribute("aria-expanded", String(!!S.pop)); if (S.pop) pop.querySelector("a, button")?.focus(); return; }
   if (a === "rmLogo") { const r = await api.updateCustomer(c.id, { logo_url: "" }, "updated look"); toast(r.ok ? "Logo removed. Their stations show Sonoran Point's." : r.error); return render(); }
   if (a === "theme") { applyTheme(t.dataset.v); return render(); }
