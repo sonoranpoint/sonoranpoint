@@ -921,7 +921,7 @@ const live = {
         members: p.members || [], invites: p.invites || [],
         stations: p.detail ? p.stations : fleet.filter((f) => f.org_id === c.id).map(mapStation) };
     });
-    DB.log = lg.map((g, i) => ({ id: "lg" + i, at: ms(g.at), by: g.by || "", org: g.org_id, customer: g.org_id ? g.customer || "(deleted customer)" : null, action: g.action, details: detailText(g.details) }));
+    DB.log = lg.map((g, i) => ({ id: "lg" + i, at: ms(g.at), by: g.by || "Sonoran Point", org: g.org_id, customer: g.org_id ? g.customer || "(deleted customer)" : null, action: g.action, details: detailText(g.details) }));
   },
   async detail(id) {
     const r = await rpc("platform_customer", { p_org: id }); const c = custOf(id); if (!r.ok || !c) return;

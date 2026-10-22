@@ -1077,6 +1077,32 @@ update org_members set role = 'viewer' where user_id = 'cccccccc-0000-0000-0000-
 update stations set contract_id = null where name = 'Equipment Room 02';
 update employees set contract_id = null;
 
+\echo '--- Trial ending reminder'
+reset role;
+update organizations set status = 'trial', trial_ends_at = now() + interval '2 days', contact_email = 'Ops@DemoAir.example' where slug = 'demo';
+update organizations set status = 'trial', trial_ends_at = now() + interval '5 days' where slug <> 'demo';
+delete from private.email_batches;
+select pg_temp.ok(private.send_trial_reminders() = 1, 'one customer''s trial ends within 3 days');
+select pg_temp.ok((select array_agg(to_email order by to_email) from private.email_batches where subject like 'Your Sonoran Point trial ends %')
+                  = (select array_agg(distinct lower(x) order by lower(x)) from (select u.email x from org_members m join auth.users u on u.id = m.user_id
+                       where m.org_id = '00000000-0000-0000-0000-00000000d3e0' and m.role in ('owner', 'admin') union select 'ops@demoair.example') t),
+                  'owners, admins and the contact email are reminded (once each)');
+select pg_temp.ok(not exists (select 1 from private.email_batches where to_email = 'viewer@example.com'), 'viewers aren''t');
+select pg_temp.ok((select bool_and(reply_to like '%dez@vendor.example%' and html like '%reply to this email%' and html like '%/brand/logo.png%'
+                     and html like '%#overview?org=00000000-0000-0000-0000-00000000d3e0%')
+                   from private.email_batches where subject like 'Your Sonoran Point trial ends %'), 'replies come to us; the email has our logo and a dashboard link');
+select pg_temp.ok((select count(*) from private.email_batches where to_email = 'dez@vendor.example' and subject like 'Trial ending: Demo Air Services on %'
+                     and html like '%ops@demoair.example%' and html like '%/#customer/00000000-0000-0000-0000-00000000d3e0%') = 1, 'we get a copy saying who was emailed');
+select pg_temp.ok((select action from private.platform_log where org_id = '00000000-0000-0000-0000-00000000d3e0' order by id desc limit 1) = 'emailed a trial ending reminder',
+                  'the customer''s console page notes it');
+select pg_temp.ok(private.send_trial_reminders() = 0, 'only once per trial end date');
+update organizations set trial_ends_at = now() + interval '3 days' - interval '1 minute' where slug = 'demo';
+select pg_temp.ok(private.send_trial_reminders() = 1, 'a new end date gets its own reminder');
+update organizations set trial_ends_at = now() - interval '1 hour' where slug = 'demo';
+select pg_temp.ok(private.send_trial_reminders() = 0, 'nothing for a trial that''s already over');
+select pg_temp.ok(private.send_emails() = 0, 'send_emails runs the reminders without a Resend key');
+update organizations set status = 'active', trial_ends_at = null, contact_email = null where slug = 'demo';
+
 \echo '--- Deleting a company removes all its data'
 delete from organizations where slug = 'demo';
 select pg_temp.ok((select count(*) from equipment) = 0 and (select count(*) from transactions) = 0, 'company delete cascades cleanly');

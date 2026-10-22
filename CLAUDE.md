@@ -16,7 +16,7 @@ See README.md for the full product description.
 - Push to `main` → GitHub Actions runs `tests/run.sh db` + `ui`, then deploys app + console to Cloudflare Pages
   (projects `sonoranpoint-app`, `sonoranpoint-console`).
 - Database changes are NOT automatic. Add a new migration file (never edit one already run on the live
-  project), then tell Dez to run it in the Supabase SQL editor. Migrations 1–17 have been run (checked 2026-10-21), 18 handed over (
+  project), then tell Dez to run it in the Supabase SQL editor. Migrations 1–18 have been run (checked 2026-10-21;
   ask if unsure). Alert emails are live (Resend key in Vault, first send
   confirmed 2026-10-20).
 - Station changes reach the Pis by copying `deploy/dist/station` onto each Pi (not automatic yet).
@@ -38,6 +38,9 @@ See README.md for the full product description.
 - Alert emails go out from the database: `private.send_emails()` runs every minute (pg_cron) and posts to Resend
   with pg_net. The Resend key lives in Supabase Vault as `resend_api_key` (never in code). Check sends with
   `select status, error, to_email, subject from private.email_batches order by id desc limit 20;`
+- Trial reminder (migration 19): 3 days before `trial_ends_at`, `private.send_trial_reminders()` (run from
+  `send_emails()`) emails the customer's owners, admins and contact email (reply-to: operator owners) and copies
+  every operator; once per end date (`private.trial_reminders`). Nothing pauses automatically when a trial ends.
 
 ## Rules
 - Run `tests/run.sh db` and `tests/run.sh ui` before pushing; add tests for new behaviour.
