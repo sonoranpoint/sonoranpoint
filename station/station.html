@@ -1151,10 +1151,15 @@ function uiColor(hex) {   // their color, made dark enough to see on the light s
   for (let k = 0.92; contrast(c, "#f7f8fa") < 3 && k > 0.1; k -= 0.06) c = shade(hex, k);
   return c;
 }
+// The bar's color decides which logo fits: the light logo on a dark bar, the normal logo on a light one.
 function barStyle(o) {
   const main = /^#[0-9a-f]{6}$/i.test(o?.primary_color || "") ? o.primary_color : "#1F4E79";
-  if (o?.logo_url && !o?.logo_dark_url) return { bar: "#ffffff", ink: "#121820", edge: "#dde2e8", logo: o.logo_url };
-  return { bar: main, ink: inkOn(main), edge: lum(main) > 0.85 ? "#dde2e8" : "transparent", logo: o?.logo_dark_url || null };
+  const dark = lum(main) <= 0.4, edge = (c) => (lum(c) > 0.85 ? "#dde2e8" : "transparent");
+  if (o?.logo_dark_url && dark) return { bar: main, ink: "#ffffff", edge: "transparent", logo: o.logo_dark_url };       // light logo on their dark color
+  if (o?.logo_url && !dark) return { bar: main, ink: inkOn(main), edge: edge(main), logo: o.logo_url };                  // normal logo on their light color
+  if (o?.logo_url) return { bar: "#ffffff", ink: "#121820", edge: "#dde2e8", logo: o.logo_url };                          // normal logo, dark color: white bar
+  if (o?.logo_dark_url) { const d = uiColor(main); return { bar: d, ink: "#ffffff", edge: "transparent", logo: o.logo_dark_url }; }  // only a light logo, light color: darken the bar
+  return { bar: main, ink: inkOn(main), edge: edge(main), logo: null };                                                   // no logo: their color and name
 }
 function applyBrand() {
   const o = S.saved.config?.organization; const r = document.documentElement.style;

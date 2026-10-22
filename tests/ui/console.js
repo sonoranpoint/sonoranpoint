@@ -220,7 +220,9 @@ const api_set = async (id) => { E(`api.updateCustomer('${id}', { logo_dark_url: 
   check(E(`custOf('${da}').logo_dark_url`) === "" && !doc.querySelector('[data-act="rmLogoDark"]'), "and can be removed");
   // Station preview follows the same color rules
   E(`Object.assign(custOf('${da}'), { primary: "#FFFFFF", logo_url: "data:image/png;base64,AAA", logo_dark_url: "" })`); await go("customers"); await go("customer/" + da);
-  check(/background:#ffffff/.test(doc.querySelector(".pv-top").getAttribute("style")) && !doc.querySelector('[data-pair="accent"]'), "preview: white top bar with their logo; no accent color to pick");
+  check(/background:#ffffff/i.test(doc.querySelector(".pv-top").getAttribute("style")) && !doc.querySelector('[data-pair="accent"]'), "preview: white top bar with their logo; no accent color to pick");
+  E(`Object.assign(custOf('${da}'), { primary: "#FBFAFF", logo_dark_url: "data:image/png;base64,BBB" })`); await go("customers"); await go("customer/" + da);
+  check(doc.querySelector(".pv-top img")?.getAttribute("src") === "data:image/png;base64,AAA", "preview: a light main color keeps the normal logo even with a light one uploaded");
   check(E("stContrast(stUi('#FFFFFF'), '#f7f8fa')") >= 3, "preview rings use a color that shows on the screen");
   check(errors.length === 0, "no script errors " + errors.join(";"));
   process.exit();

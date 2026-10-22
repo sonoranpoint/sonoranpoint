@@ -45,8 +45,8 @@ See README.md for the full product description.
 ## Dashboard sidebar
 - Dark blue with the company's light logo (`organizations.logo_dark_url`, migration 22) when they have one; otherwise `.side.light`
   (white, their normal logo or name). Dark appearance keeps it dark either way. Sonoran Point's logo sits at the bottom (`.sp-foot`).
-- Station colors (`applyBrand` in station.html, mirrored by `stationPreview` in the console): top bar is white with the normal logo
-  unless there's a light logo (then main color + light logo; no logo at all = main color + name). Rings/buttons use the main
+- Station colors (`applyBrand` in station.html, mirrored by `stationPreview` in the console): top bar uses the logo that fits the main color
+  (dark main + light logo -> light logo on it; light main -> normal logo on it; dark main with only a normal logo -> white bar; no logo = main + name). Rings/buttons use the main
   color darkened to 3:1 against the screen (`uiColor`). The accent color is no longer offered (kept in the DB; manager tag is fixed).
 
 ## Email
