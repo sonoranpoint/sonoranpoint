@@ -1269,14 +1269,15 @@ function viewSwitch() {
 async function toPng(file) {
   if (!/^image\/(png|jpeg|svg\+xml|webp)$/.test(file.type)) throw new Error("Pick a PNG, JPG, SVG or WebP image.");
   if (file.size > 10e6) throw new Error("That image is over 10 MB.");
-  const url = URL.createObjectURL(file);
+  // Read as a data: URL (the site's security policy allows data: images, not blob: ones).
+  const url = await new Promise((ok, bad) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = () => bad(new Error("That image couldn't be read.")); r.readAsDataURL(file); });
   try {
     const img = await new Promise((ok, bad) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => bad(new Error("That image couldn't be opened.")); i.src = url; });
     let w = img.naturalWidth || 1024, h = img.naturalHeight || 1024;
     const k = file.type === "image/svg+xml" ? 1024 / Math.max(w, h) : Math.min(1, 1024 / Math.max(w, h)); w = Math.round(w * k); h = Math.round(h * k);
     const c = document.createElement("canvas"); c.width = w; c.height = h; c.getContext("2d").drawImage(img, 0, 0, w, h);
     return await new Promise((ok, bad) => c.toBlob((b) => (b ? ok(b) : bad(new Error("That image couldn't be converted."))), "image/png"));
-  } finally { URL.revokeObjectURL(url); }
+  } finally { /* data: URLs need no cleanup */ }
 }
 // Saves the logo: Supabase Storage on the live site (logos/<company>/…), kept in the page in the demo.
 async function uploadLogo(file) {
