@@ -18,28 +18,36 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     const text = () => (doc.querySelector("#app").textContent + " " + doc.querySelector("#layer").textContent).replace(/\s+/g, " ");
     const until = async (fn, ms = 6000) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { try { if (fn()) return true; } catch {} await sleep(50); } return false; };
     const type = (sel, v) => { const el = doc.querySelector(sel); el.value = v; el.dispatchEvent(new dom.window.Event("input", { bubbles: true })); };
-    const submit = (sel) => doc.querySelector(sel).dispatchEvent(new dom.window.Event("submit", { bubbles: true, cancelable: true }));
-    const click = (sel) => { const el = doc.querySelector(sel); if (!el) throw new Error("missing " + sel + " :: " + text().slice(0, 200)); el.click(); };
+    // Before each click or submit, wait for the console to finish what it's doing (database calls, a save still refreshing),
+    // like a person would; otherwise a late refresh can undo what the test just opened.
+    const settle = async () => {
+      const w = dom.window;
+      if (typeof w.rpc === "function" && !w.rpc.tracked) { const o = w.rpc; w.__inflight = 0; w.rpc = Object.assign(async (...a) => { w.__inflight++; try { return await o(...a); } finally { w.__inflight--; } }, { tracked: true }); }
+      await until(() => !(w.__inflight > 0) && !E("typeof S === 'object' && S.busy"), 8000); await sleep(20);
+    };
+    // Submits only wait out a save in progress (it would be ignored); fields were just filled in, so no waiting for refreshes.
+    const submit = async (sel) => { await until(() => !E("typeof S === 'object' && S.busy"), 8000); doc.querySelector(sel).dispatchEvent(new dom.window.Event("submit", { bubbles: true, cancelable: true })); };
+    const click = async (sel) => { await settle(); const el = doc.querySelector(sel); if (!el) throw new Error("missing " + sel + " :: " + text().slice(0, 200)); el.click(); };
     return { dom, doc, E, text, until, type, submit, click, errors };
   };
   // not signed in -> sign-in screen; customer can't use it
   let P = open();
   check(await P.until(() => /Sign in/.test(P.text()) && P.doc.querySelector('[data-form="signin"]')), "live console asks you to sign in");
-  P.type('[name=email]', "morgan@demoair.example"); P.type('[name=password]', "wrong"); P.submit('[data-form="signin"]');
+  P.type('[name=email]', "morgan@demoair.example"); P.type('[name=password]', "wrong"); await P.submit('[data-form="signin"]');
   check(await P.until(() => /don't match/.test(P.text())), "wrong password -> clear message");
-  P.type('[name=email]', "morgan@demoair.example"); P.type('[name=password]', "pass1234"); P.submit('[data-form="signin"]');
+  P.type('[name=email]', "morgan@demoair.example"); P.type('[name=password]', "pass1234"); await P.submit('[data-form="signin"]');
   check(await P.until(() => /isn't on the team/.test(P.text())), "a customer's account is turned away");
   // operator
   P = open();
   await P.until(() => P.doc.querySelector('[data-form="signin"]'));
-  P.type('[name=email]', "g.ryan@sonoranpoint.com"); P.type('[name=password]', "pass1234"); P.submit('[data-form="signin"]');
+  P.type('[name=email]', "g.ryan@sonoranpoint.com"); P.type('[name=password]', "pass1234"); await P.submit('[data-form="signin"]');
   check(await P.until(() => /Demo Air Services/.test(P.text()) && /Customers/.test(P.text())), "operator signs in and sees real customers", P.text());
   check(/Dez/.test(P.text()) && /Sign out/.test(P.text()) && !/Demo data/.test(P.text()), "shows who's signed in, no demo label", P.E("JSON.stringify({ready: S.ready, view: AUTH.view, route: S.route})") + " || " + P.doc.querySelector("#app").textContent.slice(0, 300));
   // create a customer
   P.dom.window.location.hash = "new"; await P.until(() => P.doc.querySelector('[data-new="name"]'));
   P.type('[data-new="name"]', "Cactus Air Logistics"); P.type('[data-new="owner_email"]', "Boss@CactusAir.example");
-  P.click('[data-act="addStationRow"]'); await sleep(50); P.type('[data-station="1"]', "Ramp Office");
-  P.submit('[data-form="new"]');
+  await P.click('[data-act="addStationRow"]'); await sleep(50); P.type('[data-station="1"]', "Ramp Office");
+  await P.submit('[data-form="new"]');
   check(await P.until(() => /Cactus Air Logistics is set up/.test(P.text())), "create customer in the real database", P.text());
   const codes = [...P.doc.querySelectorAll(".shipcard .codebox")].map((x) => x.textContent);
   check(codes.length === 2 && codes.every((c) => /^[A-Z2-9]{4}-[A-Z2-9]{4}$/.test(c)), "two real activation codes " + codes.join(" "));
@@ -52,40 +60,41 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   P.dom.window.location.hash = "customer/" + org;
   check(await P.until(() => /Admin invite sent/.test(P.text()) && /Ramp Office/.test(P.text())), "customer page loads stations and the pending invite", P.text());
   // pause / resume
-  P.click('[data-act="askPause"]'); await sleep(30); P.click('[data-act="doPause"]');
+  await P.click('[data-act="askPause"]'); await sleep(30); await P.click('[data-act="doPause"]');
   check(await P.until(() => b.psql(`select status from organizations where id = '${org}'`) === "paused" && /This station is paused/.test(P.text())), "pause saves to the database");
-  P.click('[data-act="resume"]');
+  await P.click('[data-act="resume"]');
   check(await P.until(() => b.psql(`select status from organizations where id = '${org}'`) === "active"), "resume saves");
   // look
-  P.type('[data-form="brand"] [name=accent]', "#cc3300"); P.submit('[data-form="brand"]');
+  P.type('[data-form="brand"] [name=accent]', "#cc3300"); await P.submit('[data-form="brand"]');
   check(await P.until(() => b.psql(`select accent_color from organizations where id = '${org}'`) === "#CC3300"), "look saves");
   // account (notes are private); wait for the look save to finish first
   await P.until(() => !P.E("S.busy"));
   P.doc.querySelector('[data-form="account"] [name=notes]').value = "Pilot at PHX"; P.doc.querySelector('[data-form="account"] [name=station_limit]').value = "3";
-  P.submit('[data-form="account"]');
+  await P.submit('[data-form="account"]');
   check(await P.until(() => b.psql(`select notes from private.customer_notes where org_id = '${org}'`) === "Pilot at PHX" && b.psql(`select station_limit from organizations where id = '${org}'`) === "3"), "account + private notes save", P.E("JSON.stringify(S.formErr)") + " " + b.psql(`select coalesce(notes,'-') from private.customer_notes where org_id = '${org}'`) + " " + b.psql(`select station_limit from organizations where id = '${org}'`));
   // add station, new code, disconnect
-  P.type('[data-form="addStation"] [name=name]', "Bag Room"); P.submit('[data-form="addStation"]');
+  await P.until(() => !P.E("S.busy"));   // the account save is still refreshing; a second submit meanwhile is ignored
+  P.type('[data-form="addStation"] [name=name]', "Bag Room"); await P.submit('[data-form="addStation"]');
   check(await P.until(() => /Activation code for Bag Room/.test(P.text())), "add a station -> code");
   const sid = b.psql(`select id from stations where org_id = '${org}' and name = 'Ramp Office'`);
-  P.click(`[data-act="askCode"][data-id="${sid}"]`); await sleep(30); P.click(`[data-act="doCode"][data-id="${sid}"]`);
+  await P.click(`[data-act="askCode"][data-id="${sid}"]`); await sleep(30); await P.click(`[data-act="doCode"][data-id="${sid}"]`);
   check(await P.until(() => /Activation code for Ramp Office/.test(P.text())), "new code for a station");
-  P.click(`[data-act="askRevoke"][data-id="${sid}"]`); await sleep(30); P.click(`[data-act="doRevoke"][data-id="${sid}"]`);
+  await P.click(`[data-act="askRevoke"][data-id="${sid}"]`); await sleep(30); await P.click(`[data-act="doRevoke"][data-id="${sid}"]`);
   check(await P.until(() => b.psql(`select revoked_at is not null from stations where id = '${sid}'`) === "t" && /Disconnected.*Ramp Office/.test(P.text()) && !!P.doc.querySelector(`[data-act="askRemove"][data-id="${sid}"]`)), "disconnect a station");
-  P.click(`[data-act="askRemove"][data-id="${sid}"]`); await sleep(30); P.click(`[data-act="doRemove"][data-id="${sid}"]`);
+  await P.click(`[data-act="askRemove"][data-id="${sid}"]`); await sleep(30); await P.click(`[data-act="doRemove"][data-id="${sid}"]`);
   check(await P.until(() => b.psql(`select removed_at is not null from stations where id = '${sid}'`) === "t" && !P.doc.querySelector(`[data-id="${sid}"]`)), "remove it for good (live)");
   { const bag = b.psql(`select id from stations where org_id = '${org}' and name = 'Bag Room'`);
-    P.click(`[data-act="askEditStation"][data-id="${bag}"]`); await P.until(() => P.doc.querySelector(`[data-form="stEdit:${bag}"]`));
+    await P.click(`[data-act="askEditStation"][data-id="${bag}"]`); await P.until(() => P.doc.querySelector(`[data-form="stEdit:${bag}"]`));
     P.doc.querySelector(`[data-form="stEdit:${bag}"] [name=name]`).value = "Bag Room North"; P.doc.querySelector(`[data-form="stEdit:${bag}"] [name=location]`).value = "Terminal 4";
-    P.submit(`[data-form="stEdit:${bag}"]`);
+    await P.submit(`[data-form="stEdit:${bag}"]`);
     check(await P.until(() => b.psql(`select s.name || '|' || l.name from stations s join locations l on l.id = s.location_id where s.id = '${bag}'`) === "Bag Room North|Terminal 4"), "rename and move a station from the console (live)");
-    await P.until(() => P.doc.querySelector(`[data-act="stHist"][data-id="${bag}"]`)); P.click(`[data-act="stHist"][data-id="${bag}"]`);
+    await P.until(() => P.doc.querySelector(`[data-act="stHist"][data-id="${bag}"]`)); await P.click(`[data-act="stHist"][data-id="${bag}"]`);
     check(await P.until(() => /Renamed from Bag Room to Bag Room North/.test(P.doc.querySelector("tr.histrow")?.textContent || "") && /Sonoran Point/.test(P.doc.querySelector("tr.histrow")?.textContent || "")), "its history (live)"); }
   // resend invite
-  P.type('[data-form="invite"] [name=email]', "second@cactusair.example"); P.submit('[data-form="invite"]');
+  P.type('[data-form="invite"] [name=email]', "second@cactusair.example"); await P.submit('[data-form="invite"]');
   check(await P.until(() => /Invite for second@cactusair.example/.test(P.text()) && b.outbox.some((m) => m.email === "second@cactusair.example")), "invite another owner (email sent)");
   // fleet + log
-  P.dom.window.location.hash = "fleet"; await sleep(100); P.click('[data-seg="fleet:all"]'); await sleep(50);
+  P.dom.window.location.hash = "fleet"; await sleep(100); await P.click('[data-seg="fleet:all"]'); await sleep(50);
   check(/Bag Room/.test(P.text()) && /Cactus Air Logistics/.test(P.text()), "fleet shows the real stations");
   P.dom.window.location.hash = "log"; await sleep(100);
   check(/created customer/.test(P.text()) && /status: paused/.test(P.text()) && /Dez/.test(P.text()), "your activity log from the database", P.text());
@@ -93,7 +102,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   // team
   P.dom.window.location.hash = "team";
   check(await P.until(() => /Invite someone/.test(P.text()) && /Dez/.test(P.text()) && /\(you\)/.test(P.text())), "team page for the owner", P.text());
-  P.type('[data-form="opinvite"] [name=name]', "Casey"); P.type('[data-form="opinvite"] [name=email]', "Casey@SonoranPoint.example"); P.submit('[data-form="opinvite"]');
+  P.type('[data-form="opinvite"] [name=name]', "Casey"); P.type('[data-form="opinvite"] [name=email]', "Casey@SonoranPoint.example"); await P.submit('[data-form="opinvite"]');
   const om = await P.until(() => b.outbox.some((m) => m.email === "casey@sonoranpoint.example"));
   const omail = b.outbox.find((m) => m.email === "casey@sonoranpoint.example");
   check(om && /^https:\/\/console\.sonoranpoint\.test\/\?opinvite=[0-9a-f]{48}$/.test(omail.redirect_to), "operator invite emailed with a console link: " + omail?.redirect_to);
@@ -102,17 +111,17 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   // Casey opens the link
   const Q = open(omail.redirect_to);
   await Q.until(() => Q.doc.querySelector('[data-form="signin"]'));
-  Q.type('[name=email]', "casey@sonoranpoint.example"); Q.type('[name=password]', "pass1234"); Q.submit('[data-form="signin"]');
+  Q.type('[name=email]', "casey@sonoranpoint.example"); Q.type('[name=password]', "pass1234"); await Q.submit('[data-form="signin"]');
   check(await Q.until(() => /Demo Air Services/.test(Q.text()) && /Welcome, Casey/.test(Q.text())), "invited person signs in and is in", Q.text());
   check(/Casey/.test(Q.doc.querySelector(".me").textContent) && /Operator/.test(Q.doc.querySelector(".me").textContent) && !/opinvite/.test(Q.dom.window.location.href), "rail shows their name and role; link cleaned up");
   Q.dom.window.location.hash = "team";
   check(await Q.until(() => Q.doc.querySelector('[data-form="myname"]') && !/Invite someone/.test(Q.text()) && !Q.doc.querySelector("[data-oprole]")), "operators can't invite or change roles");
-  Q.type('[data-form="myname"] [name=name]', "Casey Nguyen"); Q.submit('[data-form="myname"]');
+  Q.type('[data-form="myname"] [name=name]', "Casey Nguyen"); await Q.submit('[data-form="myname"]');
   check(await Q.until(() => b.psql("select name from private.platform_operators po join auth.users u on u.id = po.user_id where u.email = 'casey@sonoranpoint.example'") === "Casey Nguyen"
     && /Casey Nguyen/.test(Q.doc.querySelector(".me").textContent)), "operator sets their own name");
   const R = open(omail.redirect_to);   // used link
   await R.until(() => R.doc.querySelector('[data-form="signin"]'));
-  R.type('[name=email]', "nobody@example.com"); R.type('[name=password]', "pass1234"); R.submit('[data-form="signin"]');
+  R.type('[name=email]', "nobody@example.com"); R.type('[name=password]', "pass1234"); await R.submit('[data-form="signin"]');
   check(await R.until(() => /already been used/.test(R.text())), "a used invite link is refused", R.text());
   // owner changes role and removes
   P.dom.window.location.hash = "customers"; await sleep(50); P.dom.window.location.hash = "team";
@@ -121,7 +130,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const cid = b.psql("select id from auth.users where email = 'casey@sonoranpoint.example'");
   const sel = P.doc.querySelector(`[data-oprole="${cid}"]`); sel.value = "owner"; sel.dispatchEvent(new P.dom.window.Event("change", { bubbles: true }));
   check(await P.until(() => b.psql(`select role from private.platform_operators where user_id = '${cid}'`) === "owner"), "owner promotes someone");
-  P.click(`[data-act="askRmOp"][data-id="${cid}"]`); await sleep(30); P.click(`[data-act="doRmOp"][data-id="${cid}"]`);
+  await P.click(`[data-act="askRmOp"][data-id="${cid}"]`); await sleep(30); await P.click(`[data-act="doRmOp"][data-id="${cid}"]`);
   check(await P.until(() => b.psql(`select count(*) from private.platform_operators where user_id = '${cid}'`) === "0" && !/Casey Nguyen/.test(P.doc.querySelector(".list").textContent)), "owner removes someone");
   P.dom.window.location.hash = "log"; await sleep(150);
   check(/invited operator/.test(P.text()) && /removed operator/.test(P.text()) && /casey@sonoranpoint.example, as Operator/.test(P.text()), "team changes in the activity log", P.text().slice(0, 800));
@@ -130,13 +139,13 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   P.dom.window.location.hash = "hardware";
   check(await P.until(() => /No hardware yet/.test(P.text())), "hardware page (empty)", P.text().slice(0, 300));
   P.dom.window.location.hash = "unit/new"; await P.until(() => P.doc.querySelector('[data-form="hwnew"]'));
-  P.type('[data-form="hwnew"] [name=pi_serial]', "10000000cafe0001"); P.submit('[data-form="hwnew"]');
+  P.type('[data-form="hwnew"] [name=pi_serial]', "10000000cafe0001"); await P.submit('[data-form="hwnew"]');
   check(await P.until(() => /SP-0001/.test(P.text()) && /added this unit/.test(P.text())), "add a unit to the database", P.text().slice(0, 400));
   const hid = b.psql("select id from private.hardware_units where serial = 'SP-0001'");
   const bag = b.psql(`select id from stations where org_id = '${org}' and name = 'Bag Room North'`);
   const cs = P.doc.querySelector('[data-form="hwship"] [name=org_id]'); cs.value = org; cs.dispatchEvent(new P.dom.window.Event("change", { bubbles: true })); await sleep(30);
   P.doc.querySelector('[data-form="hwship"] [name=station_id]').value = bag;
-  P.type('[data-form="hwship"] [name=tracking]', "1Z999AA10000000002"); P.submit('[data-form="hwship"]');
+  P.type('[data-form="hwship"] [name=tracking]', "1Z999AA10000000002"); await P.submit('[data-form="hwship"]');
   check(await P.until(() => b.psql(`select status || '|' || station_id || '|' || tracking from private.hardware_units where id = '${hid}'`) === `shipped|${bag}|1Z999AA10000000002`
     && /marked it shipped/.test(P.text())), "ship it to a station", P.text().slice(0, 600));
   // the customer activates the Bag Room station with its code
@@ -147,8 +156,25 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   check(await P.until(() => /SP-0001/.test(P.text())), "customer page shows the unit");
   P.dom.window.location.hash = "log"; await sleep(150);
   check(/hardware shipped/.test(P.text()) && /SP-0001/.test(P.text()), "shipping shows in activity");
+  // Requests: a website message shows up, gets picked up, answered and noted
+  b.psql(`set role anon; select submit_contact('Priya Shah', 'priya@cactusfreight.example', 'We lose track of 40 scanners.', 'Cactus Freight', null, 'Pricing'); reset role;`);
+  P.dom.window.location.hash = "requests";
+  for (let i = 0; i < 10 && !/Priya Shah/.test(P.text()); i++) { await P.E("live.refresh()"); P.E("render()"); await sleep(100); }
+  check(await P.until(() => /Priya Shah/.test(P.text()) && /Cactus Freight/.test(P.text())), "a website message shows in Requests (live)", P.text().slice(0, 600));
+  const rid = b.psql(`select id from private.contact_requests where email = 'priya@cactusfreight.example'`);
+  P.dom.window.location.hash = "request/" + rid;
+  check(await P.until(() => /lose track of 40 scanners/.test(P.text()) && /sent this from the website/.test(P.text())), "it opens with its history (live)", P.text().slice(0, 600));
+  await P.click('[data-act="reqTake"]');
+  check(await P.until(() => b.psql(`select status from private.contact_requests where id = ${rid}`) === "open"), "take it (live)");
+  await P.until(() => !P.E("S.busy"));
+  P.type('[data-form="reqreply"] [name=text]', "Hi Priya, here's a quote."); await P.submit('[data-form="reqreply"]');
+  check(await P.until(() => b.psql(`select count(*) from private.email_batches where to_email = 'priya@cactusfreight.example'`) === "1"
+    && b.psql(`select status from private.contact_requests where id = ${rid}`) === "waiting" && /emailed priya@cactusfreight.example/.test(P.text())), "reply by email (live)", P.text().slice(0, 600));
+  await P.until(() => !P.E("S.busy"));
+  P.type('[data-form="reqnote"] [name=note]', "Sent the pricing sheet."); await P.submit('[data-form="reqnote"]');
+  check(await P.until(() => /Sent the pricing sheet\./.test(P.text())), "add a note (live)");
   // sign out
-  P.click('[data-act="signOut"]');
+  await P.click('[data-act="signOut"]');
   check(await P.until(() => P.doc.querySelector('[data-form="signin"]')), "sign out");
   check(P.errors.length === 0, "no script errors " + P.errors.join(";"));
   b.pg.kill(); b.server.close(); process.exit();

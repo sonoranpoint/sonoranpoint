@@ -76,6 +76,10 @@ h1, h2, h3 { text-wrap: balance; }
 .panel-h { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
 .panel-h h2 { margin: 0; font-size: 13px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
 .panel-b { padding: 14px 18px; }
+.msg { white-space: pre-wrap; margin: 0; line-height: 1.55; }
+.feed .sub.msg { margin-top: 4px; color: var(--ink); background: var(--surface-2); border-radius: 8px; padding: 8px 10px; display: block; }
+tr.unread td:first-child b::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--t-blue); margin-right: 8px; vertical-align: middle; }
+.infobox { background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--t-blue); border-radius: 10px; padding: 12px 14px; font-size: 14px; }
 .cols { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr); gap: 20px; align-items: start; }
 .stack { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
 @media (max-width: 1080px) { .cols { grid-template-columns: minmax(0, 1fr); } }
@@ -540,6 +544,12 @@ const CARRIERS = { UPS: "https://www.ups.com/track?tracknum=", USPS: "https://to
   FedEx: "https://www.fedex.com/fedextrack/?trknbr=", DHL: "https://www.dhl.com/us-en/home/tracking/tracking-express.html?tracking-id=", "Hand delivered": null, Other: null };
 const PLANS = [{ id: "pilot", name: "Pilot" }, { id: "standard", name: "Standard" }, { id: "enterprise", name: "Enterprise" }];   // rename to your price list
 const MODULES = [{ id: "shifts", name: "Shifts", desc: "Assign people to shifts, end-of-shift reports, items due at end of shift" }];
+const REQ_STATUS = { new: ["New", "info"], open: ["Open", "warn"], waiting: ["Waiting on them", "quiet"], won: ["Won", "ok"], lost: ["Not a fit", "quiet"], closed: ["Resolved", "ok"], spam: ["Spam", "quiet"] };
+const REQ_FLOW = { lead: ["new", "open", "waiting", "won", "lost", "spam"], support: ["new", "open", "waiting", "closed", "spam"] };
+const REQ_DONE = ["won", "lost", "closed", "spam"];
+const REQ_KIND = { lead: "Lead", support: "Support" };
+const REQ_ERR = { not_found: "That request no longer exists.", bad_status: "Pick a status.", bad_kind: "Pick lead or support.", not_operator: "Pick someone on your team.",
+  bad_email: "Enter a full email address, or leave it blank.", bad_name: "Enter their name.", bad_note: "Write something first.", no_email: "There's no email address for them. Add one, or call them.", owner_only: "Only owners can delete requests." };
 const STATUS = { trial: ["Trial", "info"], active: ["Active", "ok"], paused: ["Paused", "bad"], cancelled: ["Closed", "quiet"] };
 const TERMS = [["equipment", "Equipment (one)", "Radio"], ["equipment_plural", "Equipment (many)", "Radios"], ["employee", "Person (one)", "Agent"],
   ["employee_plural", "People (many)", "Agents"], ["checkout", "Check out button", "Check Out"], ["checkin", "Return button", "Return"]];
@@ -689,7 +699,28 @@ function buildDemo() {
   const live = customers.flatMap((c) => c.stations.filter((x) => x.activated_at && !x.revoked));
   const outages = [[0, 26 * HOUR, 22 * MIN], [0, 5 * HOUR, 41 * MIN], [1, 3 * DAY, 2 * HOUR], [2, 9 * HOUR, 12 * MIN]]
     .filter(([i]) => live[i]).map(([i, back, len]) => ({ station: live[i].id, start: now - back - len, end: now - back }));
-  return { customers, log, team, hw, latestStation: "station-0.1.0", outages };
+  // Requests: contact form messages (leads and support) and ones you added yourself.
+  let rq = 0;
+  const R = (o, events = []) => { rq++; const r = { id: rq, source: "website", kind: "lead", status: "new", assigned_to: null, org_id: null, company: null, phone: null, topic: "Pricing", closed_at: null, ...o };
+    r.updated_at = r.created_at; r.events = [...events, { at: r.created_at, kind: "created", by: null, details: { source: r.source } }]; return r; };
+  const me = team.operators[0], jordan = team.operators[1];
+  const requests = [
+    R({ created_at: now - 25 * MIN, name: "Priya Shah", email: "priya@cactusfreight.example", company: "Cactus Freight", phone: "(480) 555-0199",
+      message: "We lose track of about 40 handheld scanners and a dozen forklift keys across two warehouses. What would that cost, and how long does setup take?" }),
+    R({ created_at: now - 3 * HOUR, name: "Tasha Begay", email: "tbegay@desertground.example", company: "Desert Ground Handling", kind: "support", topic: "Help with my account", org_id: desert.id,
+      message: "Our Ramp Office station keeps saying the reader isn't responding after lunch. Restarting fixes it for a while." }),
+    R({ created_at: now - 2 * DAY, name: "Marcus Lee", email: "mlee@valleytools.example", company: "Valley Tool Rental", status: "waiting", assigned_to: me.user_id, topic: "A pilot",
+      message: "Interested in a pilot for our tool crib. About 300 tools, 25 techs." },
+      [{ at: now - 2 * DAY + 3 * HOUR, kind: "reply", by: me.name, text: "Thanks Marcus. Happy to set up a 30-day pilot. Does next Tuesday work for a quick call?", details: { to: "mlee@valleytools.example" } },
+       { at: now - 2 * DAY + 2 * HOUR, kind: "assigned", by: me.name, details: { to: me.name } }]),
+    R({ created_at: now - 4 * DAY, name: "Dana Ortiz", email: null, company: "Sun Valley Schools", phone: "(602) 555-0123", status: "open", source: "console", assigned_to: jordan.user_id, topic: "Phone call",
+      message: "Called about tracking Chromebooks and AV carts across 6 schools. Wants a quote by end of month." },
+      [{ at: now - 3 * DAY, kind: "note", by: jordan.name, text: "Sent the pricing sheet by text. Follow up Friday." }]),
+    R({ created_at: now - 9 * DAY, name: "Lena Ruiz", email: "lruiz@saguarofuel.example", company: "Saguaro Aviation Fuel", status: "won", org_id: saguaro.id, assigned_to: me.user_id, topic: "A pilot", closed_at: now - 1 * DAY,
+      message: "We'd like to try it at our fuel farm office." },
+      [{ at: now - 1 * DAY, kind: "status", by: me.name, details: { from: "open", to: "won" } }, { at: now - 1 * DAY, kind: "customer", by: me.name, details: { to: "Saguaro Aviation Fuel" } }]),
+  ];
+  return { customers, log, team, hw, latestStation: "station-0.1.0", outages, requests };
 }
 const DB = buildDemo();
 
@@ -927,7 +958,55 @@ const api = {
     Object.assign(s, { code: newCode(), code_expires: Date.now() + 7 * DAY, activated_at: null, last_seen: null, admin_claimed_at: null, revoked: false, replaced: Date.now() });
     log(c, "replaced station hardware", changeText({ station: s.name, ...(u ? { unit: u.serial } : {}) })); return { ok: true, code: s.code, unit: u?.serial || null };
   },
+  /* rpc platform_requests() — every contact form message and request you added; null before database update 28 */
+  requests() { return DB.requests ? DB.requests.map(reqView) : null; },
+  /* rpc platform_request(id) — one request and its history */
+  request(id) { const r = DB.requests?.find((x) => String(x.id) === String(id)); return r ? reqView(r) : null; },
+  /* rpc platform_update_request(id, {status, kind, assigned_to, org_id, name, email, company, phone}) */
+  updateRequest(id, p) {
+    const r = DB.requests.find((x) => String(x.id) === String(id)); if (!r) return { ok: false, error: REQ_ERR.not_found };
+    const ev = (kind, details = {}, text = null) => r.events.unshift({ at: Date.now(), kind, by: OPERATOR.name, text, details });
+    if ("email" in p && p.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(p.email.trim())) return { ok: false, error: REQ_ERR.bad_email };
+    if ("name" in p && !String(p.name || "").trim()) return { ok: false, error: REQ_ERR.bad_name };
+    if ("status" in p && p.status !== r.status) { ev("status", { from: r.status, to: p.status }); r.status = p.status; r.closed_at = REQ_DONE.includes(r.status) ? Date.now() : null; }
+    if ("kind" in p && p.kind !== r.kind) { ev("kind", { to: p.kind }); r.kind = p.kind;
+      if (r.kind === "support" && ["won", "lost"].includes(r.status)) r.status = "closed"; if (r.kind === "lead" && r.status === "closed") r.status = "lost"; }
+    if ("assigned_to" in p && (p.assigned_to || null) !== r.assigned_to) { r.assigned_to = p.assigned_to || null; ev("assigned", { to: opName(r.assigned_to) }); }
+    if ("org_id" in p && (p.org_id || null) !== r.org_id) { r.org_id = p.org_id || null; ev("customer", { to: custOf(r.org_id)?.name || null }); }
+    const nz = (v) => (String(v ?? "").trim() || null);
+    if (["name", "email", "company", "phone"].some((k) => k in p && nz(p[k]) !== r[k])) { ev("details");
+      for (const k of ["name", "company", "phone"]) if (k in p) r[k] = nz(p[k]); if ("email" in p) r.email = nz(p.email)?.toLowerCase() || null; }
+    r.updated_at = Date.now(); return { ok: true };
+  },
+  /* rpc platform_request_note(id, text) */
+  requestNote(id, text) {
+    const r = DB.requests.find((x) => String(x.id) === String(id)); text = (text || "").trim(); if (!text) return { ok: false, error: REQ_ERR.bad_note };
+    r.events.unshift({ at: Date.now(), kind: "note", by: OPERATOR.name, text }); if (r.status === "new") r.status = "open"; return { ok: true };
+  },
+  /* rpc platform_request_reply(id, text) — emailed from no-reply@, replies come to you */
+  requestReply(id, text) {
+    const r = DB.requests.find((x) => String(x.id) === String(id)); text = (text || "").trim();
+    if (!r.email) return { ok: false, error: REQ_ERR.no_email }; if (!text) return { ok: false, error: REQ_ERR.bad_note };
+    r.events.unshift({ at: Date.now(), kind: "reply", by: OPERATOR.name, text, details: { to: r.email } });
+    if (["new", "open"].includes(r.status)) r.status = "waiting"; r.assigned_to ||= DB.team?.operators.find((o) => o.me)?.user_id || null; return { ok: true };
+  },
+  /* rpc platform_add_request(jsonb) — a phone call, someone you met */
+  addRequest(p) {
+    const name = (p.name || "").trim(), email = (p.email || "").trim().toLowerCase();
+    if (!name) return { ok: false, error: REQ_ERR.bad_name }; if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return { ok: false, error: REQ_ERR.bad_email };
+    const id = Math.max(0, ...DB.requests.map((r) => r.id)) + 1, now = Date.now();
+    DB.requests.unshift({ id, created_at: now, updated_at: now, name, email: email || null, company: (p.company || "").trim() || null, phone: (p.phone || "").trim() || null, topic: (p.topic || "").trim() || null,
+      message: (p.message || "").trim() || null, kind: p.kind || "lead", status: "open", source: "console", assigned_to: DB.team?.operators.find((o) => o.me)?.user_id || null, org_id: null, closed_at: null,
+      events: [{ at: now, kind: "created", by: OPERATOR.name, details: { source: "console" } }] });
+    return { ok: true, id };
+  },
+  /* rpc platform_delete_request(id) — owners only */
+  deleteRequest(id) { if (OPERATOR.role !== "owner") return { ok: false, error: REQ_ERR.owner_only }; DB.requests = DB.requests.filter((r) => String(r.id) !== String(id)); return { ok: true }; },
 };
+const opName = (uid) => (uid ? DB.team?.operators.find((o) => o.user_id === uid)?.name || "Someone" : null);
+// One request as the screens use it (same shape as private.request_json in the database).
+const reqView = (r) => ({ ...r, assigned_name: r.assigned_name ?? opName(r.assigned_to), customer: custOf(r.org_id)?.name || r.customer || null,
+  last_at: r.events?.length ? Math.max(...r.events.map((e) => e.at)) : r.last_at || r.created_at, notes: r.events ? r.events.filter((e) => e.kind === "note" || e.kind === "reply").length : r.notes || 0 });
 // Station history (the database writes these itself; the demo keeps them here)
 function stEvent(c, stId, kind, details = {}) { (c.events ||= []).push({ station: stId, at: Date.now(), kind, details, by: "Sonoran Point" }); }
 function stEventText(e) {
@@ -979,17 +1058,25 @@ const mapTeam = (t) => ({ operators: (t.operators || []).map((o) => ({ ...o, sin
 const mapStation = (s) => ({ id: s.id, name: s.name, location: s.location || "", activated_at: ms(s.activated_at), last_seen: ms(s.last_seen_at),
   version: s.software_version, admin_claimed_at: ms(s.admin_claimed_at), code: null, code_expires: ms(s.code_expires_at),
   revoked: !!s.revoked_at, created: ms(s.created_at) || Date.now(), contract_id: s.contract_id || null, replaced: ms(s.replaced_at) || null });
+// A slow refresh that started before a newer one (say, the 30-second refresh racing a save) mustn't put old data back.
+let loadSeq = 0, detailSeq = 0;
 const live = {
   async load() {
+    const seq = ++loadSeq;
     // Outages (database update 26); null hides uptime until it's run.
     const outs = rpc("platform_outages").catch(() => null);
+    // Requests (database update 28); null shows how to turn them on.
+    const reqs = rpc("platform_requests").catch(() => null);
     // The newest station version (published with each deploy); stations update themselves to it.
     fetch("station-release/latest.json", { cache: "no-store" }).then((r) => r.ok ? r.json() : null).then((m) => { if (m?.version && m.version !== DB.latestStation) { DB.latestStation = m.version; render(); } }).catch(() => {});
     const [cs, fleet, lg, team, hw] = await Promise.all([rpc("platform_customers"), rpc("platform_fleet"), rpc("platform_log", { p_limit: 300 }),
       rpc("platform_team").catch(() => null),   // null until the team migration is run
       rpc("platform_hardware").catch(() => null)]);   // null until the hardware migration is run
+    if (seq !== loadSeq) { await reqs.catch(() => {}); await outs.catch(() => {}); return; }
     DB.team = team ? mapTeam(team) : null;
-    const o = await outs; DB.outages = o ? o.map((x) => ({ station: x.station_id, start: ms(x.started_at), end: ms(x.ended_at) })) : null;
+    const rl = await reqs; if (seq !== loadSeq) return; const rPrev = Object.fromEntries((DB.requests || []).map((r) => [r.id, r]));
+    DB.requests = rl ? rl.map((r) => mapRequest(r, rPrev[r.id]?.events)) : null;
+    const o = await outs; if (seq !== loadSeq) return; DB.outages = o ? o.map((x) => ({ station: x.station_id, start: ms(x.started_at), end: ms(x.ended_at) })) : null;
     const hwPrev = Object.fromEntries((DB.hw || []).map((u) => [u.id, u]));
     DB.hw = hw ? hw.map((u) => ({ ...u, created_at: ms(u.created_at), events: hwPrev[u.id]?.events })) : null;
     const prev = Object.fromEntries(DB.customers.map((c) => [c.id, c]));
@@ -1006,7 +1093,8 @@ const live = {
     DB.log = lg.map((g, i) => ({ id: "lg" + i, at: ms(g.at), by: g.by || "Sonoran Point", org: g.org_id, customer: g.org_id ? g.customer || "(deleted customer)" : null, action: g.action, details: detailText(g.details) }));
   },
   async detail(id) {
-    const r = await rpc("platform_customer", { p_org: id }); const c = custOf(id); if (!r.ok || !c) return;
+    const seq = ++detailSeq;
+    const r = await rpc("platform_customer", { p_org: id }); const c = custOf(id); if (!r.ok || !c || seq !== detailSeq) return;
     const o = r.organization;
     Object.assign(c, { detail: true, terms: { ...DEFAULT_TERMS, ...(o.terminology || {}) }, timezone: o.timezone, contact_phone: o.contact_phone || "", notes: o.notes || "",
       logo_url: o.logo_url || "", ...("logo_dark_url" in o ? { logo_dark_url: o.logo_dark_url || "" } : {}), stations: r.stations.map(mapStation), contracts: r.contracts || [], locations: r.locations || [],
@@ -1015,6 +1103,11 @@ const live = {
       invites: r.invites.map((i) => ({ id: i.id, email: i.email, role: i.role, expires: ms(i.expires_at) })) });
     if (c.members.length) c.has_owner = c.members.some((m) => m.role === "owner");
   },
+  async reqDetail(id) {
+    const r = await rpc("platform_request", { p_id: Number(id) }); if (!r.ok) return;
+    const i = (DB.requests || []).findIndex((x) => String(x.id) === String(id));
+    const m = mapRequest(r.request, r.events.map((e) => ({ ...e, at: ms(e.at) }))); if (i >= 0) DB.requests[i] = m; else (DB.requests ||= []).unshift(m);
+  },
   async hwDetail(id) {
     const r = await rpc("platform_hardware_unit", { p_id: id }); const u = DB.hw?.find((x) => x.id === id); if (!r.ok || !u) return;
     u.events = r.events.map((e) => ({ ...e, at: ms(e.at) }));
@@ -1022,9 +1115,11 @@ const live = {
   async refresh(id) {
     await live.load();
     if (S.route === "unit" && S.id && S.id !== "new") await live.hwDetail(S.id).catch(() => {});
+    else if (S.route === "request" && S.id && S.id !== "new") await live.reqDetail(S.id).catch(() => {});
     else if (id || S.id) await live.detail(id || S.id).catch(() => {});
   },
 };
+const mapRequest = (r, events) => ({ ...r, created_at: ms(r.created_at), updated_at: ms(r.updated_at), closed_at: ms(r.closed_at), last_at: ms(r.last_at), events });
 const ERR = { slug_taken: ["That short ID is already used.", "slug"], bad_slug: ["Short ID: letters, numbers and dashes only.", "slug"], bad_email: ["Enter their admin's email address.", "owner_email"],
   name_required: ["Enter the company name.", "name"], already_member: ["That person is already on their team.", "email"], not_found: ["That customer or station no longer exists.", null] };
 const demoCreate = api.createCustomer;
@@ -1132,6 +1227,26 @@ const liveApi = {
     if (!r.ok) return { ok: false, error: TEAM_ERR[r.error] || r.error };
     await live.refresh().catch(() => {}); return { ok: true };
   },
+  async updateRequest(id, p) {
+    let r; try { r = await rpc("platform_update_request", { p_id: Number(id), p }); } catch (e) { return { ok: false, error: nice(e) }; }
+    if (!r.ok) return { ok: false, error: REQ_ERR[r.error] || r.error }; await live.load().catch(() => {}); await live.reqDetail(id).catch(() => {}); return { ok: true };
+  },
+  async requestNote(id, text) {
+    let r; try { r = await rpc("platform_request_note", { p_id: Number(id), p_text: text }); } catch (e) { return { ok: false, error: nice(e) }; }
+    if (!r.ok) return { ok: false, error: REQ_ERR[r.error] || r.error }; await live.load().catch(() => {}); await live.reqDetail(id).catch(() => {}); return { ok: true };
+  },
+  async requestReply(id, text) {
+    let r; try { r = await rpc("platform_request_reply", { p_id: Number(id), p_text: text }); } catch (e) { return { ok: false, error: nice(e) }; }
+    if (!r.ok) return { ok: false, error: REQ_ERR[r.error] || r.error }; await live.load().catch(() => {}); await live.reqDetail(id).catch(() => {}); return { ok: true };
+  },
+  async addRequest(p) {
+    let r; try { r = await rpc("platform_add_request", { p }); } catch (e) { return { ok: false, error: nice(e) }; }
+    if (!r.ok) return { ok: false, error: REQ_ERR[r.error] || r.error }; await live.load().catch(() => {}); await live.reqDetail(r.id).catch(() => {}); return { ok: true, id: r.id };
+  },
+  async deleteRequest(id) {
+    let r; try { r = await rpc("platform_delete_request", { p_id: Number(id) }); } catch (e) { return { ok: false, error: nice(e) }; }
+    if (!r.ok) return { ok: false, error: REQ_ERR[r.error] || r.error }; await live.load().catch(() => {}); return { ok: true };
+  },
   async cancelOperatorInvite(id) {
     try { await rpc("platform_cancel_operator_invite", { p_invite: id }); } catch (e) { return { ok: false, error: nice(e) }; }
     await live.refresh().catch(() => {}); return { ok: true };
@@ -1190,7 +1305,8 @@ async function afterSignIn() {
   try { const me = await rpc("platform_me"); if (me?.operator) Object.assign(OPERATOR, { name: me.name, role: me.role, email: me.email }); } catch {}   // before the team migration: everyone is an owner
   if (OPINVITE.joined) { OPINVITE.joined = false; toast(`Welcome, ${OPERATOR.name}`); }
   try { await live.load(); } catch (e) { AUTH.view = "signin"; AUTH.err = nice(e); return renderAuth(); }
-  S.ready = true; readHash(); if (S.route === "customer") await live.detail(S.id).catch(() => {}); if (S.route === "unit" && S.id !== "new") await live.hwDetail(S.id).catch(() => {}); render();
+  S.ready = true; readHash(); if (S.route === "customer") await live.detail(S.id).catch(() => {}); if (S.route === "unit" && S.id !== "new") await live.hwDetail(S.id).catch(() => {});
+  if (S.route === "request" && S.id !== "new") await live.reqDetail(S.id).catch(() => {}); render();
 }
 async function boot() {
   if (!LIVE) { readHash(); render(); return; }
@@ -1264,7 +1380,8 @@ const inviteLink = (t) => `${VENDOR.appUrl}/?invite=${t}`;   // the dashboard re
 const S = { route: "customers", id: null, f: { q: "", status: "all", fleet: "problems", hw: "all", hwq: "" }, confirm: null, toast: null, made: null, newForm: null, formErr: null, lastCode: null, lastInvite: null };
 function readHash() {
   const [r, id] = location.hash.slice(1).split("/");
-  S.route = ["customers", "customer", "new", "fleet", "log", "team", "hardware", "unit"].includes(r) ? r : "customers"; S.id = id || null;
+  S.route = ["customers", "customer", "new", "fleet", "log", "team", "hardware", "unit", "requests", "request"].includes(r) ? r : "customers"; S.id = id || null;
+  if (S.route === "request" && S.id !== "new" && !api.request(S.id)) S.route = "requests";
   if (S.route === "customer" && !custOf(S.id)) S.route = "customers";
   if (S.route === "unit" && S.id !== "new" && !api.hardwareUnit(S.id)) S.route = "hardware";
   S.hwAssign = null;
@@ -1273,7 +1390,8 @@ function readHash() {
 }
 window.addEventListener("hashchange", async () => { readHash(); render(); window.scrollTo(0, 0);
   if (LIVE && S.ready && S.route === "customer") { await live.detail(S.id).catch(() => {}); if (S.route === "customer") render(); }
-  if (LIVE && S.ready && S.route === "unit" && S.id !== "new") { await live.hwDetail(S.id).catch(() => {}); if (S.route === "unit") render(); } });
+  if (LIVE && S.ready && S.route === "unit" && S.id !== "new") { await live.hwDetail(S.id).catch(() => {}); if (S.route === "unit") render(); }
+  if (LIVE && S.ready && S.route === "request" && S.id !== "new") { await live.reqDetail(S.id).catch(() => {}); if (S.route === "request") render(); } });
 let toastT;
 function toast(t) { S.toast = t; renderLayer(); clearTimeout(toastT); toastT = setTimeout(() => { S.toast = null; renderLayer(); }, 2600); }
 function renderLayer() { $("#layer").innerHTML = (S.preview ? vPreview() : "") + (S.toast ? `<div class="toast" role="status">${esc(S.toast)}</div>` : ""); }
@@ -1302,13 +1420,15 @@ const daysLeft = (ms) => Math.ceil((ms - Date.now()) / DAY);
 const PAGE = 8;
 // The bell's list: the same things as Needs attention on the overview, newest problems first.
 function bellList() {
-  const att = attention();
-  if (!att.length) return `<div class="none">Nothing needs a look. Every customer and station is fine.</div>`;
+  const att = attention(), nr = (api.requests() || []).filter((r) => r.status === "new");
+  const reqs = nr.length ? `<div class="grp">New requests (${nr.length})</div>${nr.slice(0, 4).map((r) => `<a href="#request/${r.id}" data-act="bellPick" class="bellrow">
+      <span class="tone info">${ic("mail")}</span><span><b>${esc(r.name)}${r.company ? `, ${esc(r.company)}` : ""}</b><small>${esc(REQ_KIND[r.kind])} · ${esc(ago(r.created_at))}</small></span></a>`).join("")}` : "";
+  if (!att.length) return reqs + (reqs ? "" :  `<div class="none">Nothing needs a look. Every customer and station is fine.</div>`);
   const icon = { trial: "clock", offline: "wifiOff", expired: "alert", waiting: "clock", owner: "user" };
   const row = (x) => `<button data-preview="${x.c.id}" data-act="bellPick" class="bellrow">
       <span class="tone ${x.tone}">${ic(icon[x.kind] || "alert")}</span><span><b>${esc(x.text)}</b><small>${esc(x.c.name)}</small></span></button>`;
   const now = att.filter((x) => x.tone !== "info"), later = att.filter((x) => x.tone === "info");
-  return (now.length ? `<div class="grp">Needs a look now (${now.length})</div>${now.slice(0, 6).map(row).join("")}` : "")
+  return reqs + (now.length ? `<div class="grp">Needs a look now (${now.length})</div>${now.slice(0, 6).map(row).join("")}` : "")
     + (later.length ? `<div class="grp">Also</div>${later.slice(0, Math.max(2, 7 - now.length)).map(row).join("")}` : "")
     + `<a href="#customers" data-act="bellPick" class="bellall">${att.length > 7 ? `See all ${att.length} on the overview` : "Open the overview"}</a>`;
 }
@@ -1662,6 +1782,7 @@ function vNew() {
   const sec = (n, title, body) => `<section class="panel"><div class="panel-h"><h2>${n}. ${title}</h2></div><div class="panel-b fgrid">${body}</div></section>`;
   return `<div><a class="back" href="#customers">‹ All customers</a></div>
     <div class="head"><div><h1>New customer</h1><p>Sets up their company, invites their admin and makes an activation code for each station you'll ship.</p></div></div>
+    ${S.fromRequest && api.request(S.fromRequest) ? `<div class="infobox">Filled in from <a href="#request/${S.fromRequest}" style="color:var(--brand-text)">${esc(api.request(S.fromRequest).name)}'s request</a>. When you create the customer, the request is marked won and linked to them.</div>` : ""}
     <form data-form="new" class="cols" novalidate><div class="stack">
       ${sec(1, "Company", `<label class="full">Company name<input class="field" name="name" required maxlength="80" value="${esc(f.name)}" placeholder="Desert Ground Handling" data-new="name"></label>
         <label>Short ID<small>Letters, numbers, dashes. Used in support and links.</small><input class="field mono" name="slug" maxlength="40" value="${esc(f.slug)}" data-new="slug" placeholder="desertground"></label>
@@ -1927,18 +2048,118 @@ function vUnit() {
 }
 const hwAction = (a) => a === "added" ? "added this unit" : a === "updated" ? "updated details" : a === "note" ? "added a note" : a.startsWith("status: ") ? `marked it ${HW_STATUS[a.slice(8)]?.[0].toLowerCase() || a.slice(8)}` : a;
 
-const VIEWS = { customers: vCustomers, customer: vCustomer, new: vNew, fleet: vFleet, log: vLog, team: vTeam, hardware: vHardware, unit: vUnit };
+/* ---- Requests: leads and support from the contact form, and ones you add yourself ---- */
+const reqChip = (st) => `<span class="chip ${REQ_STATUS[st][1]}">${REQ_STATUS[st][0]}</span>`;
+const reqOpen = (r) => !REQ_DONE.includes(r.status);
+const myId = () => DB.team?.operators.find((o) => o.me)?.user_id || null;
+const firstLine = (t, n = 90) => { t = String(t || "").replace(/\s+/g, " ").trim(); return t.length > n ? t.slice(0, n - 1) + "…" : t; };
+function vRequests() {
+  const all = api.requests();
+  if (!all) return `<div class="head"><div><h1>Requests</h1></div></div><div class="warnbox">Run the database update <span class="mono">20261022000028_requests.sql</span> in Supabase to turn on requests. Until then, contact form messages arrive by email only.</div>`;
+  const me = myId(), q = (S.f.rq || "").trim().toLowerCase(), month = Date.now() - 30 * DAY;
+  const groups = { open: reqOpen, new: (r) => r.status === "new", mine: (r) => reqOpen(r) && r.assigned_to && r.assigned_to === me, leads: (r) => r.kind === "lead" && reqOpen(r),
+    support: (r) => r.kind === "support" && reqOpen(r), done: (r) => REQ_DONE.includes(r.status) && r.status !== "spam", all: (r) => r.status !== "spam" };
+  const f = S.f.req || "open";
+  const rows = all.filter(groups[f] || groups.open).filter((r) => !q || [r.name, r.email, r.company, r.phone, r.topic, r.message, r.customer].join(" ").toLowerCase().includes(q));
+  const cnt = (fn) => all.filter(fn).length;
+  return `<div class="head"><div><h1>Requests</h1><p>Messages from the contact form on sonoranpoint.com, and calls you log yourself. Leads become customers; support gets resolved.</p></div><a class="btn primary" href="#request/new">${ic("plus")}Add request</a></div>
+    <div class="kpis">
+      <div class="kpi ${cnt((r) => r.status === "new") ? "bad" : "ok"}"><b class="num">${cnt((r) => r.status === "new")}</b><span>New</span><small>${cnt((r) => r.status === "new") ? "Nobody has picked these up" : "All picked up"}</small></div>
+      <div class="kpi"><b class="num">${cnt((r) => r.status === "open")}</b><span>Open</span><small>Being worked on</small></div>
+      <div class="kpi"><b class="num">${cnt((r) => r.status === "waiting")}</b><span>Waiting on them</span><small>You replied last</small></div>
+      <div class="kpi ok"><b class="num">${cnt((r) => r.status === "won" && r.closed_at > month)}</b><span>Won</span><small>Last 30 days</small></div>
+      <div class="kpi ${cnt((r) => r.kind === "support" && reqOpen(r)) ? "warn" : ""}"><b class="num">${cnt((r) => r.kind === "support" && reqOpen(r))}</b><span>Support open</span><small>From customers</small></div>
+    </div>
+    <section class="panel"><div class="panel-h">
+      <div class="seg" role="group" aria-label="Show">${[["open", "Open"], ["new", "New"], ["mine", "Mine"], ["leads", "Leads"], ["support", "Support"], ["done", "Done"], ["all", "All"]]
+        .map(([k, l]) => `<button data-seg="req:${k}" class="${f === k ? "on" : ""}" aria-pressed="${f === k}">${l}</button>`).join("")}</div>
+      <div class="filters"><input class="field" type="search" data-f="rq" placeholder="Name, company, email or words" aria-label="Search requests" value="${esc(S.f.rq || "")}"></div></div>
+      <div class="tablewrap"><table><thead><tr><th>From</th><th>About</th><th>Status</th><th>Who has it</th><th>Received</th></tr></thead><tbody>
+      ${rows.map((r) => `<tr class="click ${r.status === "new" ? "unread" : ""}" data-go="request/${r.id}" tabindex="0">
+        <td><b>${esc(r.name)}</b><span class="sub">${esc(r.company || r.email || r.phone || "")}${r.customer ? ` · <span style="color:var(--brand-text)">Customer</span>` : ""}</span></td>
+        <td><span class="chip ${r.kind === "support" ? "warn" : "info"}" style="margin-right:6px">${REQ_KIND[r.kind]}</span>${esc(r.topic || "")}<span class="sub">${esc(firstLine(r.message))}</span></td>
+        <td>${reqChip(r.status)}</td>
+        <td>${r.assigned_name ? esc(r.assigned_name) : `<span class="muted">Nobody yet</span>`}</td>
+        <td>${esc(ago(r.created_at))}${r.notes ? `<span class="sub">${r.notes} note${r.notes === 1 ? "" : "s"} or repl${r.notes === 1 ? "y" : "ies"}</span>` : ""}</td></tr>`).join("")
+        || `<tr><td colspan="5" class="empty">${all.length ? "Nothing here." : "No requests yet. Messages from the contact form show up here."}</td></tr>`}
+      </tbody></table></div></section>`;
+}
+const reqEventText = (e) => {
+  const d = e.details || {};
+  return { created: d.source === "console" ? "added this request" : "sent this from the website", note: "added a note", reply: `emailed ${d.to || "them"}`,
+    status: `marked it ${(REQ_STATUS[d.to]?.[0] || d.to || "").toLowerCase()}`, kind: `made it ${d.to === "support" ? "a support request" : "a lead"}`,
+    assigned: d.to ? (d.to === e.by ? "took it" : `gave it to ${d.to}`) : "took it off everyone's list", customer: d.to ? `linked it to ${d.to}` : "unlinked the customer", details: "changed their details" }[e.kind] || e.kind;
+};
+function vRequest() {
+  const e = S.formErr; const err = (form) => `<div class="err full" role="alert">${e?.form === form ? esc(e.text) : ""}</div>`;
+  if (S.id === "new") return `<div><a class="back" href="#requests">‹ All requests</a></div>
+    <div class="head"><div><h1>Add request</h1><p>A phone call, someone you met, a referral. It goes on the list like a website message.</p></div></div>
+    <div class="cols"><div class="stack"><section class="panel"><form class="panel-b fgrid" data-form="reqnew">
+      <label>Their name<input class="field" name="name" maxlength="100" required></label>
+      <label>Company<input class="field" name="company" maxlength="150"></label>
+      <label>Email<small>Optional. Needed to reply from here.</small><input class="field" type="email" name="email" maxlength="200"></label>
+      <label>Phone<input class="field" type="tel" name="phone" maxlength="40"></label>
+      <label>Type<select class="field" name="kind"><option value="lead">Lead (might buy)</option><option value="support">Support (a customer needs help)</option></select></label>
+      <label>About<input class="field" name="topic" maxlength="60" placeholder="Phone call, trade show, referral"></label>
+      <label class="full">What they need<textarea class="field" name="message" maxlength="4000" rows="5"></textarea></label>
+      ${err("reqnew")}<div class="actions full"><button class="btn primary">Add request</button><a class="btn" href="#requests">Cancel</a></div>
+    </form></section></div><div></div></div>`;
+  const r = api.request(S.id); if (!r) return `<div><a class="back" href="#requests">‹ All requests</a></div><div class="empty">That request no longer exists.</div>`;
+  const ops = DB.team?.operators || [], cf = S.confirm, c = custOf(r.org_id);
+  const contact = [r.email && `<a href="mailto:${esc(r.email)}" style="color:var(--brand-text)">${esc(r.email)}</a>`, r.phone && `<a href="tel:${esc(r.phone.replace(/[^\d+]/g, ""))}" style="color:var(--brand-text)">${esc(r.phone)}</a>`].filter(Boolean).join(" · ");
+  return `<div><a class="back" href="#requests">‹ All requests</a></div>
+    <div class="head"><div><h1>${esc(r.name)}${r.company ? `<span class="muted" style="font-weight:500"> · ${esc(r.company)}</span>` : ""}</h1>
+      <p>${reqChip(r.status)} <span class="chip ${r.kind === "support" ? "warn" : "info"}">${REQ_KIND[r.kind]}</span> · ${esc(r.source === "console" ? "Added" : "Sent")} ${esc(fmtWhen(r.created_at))}${contact ? " · " + contact : ""}</p></div>
+      <div class="actions">${r.status === "new" ? `<button class="btn primary" data-act="reqTake">Take it</button>` : ""}
+        ${r.kind === "lead" && !c && reqOpen(r) ? `<button class="btn ${r.status === "new" ? "" : "primary"}" data-act="reqMakeCustomer">${ic("userPlus")}Make them a customer</button>` : ""}
+        ${r.kind === "support" && reqOpen(r) ? `<button class="btn" data-act="reqSet" data-status="closed">Mark resolved</button>` : ""}
+        ${!reqOpen(r) ? `<button class="btn" data-act="reqSet" data-status="open">Reopen</button>` : ""}</div></div>
+    <div class="cols"><div class="stack">
+      <section class="panel"><div class="panel-h"><h2>${esc(r.topic || "Message")}</h2></div>
+        <div class="panel-b"><p class="msg">${esc(r.message || "No message.")}</p></div></section>
+      <section class="panel"><div class="panel-h"><h2>Reply</h2><span class="muted" style="font-size:13px">${r.email ? `Emailed to ${esc(r.email)}. Their answer comes to ${esc(OPERATOR.email || "you")}.` : "No email address. Add one under Details, or call them."}</span></div>
+        <form class="panel-b" data-form="reqreply" style="display:grid;gap:10px">
+          <textarea class="field" name="text" rows="5" maxlength="8000" placeholder="Hi ${esc(r.name.split(" ")[0])}, thanks for reaching out…" aria-label="Reply" ${r.email ? "" : "disabled"}></textarea>
+          ${err("reqreply")}<div class="actions"><button class="btn primary" ${r.email ? "" : "disabled"}>${ic("mail")}Send reply</button></div></form></section>
+      <section class="panel"><div class="panel-h"><h2>History</h2></div>
+        <form class="panel-b inline-form" data-form="reqnote" style="border-bottom:1px solid var(--line)"><input class="field" name="note" maxlength="4000" placeholder="Add a note: called them, sent a quote…" aria-label="Add a note" required><button class="btn">Add note</button></form>
+        <div class="list feed">${(r.events || []).map((ev) => `<div class="row"><time>${esc(fmtWhen(ev.at))}</time><span><b>${esc(ev.by || r.name)}</b> ${esc(reqEventText(ev))}${ev.text ? `<span class="sub msg">${esc(ev.text)}</span>` : ""}</span></div>`).join("")
+          || `<div class="empty">${r.events ? "Nothing yet." : "Loading…"}</div>`}</div></section>
+    </div>
+    <div class="stack">
+      <section class="panel"><div class="panel-h"><h2>Status</h2></div><div class="panel-b fgrid" style="grid-template-columns:1fr">
+        <label>Status<select class="field" data-req="status">${REQ_FLOW[r.kind].map((k) => `<option value="${k}" ${r.status === k ? "selected" : ""}>${REQ_STATUS[k][0]}</option>`).join("")}</select></label>
+        <label>Type<select class="field" data-req="kind">${Object.entries(REQ_KIND).map(([k, l]) => `<option value="${k}" ${r.kind === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
+        ${ops.length ? `<label>Who has it<select class="field" data-req="assigned_to"><option value="">Nobody yet</option>${ops.map((o) => `<option value="${esc(o.user_id)}" ${r.assigned_to === o.user_id ? "selected" : ""}>${esc(o.name)}${o.me ? " (you)" : ""}</option>`).join("")}</select></label>` : ""}
+        <label>Customer<small>${r.kind === "lead" ? "Set when they sign up" : "Who this is about"}</small><select class="field" data-req="org_id">${custOptions(r.org_id, "Not a customer")}</select></label>
+        ${c ? `<a class="btn sm" href="#customer/${c.id}" style="justify-self:start">Open ${esc(c.name)}</a>` : ""}
+      </div></section>
+      <section class="panel"><div class="panel-h"><h2>Details</h2></div>
+        <form class="panel-b fgrid" data-form="reqedit" style="grid-template-columns:1fr">
+          <label>Name<input class="field" name="name" maxlength="100" required value="${esc(r.name)}"></label>
+          <label>Company<input class="field" name="company" maxlength="150" value="${esc(r.company || "")}"></label>
+          <label>Email<input class="field" type="email" name="email" maxlength="200" value="${esc(r.email || "")}"></label>
+          <label>Phone<input class="field" type="tel" name="phone" maxlength="40" value="${esc(r.phone || "")}"></label>
+          ${err("reqedit")}<div class="actions"><button class="btn">Save details</button></div></form></section>
+      ${OPERATOR.role === "owner" ? `<div class="actions" style="justify-content:flex-end">${cf === "reqdel" ? `<span class="confirm">Delete this request and its history? <button class="btn sm danger" data-act="reqDelete">Delete</button><button class="btn sm" data-act="noConfirm">Cancel</button></span>`
+        : `<button class="btn sm" data-act="askReqDelete" style="color:var(--muted)">Spam or a test? Delete</button>`}</div>` : ""}
+    </div></div>`;
+}
+
+const VIEWS = { customers: vCustomers, customer: vCustomer, new: vNew, fleet: vFleet, log: vLog, team: vTeam, hardware: vHardware, unit: vUnit, requests: vRequests, request: vRequest };
 function render() {
   if (LIVE && !S.ready) return renderAuth();
-  const att = attention().filter((a) => a.tone !== "info").length;
-  const nav = [["customers", "Overview", "home", att], ["new", "New customer", "plus"], ["fleet", "Stations", "station"], ["hardware", "Hardware", "box"], ["log", "Activity", "list"], ["team", "Team", "shield"]];
-  const cur = S.route === "customer" ? "customers" : S.route === "unit" ? "hardware" : S.route;
+  const att0 = attention().filter((a) => a.tone !== "info").length;
+  const newReq = (api.requests() || []).filter((r) => r.status === "new").length;
+  const att = att0 + newReq;
+  const nav = [["customers", "Overview", "home", att0], ["requests", "Requests", "mail", newReq], ["new", "New customer", "plus"], ["fleet", "Stations", "station"], ["hardware", "Hardware", "box"], ["log", "Activity", "list"], ["team", "Team", "shield"]];
+  const cur = S.route === "customer" ? "customers" : S.route === "unit" ? "hardware" : S.route === "request" ? "requests" : S.route;
   const role = ROLES[OPERATOR.role]?.[0] || "Operator";
   $("#app").className = "app" + (S.navOpen ? " navopen" : "");
   $("#app").innerHTML = `<aside class="side" aria-label="Main menu">
       <a class="brandmark" href="#customers" aria-label="${esc(VENDOR.name)} operator console"><img src="brand/logo-light.png" srcset="brand/logo-light.png 1x, brand/logo-light@2x.png 2x" alt=""></a>
       <div class="brandsub">Operator console</div>
-      <nav class="snav" aria-label="Sections">${nav.map(([r, l, i, n]) => `<a href="#${r}" class="${cur === r ? "on" : ""}" ${cur === r ? 'aria-current="page"' : ""}>${ic(i)}${l}${n ? `<span class="n" aria-label="${n} need attention">${n}</span>` : ""}</a>`).join("")}</nav>
+      <nav class="snav" aria-label="Sections">${nav.map(([r, l, i, n]) => `<a href="#${r}" class="${cur === r ? "on" : ""}" ${cur === r ? 'aria-current="page"' : ""}>${ic(i)}${l}${n ? `<span class="n" aria-label="${n} ${r === "requests" ? "new" : "need attention"}">${n}</span>` : ""}</a>`).join("")}</nav>
       ${LIVE ? "" : `<span class="pill">Demo data</span>`}
       <div class="sidecard"><svg viewBox="0 0 240 110" preserveAspectRatio="xMidYMax slice" aria-hidden="true"><defs><radialGradient id="sg" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#ffd27a"/><stop offset=".55" stop-color="#f7931e"/><stop offset="1" stop-color="#e3621b"/></radialGradient></defs>
         <circle cx="172" cy="62" r="26" fill="url(#sg)"/><path d="M0 110 L0 78 L38 52 L58 64 L96 30 L120 50 L138 40 L176 78 L198 66 L240 88 L240 110Z" fill="#163f7c"/>
@@ -1949,7 +2170,7 @@ function render() {
     <main class="main">
       <header class="topbar">
         <button class="iconbtn menu-btn" data-act="navOpen" aria-label="Open menu">${ic("menu")}</button>
-        <div class="gsearch" role="search">${ic("search")}<input type="search" id="gsearch" placeholder="Search customers, stations, hardware or people…" aria-label="Search customers, stations, hardware or people" autocomplete="off" value="${esc(S.gq || "")}">
+        <div class="gsearch" role="search">${ic("search")}<input type="search" id="gsearch" placeholder="Search customers, stations, hardware, requests or people…" aria-label="Search customers, stations, hardware, requests or people" autocomplete="off" value="${esc(S.gq || "")}">
           <div class="pop" id="gsResults" ${S.gq ? "" : "hidden"}>${S.gq ? searchResults(S.gq) : ""}</div></div>
         <span class="spacer"></span>
         <div class="bellwrap"><button type="button" class="iconbtn" data-act="bellMenu" aria-haspopup="true" aria-expanded="${S.pop === "bell"}" aria-label="${att ? `${att} things need attention` : "Nothing needs attention"}">${ic("bell")}${att ? `<span class="badge">${att}</span>` : ""}</button>
@@ -1973,11 +2194,13 @@ function searchResults(q) {
   const st = api.fleet().filter((s) => `${s.name} ${s.location || ""}`.toLowerCase().includes(q)).slice(0, 5);
   const hw = (api.hardware() || []).filter((u) => `${u.serial} ${u.pi_serial || ""} ${u.tracking || ""}`.toLowerCase().includes(q)).slice(0, 5);
   const tm = (api.team()?.operators || []).filter((o) => `${o.name} ${o.email}`.toLowerCase().includes(q)).slice(0, 3);
-  if (!cs.length && !st.length && !hw.length && !tm.length) return `<div class="none">Nothing matches “${esc(q)}”.</div>`;
+  const rq = (api.requests() || []).filter((r) => `${r.name} ${r.company || ""} ${r.email || ""} ${r.phone || ""}`.toLowerCase().includes(q)).slice(0, 4);
+  if (!cs.length && !st.length && !hw.length && !tm.length && !rq.length) return `<div class="none">Nothing matches “${esc(q)}”.</div>`;
   const grp = (t, items) => (items.length ? `<div class="grp">${t}</div>${items.join("")}` : "");
   return grp("Customers", cs.map((c) => `<button data-preview="${c.id}" data-act="gsPick">${ic("users")}${esc(c.name)}<small class="k">${esc(STATUS[c.status][0])}</small></button>`))
     + grp("Stations", st.map((s) => `<a href="#customer/${s.org}" data-act="gsPick">${ic("station")}${esc(s.name)}<small class="k">${esc(s.customer)}</small></a>`))
     + grp("Hardware", hw.map((u) => `<a href="#unit/${u.id}" data-act="gsPick">${ic("box")}<span class="mono">${esc(u.serial)}</span><small class="k">${esc(HW_STATUS[u.status][0])}</small></a>`))
+    + grp("Requests", rq.map((r) => `<a href="#request/${r.id}" data-act="gsPick">${ic("mail")}${esc(r.name)}<small class="k">${esc(REQ_STATUS[r.status][0])}</small></a>`))
     + grp("Team", tm.map((o) => `<a href="#team" data-act="gsPick">${ic("user")}${esc(o.name)}<small class="k">${esc(ROLES[o.role]?.[0] || "")}</small></a>`));
 }
 
@@ -2030,6 +2253,8 @@ document.addEventListener("change", async (e) => {
     toast(r.ok ? `${r.serial} goes in this box` : r.error); return render(); }
   if (t.matches("[data-hwcust]")) { if (S.hwAssign) S.hwAssign.org = t.value; const sel = t.form.elements.station_id; sel.innerHTML = stationOptions(t.value, null);
     if (t.form.dataset.form === "hwship" && t.form.elements.ship_to) { const c = custOf(t.value); t.form.elements.ship_to.value = c ? [c.contact_name, c.name].filter(Boolean).join(", ") : ""; } return; }
+  if (t.dataset.req) { const v = t.value; const r = await api.updateRequest(S.id, { [t.dataset.req]: v || null });
+    toast(r.ok ? { status: `Marked ${REQ_STATUS[v]?.[0].toLowerCase()}`, kind: `Now a ${v === "support" ? "support request" : "lead"}`, assigned_to: v ? `Given to ${opName(v) || "them"}` : "Nobody has it now", org_id: v ? `Linked to ${custOf(v)?.name}` : "Not linked to a customer" }[t.dataset.req] : r.error); return render(); }
   if (t.dataset.oprole) { const r = await api.setOperatorRole(t.dataset.oprole, t.value); toast(r.ok ? "Role changed" : r.error); return render(); }
   if (t.dataset.newmod) { const mods = new Set(S.newForm.modules); t.checked ? mods.add(t.dataset.newmod) : mods.delete(t.dataset.newmod); S.newForm.modules = [...mods]; return; }
   if (t.dataset.new === "status" || t.dataset.new === "plan" || t.dataset.new === "timezone") { readNewForm(t.form); return render(); }
@@ -2053,7 +2278,7 @@ document.addEventListener("click", async (e) => {
   const pv = e.target.closest("[data-preview]"); if (pv) { S.preview = pv.dataset.preview; S.confirm = null; if (LIVE) live.detail(S.preview).then(() => { if (S.preview) renderLayer(); }).catch(() => {}); renderLayer(); $(".preview .x")?.focus(); return; }
   const pgb = e.target.closest("[data-page]"); if (pgb) { S.f.page = +pgb.dataset.page; render(); $(".ctable")?.scrollIntoView({ block: "nearest" }); return; }
   const go = e.target.closest("tr[data-go]"); if (go) { location.hash = go.dataset.go; return; }
-  if (e.target.closest('a[href="#new"]')) { S.made = null; S.newForm = null; S.formErr = null; if (location.hash === "#new") { e.preventDefault(); render(); window.scrollTo(0, 0); } return; }
+  if (e.target.closest('a[href="#new"]')) { S.made = null; S.newForm = null; S.formErr = null; S.fromRequest = null; if (location.hash === "#new") { e.preventDefault(); render(); window.scrollTo(0, 0); } return; }
   const seg = e.target.closest("[data-seg]"); if (seg) { const [k, v] = seg.dataset.seg.split(":"); S.f[k] = v; S.f.page = 1; if (seg.matches("a.stat")) { e.preventDefault(); if (S.route !== "customers") location.hash = "customers"; } return render(); }
   const cp = e.target.closest("[data-copy]"); if (cp) { try { await navigator.clipboard.writeText(cp.dataset.copy); toast("Copied"); } catch { toast("Select it and copy"); } return; }
   const t = e.target.closest("[data-act]"); if (!t) return;
@@ -2098,6 +2323,14 @@ document.addEventListener("click", async (e) => {
   if (a === "rmStation") { readNewForm(t.closest("form")); S.newForm.stations.splice(+t.dataset.i, 1); return render(); }
   if (a === "print") { window.print(); return; }
   if (a === "hwStatus") { const r = await api.saveHardware({ id: S.id, status: t.dataset.status }); toast(r.ok ? `${r.serial}: ${HW_STATUS[t.dataset.status][0]}` : r.error); S.hwAssign = null; return render(); }
+  if (a === "reqTake") { const r = await api.updateRequest(S.id, { status: "open", ...(myId() ? { assigned_to: myId() } : {}) }); toast(r.ok ? "It's yours" : r.error); return render(); }
+  if (a === "reqSet") { const r = await api.updateRequest(S.id, { status: t.dataset.status }); toast(r.ok ? `Marked ${REQ_STATUS[t.dataset.status][0].toLowerCase()}` : r.error); return render(); }
+  if (a === "askReqDelete") { S.confirm = "reqdel"; return render(); }
+  if (a === "reqDelete") { const r = await api.deleteRequest(S.id); S.confirm = null; if (!r.ok) { toast(r.error); return render(); } toast("Deleted"); location.hash = "requests"; return; }
+  if (a === "reqMakeCustomer") { const r = api.request(S.id); const nf = newDefaults();
+    Object.assign(nf, { name: r.company || r.name, slug: slugify(r.company || r.name), owner_email: r.email || "", contact_name: r.name, contact_phone: r.phone || "",
+      notes: [r.topic, r.message].filter(Boolean).join(": ").slice(0, 2000) });
+    S.made = null; S.formErr = null; location.hash = "new"; S.newForm = nf; S.fromRequest = r.id; return; }
   if (a === "askHwDelete") { S.confirm = "hwdel"; return render(); }
   if (a === "hwDelete") { const r = await api.deleteHardware(S.id); S.confirm = null; if (!r.ok) { toast(r.error); return render(); } toast("Deleted"); location.hash = "hardware"; return; }
   if (a === "askRmOp") { S.confirm = "rmop:" + t.dataset.id; return render(); }
@@ -2152,6 +2385,10 @@ async function onSubmit(f, kind, fd, d) {
     if (!r.ok) { S.formErr = { form: "hwedit", text: r.error }; return render(); }
     S.formErr = null; S.hwAssign = null; toast("Saved"); return render();
   }
+  if (kind === "reqnew") { const r = await api.addRequest(d); if (!r.ok) { S.formErr = { form: "reqnew", text: r.error }; return render(); } S.formErr = null; toast("Request added"); location.hash = "request/" + r.id; return; }
+  if (kind === "reqreply") { const r = await api.requestReply(S.id, d.text); if (!r.ok) { S.formErr = { form: "reqreply", text: r.error }; return render(); } S.formErr = null; toast(LIVE ? "Reply sent" : "Reply sent (demo: no email goes out)"); return render(); }
+  if (kind === "reqnote") { const r = await api.requestNote(S.id, d.note); if (!r.ok) return toast(r.error); toast("Note added"); return render(); }
+  if (kind === "reqedit") { const r = await api.updateRequest(S.id, { name: d.name, company: d.company, email: d.email, phone: d.phone }); if (!r.ok) { S.formErr = { form: "reqedit", text: r.error }; return render(); } S.formErr = null; toast("Details saved"); return render(); }
   if (kind === "hwnote") { const r = await api.saveHardware({ id: S.id, note: d.note }); if (!r.ok) return toast(r.error); toast("Note added"); return render(); }
   if (kind === "myname") { const r = await api.setMyName(d.name); if (!r.ok) { S.formErr = { form: "myname", text: r.error }; return render(); } S.formErr = null; toast("Name saved"); return render(); }
   if (kind === "opinvite") {
@@ -2162,7 +2399,9 @@ async function onSubmit(f, kind, fd, d) {
     readNewForm(f);
     const r = await api.createCustomer(S.newForm);
     if (!r.ok) { S.formErr = { form: "new", text: r.error }; render(); const el = $(`[data-new="${r.field}"]`) || $("[data-station]"); el?.focus(); return; }
-    S.formErr = null; S.newForm = null; S.made = r; render(); window.scrollTo(0, 0); return;
+    S.formErr = null; S.newForm = null; S.made = r;
+    if (S.fromRequest) { await api.updateRequest(S.fromRequest, { org_id: r.id, status: "won" }); S.fromRequest = null; }
+    render(); window.scrollTo(0, 0); return;
   }
 }
 

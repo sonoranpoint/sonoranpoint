@@ -159,7 +159,7 @@ const api_set = async (id) => { E(`api.updateCustomer('${id}', { logo_dark_url: 
   // The bell opens a short list
   doc.querySelector("[data-act=bellMenu]").click(); await sleep(20);
   check(!doc.querySelector(".bellpop").hidden && doc.querySelectorAll(".bellpop .bellrow").length > 0 && /offline/.test(doc.querySelector(".bellpop").textContent), "the bell opens a list of what needs attention");
-  doc.querySelector(".bellpop .bellrow").click(); await sleep(30);
+  doc.querySelector(".bellpop .bellrow[data-preview]").click(); await sleep(30);
   check(E("!!S.preview") && doc.querySelector(".bellpop").hidden, "picking one opens that customer's quick view and closes the list");
   E("S.preview = null; renderLayer()");
   // Customer search finds stations and serials
@@ -257,6 +257,39 @@ const api_set = async (id) => { E(`api.updateCustomer('${id}', { logo_dark_url: 
   await go("fleet"); await click('[data-seg="fleet:all"]');
   check(/Uptime, 7 days/.test(page()) && /\d+\.\d%\s*\d+ outages?/.test(page()), "the Stations page shows each station's 7-day uptime and outages");
   check(E("pctText(uptimeOf({ id: 'x', activated_at: Date.now() - 2 * DAY, last_seen: Date.now() - 6 * HOUR }, Date.now() - DAY).up)") === "75.0%", "an offline station counts the time since its last heartbeat");
+  // Requests: leads and support from the contact form
+  const mainText = () => doc.querySelector(".main > .wrap").textContent;
+  check(/Requests\s*2/.test(doc.querySelector(".snav").textContent), "the menu shows how many requests are new");
+  await go("requests");
+  check(/Priya Shah/.test(mainText()) && /Marcus Lee/.test(mainText()) && !/Lena Ruiz/.test(mainText()), "Requests lists the open ones (won ones are under Done)");
+  await click('[data-seg="req:support"]'); check(/Tasha Begay/.test(mainText()) && !/Priya Shah/.test(mainText()), "the Support filter shows customers who need help");
+  await click('[data-seg="req:done"]'); check(/Lena Ruiz/.test(mainText()), "Done shows won leads");
+  await click('[data-seg="req:open"]');
+  const priya = E("DB.requests.find(r => r.name === 'Priya Shah').id");
+  await go("request/" + priya);
+  check(/handheld scanners/.test(mainText()) && /Make them a customer/.test(mainText()) && /sent this from the website/.test(mainText()), "a request shows the message, its history and what to do next");
+  await click('[data-act="reqTake"]');
+  check(E(`api.request(${priya}).status`) === "open" && E(`api.request(${priya}).assigned_to`) === "op-me" && /took it|marked it open/.test(mainText()), "Take it: open and yours");
+  doc.querySelector('[data-form="reqnote"] [name=note]').value = "Called, sending a quote."; await submit('[data-form="reqnote"]'); await sleep(20);
+  check(/Called, sending a quote\./.test(mainText()), "add a note");
+  doc.querySelector('[data-form="reqreply"] [name=text]').value = "Hi Priya, here's what it would cost."; await submit('[data-form="reqreply"]'); await sleep(20);
+  check(E(`api.request(${priya}).status`) === "waiting" && /emailed priya@cactusfreight.example/.test(mainText()), "reply by email: it's now waiting on them");
+  const sel = doc.querySelector('[data-req="status"]'); sel.value = "lost"; sel.dispatchEvent(new dom.window.Event("change", { bubbles: true })); await sleep(30);
+  check(E(`api.request(${priya}).status`) === "lost" && /Reopen/.test(mainText()), "change the status from the side panel");
+  await click('[data-act="reqSet"][data-status="open"]');
+  await click('[data-act="reqMakeCustomer"]'); await sleep(30);
+  check(E("S.route") === "new" && E("S.newForm.name") === "Cactus Freight" && E("S.newForm.owner_email") === "priya@cactusfreight.example" && /Filled in from/.test(mainText()),
+        "Make them a customer fills in the new-customer form");
+  doc.querySelector('[data-new="slug"]') && (doc.querySelector('[data-new="slug"]').value = "cactusfreight");
+  await submit('[data-form="new"]'); await sleep(40);
+  check(E(`api.request(${priya}).status`) === "won" && E(`custOf(api.request(${priya}).org_id)?.name`) === "Cactus Freight", "creating the customer marks the lead won and links it");
+  // A call you log yourself, no email
+  await go("request/new");
+  doc.querySelector('[data-form="reqnew"] [name=name]').value = "Sam from the trade show"; doc.querySelector('[data-form="reqnew"] [name=phone]').value = "602-555-0100";
+  await submit('[data-form="reqnew"]'); await sleep(40);
+  check(E("S.route") === "request" && /Sam from the trade show/.test(mainText()) && doc.querySelector('[data-form="reqreply"] button').disabled, "add a request by hand; with no email, reply is off");
+  doc.getElementById("gsearch").value = "cactus"; doc.getElementById("gsearch").dispatchEvent(new dom.window.Event("input", { bubbles: true })); await sleep(10);
+  check(/Requests/.test(doc.getElementById("gsResults").textContent) && /Priya Shah/.test(doc.getElementById("gsResults").textContent), "search finds requests");
   check(errors.length === 0, "no script errors " + errors.join(";"));
   process.exit();
 })();

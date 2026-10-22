@@ -23,7 +23,7 @@ See README.md for the full product description.
 - Push to `main` → GitHub Actions runs `tests/run.sh db` + `ui`, then deploys app + console to Cloudflare Pages
   (projects `sonoranpoint-app`, `sonoranpoint-console`, `sonoranpoint-site`).
 - Database changes are NOT automatic. Add a new migration file (never edit one already run on the live
-  project), then tell Dez to run it in the Supabase SQL editor. Migrations 1–26 have been run, 27 (contact form) not yet (checked 2026-10-22;
+  project), then tell Dez to run it in the Supabase SQL editor. Migrations 1–26 have been run, 27 (contact form) and 28 (requests) not yet (checked 2026-10-22;
   ask if unsure). Alert emails are live (Resend key in Vault, first send
   confirmed 2026-10-20).
 - Station changes reach the Pis by themselves: every deploy publishes `app.sonoranpoint.com/station-release/latest.json` + a zip
@@ -53,6 +53,15 @@ See README.md for the full product description.
   removed, renamed, moved location/contract) plus `private.station_event()` for new codes; `by_name` is "Sonoran Point" for operators.
   Console edits go through `platform_update_station`. Taps store `station_contract_id` at insert, so moving a station
   doesn't move its past taps (RLS: `private.can_see_tap`). `station_overview` must be recreated when `stations` gets columns.
+
+## Requests (migration 28)
+- Console "Requests" (`vRequests`/`vRequest`): every contact form message (`private.contact_requests`) plus ones added by hand
+  (`platform_add_request`, email optional). kind lead/support ("Help with my account" = support; sender matched to a customer -> `org_id`).
+  Status new/open/waiting/won/lost/closed/spam; `assigned_to` = an operator. History in `private.contact_events`
+  (created, note, reply, status, kind, assigned, customer, details). `platform_request_reply` emails from no-reply@ with reply-to = the
+  operator. "Make them a customer" prefills New customer (`S.fromRequest`); creating it marks the lead won and links it.
+- Console live loads use `loadSeq`/`detailSeq` so an older refresh finishing late can't put old data back.
+- Live tests: `tests/ui/backend.js` kills any leftover PostgREST first (a stale one on port 54322 serves an old schema and makes tests flaky).
 
 ## Closing out a customer (migration 25)
 - `platform_close_customer(org)`: status cancelled, stations revoked (not removed), invites deleted, units ready/shipped/installed ->

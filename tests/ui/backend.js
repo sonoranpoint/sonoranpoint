@@ -76,8 +76,11 @@ function auth(req, res, body, url) {
 
 function start(port = 54321) {
   resetDb();
+  // A PostgREST left over from a crashed run would still hold the port with the old database's functions.
+  try { execSync("pkill -f '[.]tools/postgrest'"); } catch {}
   const pg = spawn(POSTGREST, [], { env: { ...process.env, PGRST_DB_URI: PG, PGRST_DB_SCHEMAS: "public",
     PGRST_DB_ANON_ROLE: "anon", PGRST_JWT_SECRET: SECRET, PGRST_SERVER_PORT: "54322", PGRST_LOG_LEVEL: "crit" }, stdio: "inherit" });
+  process.on("exit", () => { try { pg.kill(); } catch {} });
   const server = http.createServer((req, res) => {
     let data = ""; req.on("data", (c) => (data += c)); req.on("end", () => {
       const url = new URL(req.url, "http://x");

@@ -1281,6 +1281,42 @@ select pg_temp.ok((select count(*) from private.contact_requests) = 3 and not ex
 select pg_temp.ok((select count(*) from private.email_batches where id > :mails0 and subject like 'Website: Pricing from Pat Lee, Acme Tools' and reply_to = 'pat@example.com')
                   = (select count(*) from private.platform_operators), 'every operator is emailed; replies go to the sender');
 
+\echo '--- Requests (leads and support) in the console'
+set role anon;
+select submit_contact('Avery Owner', 'Owner-A@example.com', 'The station says offline.', p_topic => 'Help with my account') \g /dev/null
+reset role;
+select id as sreq from private.contact_requests where email = 'owner-a@example.com' \gset
+select pg_temp.ok((select kind = 'support' and org_id = '00000000-0000-0000-0000-00000000d3e0' and status = 'new' from private.contact_requests where id = :sreq),
+                  '"Help with my account" from someone on a customer''s team is a support request linked to that customer');
+select pg_temp.ok((select kind from private.contact_requests where email = 'pat@example.com' order by id limit 1) = 'lead', 'anything else is a lead');
+select pg_temp.ok((select count(*) from private.email_batches where subject like 'Website:%' and html like '%#request/' || :sreq || '%') > 0, 'the email to us links to the request in the console');
+set role authenticated;
+select set_config('request.jwt.claim.sub', 'cccccccc-0000-0000-0000-000000000003', false) \g /dev/null
+select pg_temp.ok(pg_temp.raises($$select platform_requests()$$), 'customers can''t see requests');
+select set_config('request.jwt.claim.sub', '99999999-0000-0000-0000-000000000009', false) \g /dev/null
+select pg_temp.ok(jsonb_array_length(platform_requests()) = 4, 'operators see every request');
+select pg_temp.ok((platform_update_request(:sreq, jsonb_build_object('status', 'open', 'assigned_to', '99999999-0000-0000-0000-000000000009')))->>'ok' = 'true', 'take it and mark it open');
+select pg_temp.ok((platform_request_note(:sreq, 'Asked them to check the power.'))->>'ok' = 'true', 'add a note');
+select pg_temp.ok((platform_request_reply(:sreq, 'Can you unplug it for ten seconds?'))->>'ok' = 'true', 'reply by email');
+select pg_temp.ok((platform_update_request(:sreq, '{"assigned_to": "eeeeeeee-0000-0000-0000-000000000005"}'))->>'error' = 'not_operator', 'only your own team can be assigned');
+select pg_temp.ok((platform_add_request('{"name": "Sam from the trade show", "company": "Big Rig Rentals", "phone": "602-555-0100", "message": "Wants 3 stations."}'))->>'ok' = 'true', 'add a lead by hand, no email needed');
+reset role;
+select id as samreq from private.contact_requests where name = 'Sam from the trade show' \gset
+select id as patreq from private.contact_requests where name = 'Pat Lee' order by id limit 1 \gset
+set role authenticated;
+select pg_temp.ok((platform_request_reply(:samreq, 'hi'))->>'error' = 'no_email', 'can''t email someone with no email address');
+select pg_temp.ok((platform_update_request(:patreq, '{"status": "won", "org_id": "00000000-0000-0000-0000-00000000d3e0"}'))->>'ok' = 'true', 'a lead becomes a customer');
+reset role;
+select pg_temp.ok((select status = 'waiting' and assigned_to = '99999999-0000-0000-0000-000000000009' from private.contact_requests where id = :sreq), 'after a reply it''s waiting on them');
+select pg_temp.ok((select count(*) from private.email_batches where to_email = 'owner-a@example.com' and reply_to = 'dez@vendor.example' and body_text like '%unplug it%') = 1,
+                  'the reply goes to them, and their answer comes to whoever wrote it');
+select pg_temp.ok((select string_agg(kind, ',' order by id) from private.contact_events where request_id = :sreq) = 'created,status,assigned,note,reply', 'its history keeps every step');
+select pg_temp.ok((select closed_at is not null from private.contact_requests where name = 'Pat Lee' order by id limit 1), 'won leads are closed');
+set role authenticated;
+select set_config('request.jwt.claim.sub', '99999999-0000-0000-0000-000000000009', false) \g /dev/null
+select pg_temp.ok((platform_request(:sreq))->'request'->>'assigned_name' = 'Dez' and jsonb_array_length((platform_request(:sreq))->'events') = 5, 'the console reads one request and its history');
+reset role;
+
 \echo '--- Deleting a company removes all its data'
 delete from organizations where slug = 'demo';
 select pg_temp.ok((select count(*) from equipment) = 0 and (select count(*) from transactions) = 0, 'company delete cascades cleanly');
