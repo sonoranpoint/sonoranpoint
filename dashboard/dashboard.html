@@ -437,11 +437,12 @@ a.kpi:hover { border-color: var(--brand); transform: translateY(-1px); }
 .company { margin-top: auto; position: relative; border-top: 1px solid rgba(223, 232, 247, .12); padding-top: 14px; }
 .company > button, .company > div.cbox { width: 100%; display: flex; align-items: center; gap: 11px; background: none; border: 0; color: inherit; text-align: left; padding: 8px; border-radius: 10px; }
 .company > button:hover { background: rgba(255, 255, 255, .06); }
-.clogo { width: 38px; height: 38px; border-radius: 50%; flex: none; display: grid; place-items: center; overflow: hidden; background: var(--cust, var(--sp-sun)); color: #14181d;
-  font-family: var(--head); font-weight: 800; font-size: 14px; box-shadow: 0 0 0 2px rgba(255, 255, 255, .9); }
-.clogo { position: relative; } .clogo img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; background: #fff; }
 .company b { display: block; font-size: 14.5px; color: #fff; line-height: 1.2; }
 .company small { display: block; font-size: 12.5px; color: rgba(223, 232, 247, .66); }
+.cmark { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; background: #fff; border-radius: 10px; padding: 8px 12px; min-height: 54px; }
+.cmark img { display: block; max-width: 100%; max-height: 46px; object-fit: contain; }
+.cmark b { display: none; } .cmark.nologo { background: none; padding: 0; min-height: 0; justify-content: flex-start; }
+.cmark.nologo b { display: block; font-size: 15px; overflow-wrap: anywhere; }
 .company svg.chev { width: 16px; height: 16px; margin-left: auto; flex: none; opacity: .7; }
 .side .demo-pill { margin: 0 8px 6px; display: inline-block; }
 .pop { position: absolute; z-index: 40; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); padding: 6px; min-width: 220px; }
@@ -1217,16 +1218,15 @@ function render() {
     ["stations", "Stations", "station"], ["shifts", "Shifts", "calendar"], ["alerts", "Alerts", "bell", open], "-", ["settings", "Settings", "sliders"], ...(can("admin") ? [["team", "Team access", "shield"]] : [])];
   if (S.route === "team" && !can("admin")) S.route = "overview";
   const many = LIVE && L.companies.length > 1;
-  const sub = LIVE ? ROLE_NAME[DB.me.role] : "Demo company";
   $("#app").className = "app" + (S.navOpen ? " navopen" : "");
   $("#app").innerHTML = `
     <aside class="side" aria-label="Main menu">
       <a class="brandmark" href="#overview" aria-label="Sonoran Point, dashboard home"><img src="brand/mark-180.png" alt=""><span>Sonoran<i>Point</i></span></a>
       <nav class="snav" aria-label="Sections">${nav.map((n) => n === "-" ? "<hr>" : `<a href="#${n[0]}" class="${S.route === n[0] ? "on" : ""}" ${S.route === n[0] ? 'aria-current="page"' : ""}>${ic(n[2])}${n[1]}${n[3] ? `<span class="n" aria-label="${n[3]} need attention">${n[3]}</span>` : ""}</a>`).join("")}</nav>
       <div class="company">${LIVE ? "" : `<span class="demo-pill">Demo data</span>`}
-        ${many ? `<button type="button" data-act="orgMenu" aria-haspopup="true" aria-expanded="${S.pop === "org"}">${companyBadge()}<span><b>${esc(DB.org.name)}</b><small>${esc(sub)}</small></span>${ic("chevUpDown", "chev")}</button>
+        ${many ? `<button type="button" data-act="orgMenu" aria-haspopup="true" aria-expanded="${S.pop === "org"}">${companyMark()}${ic("chevUpDown", "chev")}</button>
           <div class="pop" role="menu" ${S.pop === "org" ? "" : "hidden"}><label>Company<select id="switchOrg" aria-label="Switch company">${L.companies.map((c) => `<option value="${c.org_id}" ${c.org_id === L.org ? "selected" : ""}>${esc(c.name)}</option>`).join("")}</select></label></div>`
-          : `<div class="cbox">${companyBadge()}<span><b>${esc(DB.org.name)}</b><small>${esc(sub)}</small></span></div>`}</div>
+          : `<div class="cbox">${companyMark()}</div>`}</div>
     </aside>
     ${S.navOpen ? `<div class="navscrim" data-act="navClose"></div>` : ""}
     <main class="main">
@@ -1277,8 +1277,9 @@ async function uploadLogo(file) {
   return sb.storage.from("logos").getPublicUrl(path).data.publicUrl;
 }
 // The company's own mark at the bottom of the menu: their logo, or initials on their accent color.
-function companyBadge() {
-  return `<span class="clogo" aria-hidden="true">${DB.org.logo_url ? `<img src="${esc(DB.org.logo_url)}" alt="" onerror="this.remove()">` : ""}${esc(initialsOf(DB.org.name))}</span>`;
+// The company's logo on a white plate; its name in text when there's no logo (or it doesn't load).
+function companyMark() {
+  return `<span class="cmark ${DB.org.logo_url ? "" : "nologo"}">${DB.org.logo_url ? `<img src="${esc(DB.org.logo_url)}" alt="${esc(DB.org.name)}" onerror="this.parentNode.classList.add('nologo'); this.remove()">` : ""}<b>${esc(DB.org.name)}</b></span>`;
 }
 // Search across equipment and people from the top bar.
 function searchResults(q) {

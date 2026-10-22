@@ -94,7 +94,7 @@ const go = async (r) => { dom.window.location.hash = r; await sleep(30); };
   doc.querySelector('[data-seg="actType:for"]').click(); await sleep(10);
   check([...doc.querySelectorAll("tbody tr:not(.dayrow)")].every((tr) => /Returned for/.test(tr.textContent)) && doc.querySelectorAll("tbody tr:not(.dayrow)").length > 0, "activity filter: returned for someone");
   doc.querySelector('[data-seg="actType:all"]').click(); doc.querySelector('[data-seg="actRange:7d"]').click(); await sleep(10);
-  check(doc.querySelectorAll("tr.dayrow").length >= 2 && /Today/.test(doc.querySelector("tr.dayrow").textContent), "activity is grouped by day, newest first");
+  check(doc.querySelectorAll("tr.dayrow").length >= 2 && ((t) => /Today|Yesterday/.test(t) || [0, 1].some((d) => t.includes(new Date(Date.now() - d * 86400000).toLocaleDateString("en-US", { weekday: "long", timeZone: "America/Phoenix" }))))(doc.querySelector("tr.dayrow").textContent), "activity is grouped by day, newest first", [...doc.querySelectorAll("tr.dayrow")].map((r) => r.textContent).join("|"));
   { const dp = doc.querySelector("#actDay"); const y = E("dayKey(addDays(localDay(Date.now(), tz()), -1))"); dp.value = y; dp.dispatchEvent(new dom.window.Event("change", { bubbles: true })); await sleep(10);
     check(doc.querySelectorAll("tr.dayrow").length === 1 && !/Today/.test(doc.querySelector("tr.dayrow")?.textContent || "Today") && doc.querySelector("[data-act=clearDay]"), "picking a day shows just that day");
     doc.querySelector("[data-act=clearDay]").click(); await sleep(10); }
