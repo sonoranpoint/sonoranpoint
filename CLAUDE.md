@@ -16,8 +16,8 @@ See README.md for the full product description.
 - Push to `main` → GitHub Actions runs `tests/run.sh db` + `ui`, then deploys app + console to Cloudflare Pages
   (projects `sonoranpoint-app`, `sonoranpoint-console`).
 - Database changes are NOT automatic. Add a new migration file (never edit one already run on the live
-  project), then tell Dez to run it in the Supabase SQL editor. Migrations 1–25 have been run (checked 2026-10-22;
-  ask if unsure). Alert emails are live (Resend key in Vault, first send
+  project), then tell Dez to run it in the Supabase SQL editor. Migrations 1–25 have been run (checked 2026-10-22); 26 handed over
+  (ask if unsure). Alert emails are live (Resend key in Vault, first send
   confirmed 2026-10-20).
 - Station changes reach the Pis by themselves: every deploy publishes `app.sonoranpoint.com/station-release/latest.json` + a zip
   (version = `VERSION` in station.html + a content hash, so only station changes count). `station/pi/station_updater.py` on each
@@ -50,6 +50,11 @@ See README.md for the full product description.
 ## Closing out a customer (migration 25)
 - `platform_close_customer(org)`: status cancelled, stations revoked (not removed), invites deleted, units ready/shipped/installed ->
   hardware status `returning` ("Coming back"). Members and history stay; the dashboard shows `accountNote()`. Reopen = status active + new codes.
+
+## Uptime (migration 26)
+- `public.station_outages`: a trigger on `stations.last_seen_at` saves a gap of more than 5 minutes between heartbeats (not while
+  disconnected or at activation). A station offline now = open stretch since `last_seen_at`, worked out on read
+  (console `uptimeOf`/`fleetHours`, dashboard `api.uptime`). Console reads `platform_outages()`.
 
 ## Barcodes (migration 24)
 - `employees.barcode`, `equipment.barcode` (trimmed, upper case, unique per company). Something with only a barcode gets a tag ID

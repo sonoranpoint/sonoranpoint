@@ -441,7 +441,11 @@ a.stat:hover { border-color: color-mix(in srgb, var(--t-blue) 40%, var(--line));
 .pager button.on { background: var(--t-blue); color: #fff; } .pager button:not(.on):hover { border-color: var(--line); } .pager button[disabled] { opacity: .35; cursor: default; }
 .health { padding: 4px 20px 20px; }
 .health .ok-line { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 14px; color: var(--ok); margin-bottom: 14px; } .health .ok-line.warn { color: var(--warn); }
-.rings { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; text-align: center; }
+.warn-text { color: var(--warn, #9a5b00); } .bad-text { color: var(--bad, #b3261e); }
+.uptime-chart { display: flex; align-items: flex-end; gap: 3px; height: 56px; margin-top: 16px; }
+.uptime-chart i { flex: 1; background: var(--t-green); border-radius: 3px 3px 0 0; min-height: 0; } .uptime-chart i.warn { background: var(--t-orange); } .uptime-chart i.bad { background: var(--t-red); } .uptime-chart i.none { background: var(--surface-2); height: 4px !important; }
+.uptime-axis { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); margin-top: 4px; }
+.rings { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; text-align: center; }
 .ring { position: relative; width: 84px; height: 84px; margin: 0 auto 6px; }
 .ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
 .ring b { position: absolute; inset: 0; display: grid; place-items: center; font-family: var(--head); font-weight: 800; font-size: 17px; }
@@ -681,7 +685,11 @@ function buildDemo() {
       ...(x.activated_at ? [{ station: x.id, at: x.activated_at, kind: "set_up", details: {}, by: null }] : [])]);
     c.locations = [...new Set(c.stations.map((x) => x.location).filter(Boolean))].sort();
   });
-  return { customers, log, team, hw, latestStation: "station-0.1.0" };
+  // Some past outages, so uptime has something to show.
+  const live = customers.flatMap((c) => c.stations.filter((x) => x.activated_at && !x.revoked));
+  const outages = [[0, 26 * HOUR, 22 * MIN], [0, 5 * HOUR, 41 * MIN], [1, 3 * DAY, 2 * HOUR], [2, 9 * HOUR, 12 * MIN]]
+    .filter(([i]) => live[i]).map(([i, back, len]) => ({ station: live[i].id, start: now - back - len, end: now - back }));
+  return { customers, log, team, hw, latestStation: "station-0.1.0", outages };
 }
 const DB = buildDemo();
 
@@ -972,12 +980,15 @@ const mapStation = (s) => ({ id: s.id, name: s.name, location: s.location || "",
   revoked: !!s.revoked_at, created: ms(s.created_at) || Date.now(), contract_id: s.contract_id || null, replaced: ms(s.replaced_at) || null });
 const live = {
   async load() {
+    // Outages (database update 26); null hides uptime until it's run.
+    const outs = rpc("platform_outages").catch(() => null);
     // The newest station version (published with each deploy); stations update themselves to it.
-    fetch("station-release/latest.json", { cache: "no-store" }).then((r) => r.ok ? r.json() : null).then((m) => { if (m?.version) { DB.latestStation = m.version; render(); } }).catch(() => {});
+    fetch("station-release/latest.json", { cache: "no-store" }).then((r) => r.ok ? r.json() : null).then((m) => { if (m?.version && m.version !== DB.latestStation) { DB.latestStation = m.version; render(); } }).catch(() => {});
     const [cs, fleet, lg, team, hw] = await Promise.all([rpc("platform_customers"), rpc("platform_fleet"), rpc("platform_log", { p_limit: 300 }),
       rpc("platform_team").catch(() => null),   // null until the team migration is run
       rpc("platform_hardware").catch(() => null)]);   // null until the hardware migration is run
     DB.team = team ? mapTeam(team) : null;
+    const o = await outs; DB.outages = o ? o.map((x) => ({ station: x.station_id, start: ms(x.started_at), end: ms(x.ended_at) })) : null;
     const hwPrev = Object.fromEntries((DB.hw || []).map((u) => [u.id, u]));
     DB.hw = hw ? hw.map((u) => ({ ...u, created_at: ms(u.created_at), events: hwPrev[u.id]?.events })) : null;
     const prev = Object.fromEntries(DB.customers.map((c) => [c.id, c]));
@@ -1300,6 +1311,30 @@ function bellList() {
     + (later.length ? `<div class="grp">Also</div>${later.slice(0, Math.max(2, 7 - now.length)).map(row).join("")}` : "")
     + `<a href="#customers" data-act="bellPick" class="bellall">${att.length > 7 ? `See all ${att.length} on the overview` : "Open the overview"}</a>`;
 }
+/* Uptime: outages saved by the database (a gap of more than 5 minutes between heartbeats), plus the open stretch
+   of a station that's offline right now. Only time since the station was set up counts. */
+function downOf(s, to) {
+  const list = (DB.outages || []).filter((o) => o.station === s.id).map((o) => [o.start, o.end]);
+  if (s.activated_at && !s.revoked && s.last_seen && to - s.last_seen > 5 * MIN) list.push([s.last_seen, to]);
+  return list;
+}
+function uptimeOf(s, from, to = Date.now()) {
+  const start = Math.max(from, s.activated_at || to); if (!s.activated_at || s.revoked || start >= to) return null;
+  const down = downOf(s, to).reduce((t, [a, b]) => t + Math.max(0, Math.min(b, to) - Math.max(a, start)), 0);
+  return { up: 1 - down / (to - start), down, span: to - start };
+}
+const pctText = (u) => (u == null ? "—" : u >= 0.9995 ? "100%" : (Math.floor(u * 1000) / 10).toFixed(1) + "%");
+// Online share of all set-up stations, hour by hour, for the last 24 hours.
+function fleetHours(set, now = Date.now()) {
+  const end = Math.ceil(now / HOUR) * HOUR, out = [];
+  for (let h = 23; h >= 0; h--) {
+    const a = end - (h + 1) * HOUR, b = Math.min(end - h * HOUR, now); let span = 0, down = 0;
+    for (const s of set) { const st = Math.max(a, s.activated_at || b); if (st >= b || s.revoked) continue; span += b - st;
+      down += downOf(s, now).reduce((t, [x, y]) => t + Math.max(0, Math.min(y, b) - Math.max(x, st)), 0); }
+    out.push({ at: a, up: span ? 1 - down / span : null });
+  }
+  return out;
+}
 function vCustomers() {
   const all = api.customers(), now = Date.now();
   const fleet = api.fleet().filter((s) => s.customer_status !== "paused" && s.customer_status !== "cancelled");
@@ -1374,7 +1409,11 @@ function vCustomers() {
       <div class="stack">
         <section class="panel"><div class="panel-h"><h2>System health</h2><a class="more" href="#fleet">Stations ${ic("arrowRight")}</a></div>
           <div class="health"><div class="ok-line ${offline || waiting.some((s) => s.state.key === "expired") ? "warn" : ""}"><span class="pip" style="background:currentColor"></span>${offline ? `${offline} station${offline === 1 ? "" : "s"} offline` : "All stations connected"}</div>
-            <div class="rings">${ring(pct(online, set.length), "Online now", `${online} / ${set.length}`)}${ring(pct(set.length, set.length + waiting.length), "Set up", `${set.length} / ${set.length + waiting.length} shipped`)}${ring(pct(onLatest, set.length), "Latest software", latest ? `${onLatest} / ${set.length}` : "—")}</div></div></section>
+            <div class="rings">${DB.outages ? (() => { const us = set.map((s) => uptimeOf(s, now - DAY, now)).filter(Boolean); const span = us.reduce((t, u) => t + u.span, 0), down = us.reduce((t, u) => t + u.down, 0);
+              const v = span ? Math.floor(1000 * (1 - down / span)) / 10 : 100; return ring(v, "Uptime, 24 h", down ? `${Math.round(down / MIN)} min offline in all` : "No outages"); })() : ""}${ring(pct(online, set.length), "Online now", `${online} / ${set.length}`)}${ring(pct(set.length, set.length + waiting.length), "Set up", `${set.length} / ${set.length + waiting.length} shipped`)}${ring(pct(onLatest, set.length), "Latest software", latest ? `${onLatest} / ${set.length}` : "—")}</div>
+            ${DB.outages && set.length ? (() => { const hrs = fleetHours(set, now); return `<div class="uptime-chart" role="img" aria-label="Stations online, hour by hour, last 24 hours">
+              ${hrs.map((h) => `<i style="height:${h.up == null ? 0 : Math.max(4, Math.round(h.up * 100))}%" class="${h.up == null ? "none" : h.up >= 0.999 ? "" : h.up >= 0.9 ? "warn" : "bad"}" title="${esc(new Intl.DateTimeFormat("en-US", { hour: "numeric" }).format(new Date(h.at)))}: ${h.up == null ? "no stations yet" : pctText(h.up) + " online"}"></i>`).join("")}</div>
+              <div class="uptime-axis"><span>24 h ago</span><span>Now</span></div>`; })() : ""}</div></section>
         <section class="panel"><div class="panel-h"><h2>Needs attention</h2><span class="muted" style="font-size:13px">${att.length}</span></div>
           <div class="list">${att.slice(0, 8).map((x) => { const [tone, icon] = attIcon[x.kind] || ["info", "alert"]; return `<button class="ev" data-preview="${x.c.id}">
             <span class="tile ${tone}">${ic(icon)}</span><span><b>${esc(x.c.name)}</b><span class="sub">${esc(x.text)}. ${esc(x.sub)}</span></span><span></span></button>`; }).join("")
@@ -1516,7 +1555,7 @@ function vCustomer() {
 
       <section class="panel"><div class="panel-h"><h2>Stations</h2><span class="muted" style="font-size:13px">${live.length}${c.station_limit != null ? ` of ${c.station_limit} allowed` : ""}</span></div>
         ${live.length ? `<div class="tablewrap"><table><thead><tr><th>Station</th><th>Status</th><th>Admin tag</th><th></th></tr></thead><tbody>
-          ${stationRows(c, live, (s) => { const st = stationState(s, c); return `<tr><td><button class="linkbtn" data-act="stHist" data-id="${s.id}" aria-expanded="${S.stHist === s.id}" title="Show its history"><b>${esc(s.name)}</b></button><span class="sub">${esc([s.location, s.version].filter(Boolean).join(" · "))}</span></td>
+          ${stationRows(c, live, (s) => { const st = stationState(s, c); return `<tr><td><button class="linkbtn" data-act="stHist" data-id="${s.id}" aria-expanded="${S.stHist === s.id}" title="Show its history"><b>${esc(s.name)}</b></button><span class="sub">${esc([s.location, s.version, DB.outages && uptimeOf(s, Date.now() - 7 * DAY) ? pctText(uptimeOf(s, Date.now() - 7 * DAY).up) + " online, 7 days" : ""].filter(Boolean).join(" · "))}</span></td>
             <td><span class="chip ${st.tone}">${esc(st.label)}</span>${st.key === "waiting" || st.key === "expired" ? `<span class="sub">${s.code ? `Code <span class="code">${esc(s.code)}</span> · ` : ""}${s.code_expires > now ? "expires " + esc(fmtDate(s.code_expires)) : "expired"}</span>` : s.last_seen && st.key === "online" ? "" : s.last_seen ? `<span class="sub">Last seen ${esc(ago(s.last_seen))}</span>` : ""}</td>
             <td>${s.admin_claimed_at ? `<span class="chip ok">Registered</span>` : `<span class="muted">Not yet</span>`}</td>
             <td style="text-align:right;white-space:nowrap">${cf === "code:" + s.id
@@ -1705,13 +1744,14 @@ function vFleet() {
     <section class="panel"><div class="panel-h"><div class="seg" role="group" aria-label="Show">${[["problems", "Needs a look"], ["online", "Online"], ["waiting", "Waiting for setup"], ["all", "All"]].map(([k, l]) => `<button data-seg="fleet:${k}" class="${S.f.fleet === k ? "on" : ""}" aria-pressed="${S.f.fleet === k}">${l} (${counts[k]})</button>`).join("")}</div>
       <span class="muted" style="font-size:13px">${DB.latestStation ? `Newest: <span class="mono">${esc(DB.latestStation)}</span>${(() => { const behind = all.filter((s) => s.version && s.version !== DB.latestStation && !s.revoked).length; return behind ? ` · ${behind} not on it yet` : " · all up to date"; })()} · ` : ""}Software: ${Object.entries(versions).map(([v, n]) => `<span class="mono">${esc(v)}</span> × ${n}`).join(", ")}</span></div>
       ${DB.latestStation ? `<p class="muted" style="margin:0;padding:0 18px 12px;font-size:12.5px">Stations set up with the updater pick up a new version within about half an hour, the next time nobody is using them.</p>` : ""}
-      <div class="tablewrap"><table><thead><tr><th>Station</th><th>Status</th><th>Last seen</th><th>Software</th><th>Unit</th><th>Admin tag</th></tr></thead><tbody>
-      ${byCustomer(rows).map(([org, list]) => `<tr class="grp"><td colspan="6"><a class="glink" href="#customer/${org}">${esc(list[0].customer)}</a>
+      <div class="tablewrap"><table><thead><tr><th>Station</th><th>Status</th><th>Last seen</th>${DB.outages ? "<th>Uptime, 7 days</th>" : ""}<th>Software</th><th>Unit</th><th>Admin tag</th></tr></thead><tbody>
+      ${byCustomer(rows).map(([org, list]) => `<tr class="grp"><td colspan="${DB.outages ? 7 : 6}"><a class="glink" href="#customer/${org}">${esc(list[0].customer)}</a>
           <span class="muted" style="font-weight:400"> · ${list.length} station${list.length === 1 ? "" : "s"}${list.some((x) => x.revoked) ? `, ${list.filter((x) => x.revoked).length} disconnected` : ""}${list[0].customer_status === "paused" ? ", account paused" : list.some((x) => x.state.tone === "bad" || x.state.tone === "warn") ? "" : list.every((x) => x.revoked) ? "" : ", all fine"}</span></td></tr>`
         + list.map((s) => `<tr class="click ${s.revoked ? "gone" : ""}" data-preview="${s.org}" tabindex="0"><td><b>${esc(s.name)}</b><span class="sub">${esc([s.location, contractNameOf(s)].filter(Boolean).join(" · "))}</span></td>
         <td><span class="chip ${s.state.tone}">${esc(s.state.label)}</span>${["waiting", "expired"].includes(s.state.key) ? `<span class="sub">Shipped ${esc(ago(s.created))}</span>` : ""}</td>
-        <td>${s.last_seen ? esc(fmtWhen(s.last_seen)) : "—"}</td><td class="mono">${esc(s.version || "—")}</td><td>${hwForStation(s.id) ? `<a class="mono" href="#unit/${hwForStation(s.id).id}" style="color:var(--brand-text)">${esc(hwForStation(s.id).serial)}</a>` : `<span class="muted">—</span>`}</td><td>${s.admin_claimed_at ? "Registered" : s.activated_at ? `<span class="muted">Skipped</span>` : "—"}</td></tr>`).join("")).join("")
-        || `<tr><td colspan="6" class="empty">${S.f.fleet === "problems" ? "Nothing needs a look. Every station is online or on its way." : "None."}</td></tr>`}
+        <td>${s.last_seen ? esc(fmtWhen(s.last_seen)) : "—"}</td>${DB.outages ? (() => { const u = uptimeOf(s, Date.now() - 7 * DAY); const n = (DB.outages || []).filter((o) => o.station === s.id && o.end > Date.now() - 7 * DAY).length + (s.state.key === "offline" ? 1 : 0);
+          return `<td>${u ? `<b class="${u.up >= 0.999 ? "" : u.up >= 0.95 ? "warn-text" : "bad-text"}">${pctText(u.up)}</b>${n ? `<span class="sub">${n} outage${n === 1 ? "" : "s"}</span>` : ""}` : `<span class="muted">—</span>`}</td>`; })() : ""}<td class="mono">${esc(s.version || "—")}</td><td>${hwForStation(s.id) ? `<a class="mono" href="#unit/${hwForStation(s.id).id}" style="color:var(--brand-text)">${esc(hwForStation(s.id).serial)}</a>` : `<span class="muted">—</span>`}</td><td>${s.admin_claimed_at ? "Registered" : s.activated_at ? `<span class="muted">Skipped</span>` : "—"}</td></tr>`).join("")).join("")
+        || `<tr><td colspan="${DB.outages ? 7 : 6}" class="empty">${S.f.fleet === "problems" ? "Nothing needs a look. Every station is online or on its way." : "None."}</td></tr>`}
       </tbody></table></div></section>`;
 }
 function vLog() {

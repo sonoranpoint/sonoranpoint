@@ -251,6 +251,12 @@ const api_set = async (id) => { E(`api.updateCustomer('${id}', { logo_dark_url: 
   await click(`[data-act="askShipBox"][data-id="${sx}"]`);
   doc.querySelector('[data-form="shipbox:hwbox"] [name=tracking]').value = "1Z999AA10000000099"; await submit('[data-form="shipbox:hwbox"]'); await sleep(20);
   check(E(`DB.hw.find(u => u.id === "hwbox").status`) === "shipped" && E(`DB.hw.find(u => u.id === "hwbox").tracking`) === "1Z999AA10000000099" && /Shipped/.test(page()), "mark it shipped with its tracking number");
+  // Uptime
+  await go("customers");
+  check(/Uptime, 24 h/.test(page()) && doc.querySelectorAll(".uptime-chart i").length === 24, "System health shows 24-hour uptime and an hour-by-hour chart");
+  await go("fleet"); await click('[data-seg="fleet:all"]');
+  check(/Uptime, 7 days/.test(page()) && /\d+\.\d%\s*\d+ outages?/.test(page()), "the Stations page shows each station's 7-day uptime and outages");
+  check(E("pctText(uptimeOf({ id: 'x', activated_at: Date.now() - 2 * DAY, last_seen: Date.now() - 6 * HOUR }, Date.now() - DAY).up)") === "75.0%", "an offline station counts the time since its last heartbeat");
   check(errors.length === 0, "no script errors " + errors.join(";"));
   process.exit();
 })();

@@ -1241,6 +1241,29 @@ select pg_temp.ok(exists (select 1 from station_events e join stations s on s.id
                   and (select action from private.platform_log where org_id = :'dg' order by id desc limit 1) = 'closed out customer', 'it shows in their station history and your log');
 select pg_temp.ok(exists (select 1 from org_members where org_id = :'dg'), 'their team stays (they can still sign in to see their history)');
 
+\echo '--- Station uptime history'
+select id as ups from stations where name = 'Equipment Room 02' and org_id = '00000000-0000-0000-0000-00000000d3e0' \gset
+update stations set last_seen_at = now() - interval '2 hours' where id = :'ups';
+set role anon;
+select station_heartbeat(:'key4') \g /dev/null
+reset role;
+select pg_temp.ok((select count(*) from station_outages where station_id = :'ups' and started_at < now() - interval '119 minutes' and ended_at > now() - interval '1 minute') = 1,
+                  'a station back after 2 hours of silence records an outage for the gap');
+set role anon;
+select station_heartbeat(:'key4') \g /dev/null
+reset role;
+update stations set last_seen_at = last_seen_at - interval '2 minutes' where id = :'ups';
+set role anon;
+select station_heartbeat(:'key4') \g /dev/null
+reset role;
+select pg_temp.ok((select count(*) from station_outages where station_id = :'ups') = 1, 'short gaps (under 5 minutes) aren''t outages');
+set role authenticated;
+select set_config('request.jwt.claim.sub', '99999999-0000-0000-0000-000000000009', false) \g /dev/null
+select pg_temp.ok(exists (select 1 from jsonb_array_elements(platform_outages()) o where o->>'station_id' = :'ups'), 'the console reads outages');
+select set_config('request.jwt.claim.sub', 'aaaaaaaa-0000-0000-0000-000000000001', false) \g /dev/null
+select pg_temp.ok((select count(*) from station_outages where station_id = :'ups') = 1, 'the customer sees their station''s outages');
+reset role;
+
 \echo '--- Deleting a company removes all its data'
 delete from organizations where slug = 'demo';
 select pg_temp.ok((select count(*) from equipment) = 0 and (select count(*) from transactions) = 0, 'company delete cascades cleanly');

@@ -616,7 +616,7 @@ function downloadCsv(name, header, rows) {
 const csvWhen = (ms) => (ms ? new Intl.DateTimeFormat("en-US", { timeZone: tz(), year: "numeric", month: "2-digit", day: "2-digit", hour: "numeric", minute: "2-digit" }).format(new Date(ms)) : "");
 function statusText(q) { return statusText0(q) + (q.problem ? ` (${q.problem.reason})` : "") + (q.loan ? ` (on loan to ${contractName(q.loan.to)})` : ""); }
 function statusText0(q) { return q.status === "lost" ? "Lost" : q.status === "maintenance" ? "Maintenance" : q.status === "retired" ? "Retired" : q.is_overdue ? "Overdue" : q.is_extended ? "Out too long" : q.holder ? "Checked out" : "Available"; }
-const HOUR = 3600000, MIN = 60000;
+const HOUR = 3600000, MIN = 60000, DAY = 86400000;
 
 /* ---- Time zone helpers (company time zone) ---- */
 function tzParts(ms, tz) {
@@ -788,6 +788,7 @@ function buildDemo() {
   shifts.forEach((x) => { x.contract = { AM: "dbw", PM: "ubw" }[x.name] || null; });
   const loans = [{ id: "ln1", eq: equipment.find((q) => q.name === "Battery 06").id, from: "ubw", to: "dbw", at: now - 5 * HOUR, by: "Dana Brooks", notes: "Delta's chargers are down" }];
   const emailPrefs = { u1: ["problem"], u2: ["problem", "overdue"], u3: ["overdue", "shift_report"], u4: [] };
+  const outages = [{ station: "st1", start: now - 30 * HOUR, end: now - 30 * HOUR + 18 * MIN }, { station: "st1", start: now - 3 * DAY, end: now - 3 * DAY + 52 * MIN }];
   const stationEvents = [
     { station: "st1", at: now - 30 * 86400000, kind: "added", details: {}, by: "Sonoran Point" },
     { station: "st1", at: now - 29 * 86400000, kind: "set_up", details: {}, by: "Dana Brooks" },
@@ -795,7 +796,7 @@ function buildDemo() {
     { station: "st2", at: now - 12 * 86400000 + 2 * HOUR, kind: "set_up", details: {}, by: "Dana Brooks" },
     { station: "st2", at: now - 6 * 86400000, kind: "moved_contract", details: { from: "Delta BW", to: "United BW" }, by: "Morgan Reyes" },
   ];
-  return { now, org, categories, equipment, employees, shifts, stations, txns, alerts, audit, reportAcks, occs, members, invites, reasons, problems, emailPrefs, contracts, loans, stationEvents,
+  return { now, org, categories, equipment, employees, shifts, stations, txns, alerts, audit, reportAcks, occs, members, invites, reasons, problems, emailPrefs, contracts, loans, stationEvents, outages,
            me: { id: "u1", name: "Morgan Reyes", role: "owner", email: "morgan.reyes@demoair.example" } };
 }
 const DB = buildDemo();
@@ -944,6 +945,15 @@ const api = {
   revokeStation(id) { Object.assign(DB.stations.find((s) => s.id === id), { revoked: true }); stEvent(id, "disconnected"); },
   /* rpc remove_station: gone from the lists for good; its taps stay in history */
   removeStation(id) { Object.assign(DB.stations.find((s) => s.id === id), { revoked: true, removed: true, pending: false, code: null }); stEvent(id, "removed"); },
+  /* station_outages (database update 26) + the open stretch of a station that's offline now: uptime since `from` */
+  uptime(id, from) {
+    const s = DB.stations.find((x) => x.id === id), now = Date.now(); if (!s || s.revoked || s.pending || !DB.outages) return null;
+    const start = Math.max(from, s.added || from);
+    const list = DB.outages.filter((o) => o.station === id && o.end > start).map((o) => ({ start: o.start, end: o.end }));
+    if (s.last_seen && now - s.last_seen > 5 * MIN) list.push({ start: s.last_seen, end: now, open: true });
+    const down = list.reduce((t, o) => t + Math.max(0, Math.min(o.end, now) - Math.max(o.start, start)), 0);
+    return { up: 1 - down / Math.max(1, now - start), outages: list.sort((a, b) => b.start - a.start) };
+  },
   /* station_events: what happened to a station, newest first */
   stationHistory(id) { return (DB.stationEvents || []).filter((e) => e.station === id).sort((a, b) => b.at - a.at); },
   /* rpc reset_station_activation */
@@ -1925,6 +1935,11 @@ function dStation(id) {
         <button class="btn sm danger" data-act="doRemoveStation">Remove</button><button class="btn sm" data-act="noConfirm">Cancel</button></div>`
       : `<div class="actions">${s.revoked ? "" : `<button class="btn danger" data-act="askRevoke">Disconnect station</button>`}<button class="btn" data-act="newCode">New activation code</button>${s.revoked || s.pending ? `<button class="btn danger" data-act="askRemoveStation">Remove for good</button>` : ""}</div>
         <p class="muted" style="margin:8px 0 0;font-size:13px">A new code is for replacing or re-setting up this station. The old connection stops working.${s.revoked || s.pending ? " Remove a station you won't use again." : ""}</p>`}</div>`}
+    ${(() => { const u = api.uptime(s.id, Date.now() - 7 * DAY); if (!u) return "";
+      const pc = u.up >= 0.9995 ? "100%" : (Math.floor(u.up * 1000) / 10).toFixed(1) + "%", dur = (ms) => ms >= HOUR ? `${Math.floor(ms / HOUR)} h ${Math.round((ms % HOUR) / MIN)} min` : `${Math.max(1, Math.round(ms / MIN))} min`;
+      return `<div class="sect"><h3>Connection, last 7 days</h3><p style="margin:0 0 8px"><b>Online ${pc} of the time</b>${u.outages.length ? ` · ${u.outages.length} time${u.outages.length === 1 ? "" : "s"} offline` : " · never offline"}</p>
+        ${u.outages.length ? `<div class="list">${u.outages.slice(0, 6).map((o) => `<div class="row"><span>${o.open ? "Offline now" : "Offline"} for ${esc(dur((o.open ? Date.now() : o.end) - o.start))}<span class="sub">${o.open ? "Since " : "From "}${esc(fmtWhen(o.start))}${o.open ? "" : " to " + esc(fmtWhen(o.end))}</span></span></div>`).join("")}</div>
+          <p class="muted" style="margin:8px 0 0;font-size:13px">Taps made while a station is offline are saved on it and sync when it reconnects.</p>` : ""}</div>`; })()}
     ${(() => { const h = api.stationHistory(s.id); return h.length ? `<div class="sect"><h3>History</h3><div class="list st-hist">${h.slice(0, 25).map((e) => `<div class="row"><span>${esc(stEventText(e))}<span class="sub">${esc(fmtWhen(e.at))}${e.by ? ` · ${esc(e.by)}` : ""}</span></span></div>`).join("")}</div></div>` : ""; })()}
   </div>`;
 }
@@ -2335,6 +2350,8 @@ const live = {
       contracts: contracts.map((c) => ({ id: c.id, parent: c.parent_id, name: c.name, share: c.share_children, move: c.move_on_return, sort: c.sort_order })),
       emailPrefs: Object.fromEntries(prefs.map((p) => [p.user_id, p.kinds || []])),
     });
+    DB.outages = await q(sb.from("station_outages").select("station_id,started_at,ended_at").eq("org_id", org).gte("ended_at", new Date(Date.now() - 8 * 86400000).toISOString()).limit(2000))
+      .then((rows) => rows.map((o) => ({ station: o.station_id, start: ms(o.started_at), end: ms(o.ended_at) }))).catch(() => null);
     DB.stationEvents = (await q(sb.from("station_events").select("station_id,at,kind,details,by_name").eq("org_id", org).order("at", { ascending: false }).limit(1000)).catch(() => []))
       .map((e) => ({ station: e.station_id, at: ms(e.at), kind: e.kind, details: e.details || {}, by: e.by_name }));
     // Barcodes need database update 24; until it's run the fields stay hidden.

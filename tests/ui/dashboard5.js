@@ -165,6 +165,9 @@ const change = async (el, v) => { if (typeof v === "boolean") el.checked = v; el
   check(/This account is paused/.test(page()), "so does a paused one");
   E("DB.org.status = 'active'; render()"); await sleep(20);
   check(!/This account is/.test(page()), "and nothing when it's active");
+  // Connection history in a station's details
+  E("render()"); const s1 = E("DB.stations.find(x => !x.revoked && !x.removed).id"); E(`openDrawer('station', '${s1}')`); await sleep(20);
+  check(/Connection, last 7 days/.test(drawer()) && /Online 9\d\.\d% of the time/.test(drawer()) && /Offline for 18 min/.test(drawer()), "a station's details show its uptime and outages", drawer().slice(0, 400));
   check(errors.length === 0, "no script errors " + errors.join(";"));
   process.exit();
 })();
