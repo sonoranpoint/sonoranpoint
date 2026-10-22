@@ -653,7 +653,7 @@ function demoSeed() {
   equipment.push({ id: "q71", category_id: "c5", name: "Headset 01", barcode: "PAS-10021", nfc_uid: barcodeUid("PAS-10021"),
     status: "available", mode: "category", hours: null, extended: null, current_employee_id: null, checked_out_at: null, due_at: null, last_event_at: null });
   return {
-    org: { name: "Demo Air Services", timezone: "America/Phoenix", primary_color: "#1F4E79", accent_color: "#F2A900", logo_url: null,
+    org: { name: window.SP_DEMO ? "Northwind Logistics" : "Demo Air Services", timezone: "America/Phoenix", primary_color: "#1F4E79", accent_color: "#F2A900", logo_url: null,
       extended_checkout_hours: 9, enabled_modules: ["shifts"],
       terminology: { equipment: "Equipment", equipment_plural: "Equipment", employee: "Employee", employee_plural: "Employees", checkout: "Check Out", checkin: "Return" },
       settings: { allow_return_by_other: true, allow_checkout_while_held: false } },
@@ -672,7 +672,7 @@ function demoSeed() {
       { id: "s3", name: "Overnight", start: "21:00", end: "05:30", days: null, early: 60, active: true },
     ],
     assignments: [["s1", "e1"], ["s1", "e2"], ["s3", "e3"]],
-    stations: [{ id: "st1", name: "Equipment Room 01", location: "Terminal 3", code: "DEMO0001", key_hash: null, activated: false, revoked: false, last_seen: null }],
+    stations: [{ id: "st1", name: "Equipment Room 01", location: window.SP_DEMO ? "Phoenix site" : "Terminal 3", code: "DEMO0001", key_hash: null, activated: false, revoked: false, last_seen: null }],
     txns: [],
     audit: [],   // staff actions (what the audit log records)
     reasons: demoReasons(),

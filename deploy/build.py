@@ -6,7 +6,7 @@
   dist/app/       -> Cloudflare Pages project "sonoranpoint-app",     domain app.sonoranpoint.com
   dist/console/   -> Cloudflare Pages project "sonoranpoint-console", domain console.sonoranpoint.com
   dist/site/      -> Cloudflare Pages project "sonoranpoint-site",    domain sonoranpoint.com
-                     (site/ pages + "Try it" copies of the station, dashboard and console on demo data)
+                     (site/ pages + "Try it" copies of the station and dashboard on demo data)
   dist/station/   -> the station app, for setting up a Pi by hand (served at http://localhost/)
   dist/app/station-release/latest.json + station-<hash>.zip
                   -> what stations update themselves to (station/pi/station_updater.py checks it)
@@ -95,24 +95,22 @@ SITE_HEADERS = """/*
   Cache-Control: no-cache
 /try/app/*
   X-Robots-Tag: noindex
-/try/console/*
-  X-Robots-Tag: noindex
 /try/station/*
   X-Robots-Tag: noindex
 """
 
 def build_site():
-    """sonoranpoint.com: the site's own pages, plus the station, dashboard and console running on made-up demo data."""
+    """sonoranpoint.com: the site's own pages, plus the station and dashboard running on made-up demo data."""
     out = DIST / "site"
     shutil.copytree(ROOT / "site", out, ignore=shutil.ignore_patterns("*.md"))
     (out / "_headers").write_text(SITE_HEADERS)
-    (out / "robots.txt").write_text("User-agent: *\nDisallow: /try/app/\nDisallow: /try/console/\nDisallow: /try/station/\nSitemap: https://sonoranpoint.com/sitemap.xml\n")
+    (out / "robots.txt").write_text("User-agent: *\nDisallow: /try/app/\nDisallow: /try/station/\nSitemap: https://sonoranpoint.com/sitemap.xml\n")
     brand = ["logo.png", "logo@2x.png", "logo-light.png", "logo-light@2x.png", "mark-64.png", "mark-180.png", "mark-512.png", "favicon.ico", "apple-touch-icon.png", "app-icon-512.png"]
     (out / "brand").mkdir(exist_ok=True)
     for f in brand: shutil.copy(ROOT / "brand" / f, out / "brand" / f)
     # Demo copies: forced onto demo data, starting fresh on each visit.
     demo = '<script>window.SP_DEMO = true;</script>\n'
-    for name, src, extra in [("app", ROOT / "dashboard" / "dashboard.html", ""), ("console", ROOT / "platform" / "console.html", ""),
+    for name, src, extra in [("app", ROOT / "dashboard" / "dashboard.html", ""),
                              ("station", ROOT / "station" / "station.html", '<script>window.SP_TRY = true; try { localStorage.removeItem("station.v2"); } catch {}</script>\n')]:
         d = out / "try" / name; d.mkdir(parents=True)
         (d / "index.html").write_text(HEAD + demo + extra + (src).read_text() + "\n</html>\n")

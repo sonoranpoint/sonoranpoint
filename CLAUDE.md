@@ -9,8 +9,9 @@ See README.md for the full product description.
 - `station/station.html` — the kiosk screen on each Pi; `station/pi/` — PN532 reader service, Wi-Fi helper
 - `supabase/migrations/` — database, applied in filename order; `supabase/tests/smoke_test.sql` — DB tests
 - `brand/` — logos (`source-logo.png` is the official logo; `logo.png`/`logo@2x.png` are made from it; `logo-light*.png` are the same with the navy SONORAN/TECHNOLOGIES lettering made white, for dark backgrounds — no SVG), icons, `sp-theme.css` (injected between `SP-THEME:start/end` in dashboard + console)
-- `site/` — sonoranpoint.com (home, help, try); the build adds demo copies of the station/dashboard/console under `try/`
-  (`window.SP_DEMO` forces demo data; `window.SP_TRY` starts the station set up). Never use real customer names or emails there.
+- `site/` — sonoranpoint.com (home, help, try): pitched broadly as asset checkout/tracking, not airport-only. The build adds demo
+  copies of the station and dashboard under `try/` (no console: customers never see it). `window.SP_DEMO` forces demo data and
+  swaps in a neutral company (Northwind Logistics, departments); `window.SP_TRY` starts the station set up. No real names or emails there.
 - `deploy/build.py` — builds `deploy/dist/{app,console,station,site}`; `deploy/email-templates/` — Supabase auth emails
 - `tests/run.sh` — runs everything; `tests/ui/` — jsdom screen tests
 

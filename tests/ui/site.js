@@ -1,4 +1,4 @@
-// The public site's "Try it" copies stay on demo data on sonoranpoint.com, and the site's own links point at real files.
+// The public site's "Try it" copies (station and dashboard; the console isn't public) stay on demo data on sonoranpoint.com, and the site's own links point at real files.
 const { JSDOM } = require("jsdom");
 const fs = require("fs"), path = require("path");
 const ROOT = path.resolve(__dirname, "../..");
@@ -9,8 +9,6 @@ const open = (file, pre, url) => new JSDOM("<!doctype html><html><body>" + pre +
 (async () => {
   const app = open("dashboard/dashboard.html", "<script>window.SP_DEMO = true;</script>", "https://sonoranpoint.com/try/app/"); await sleep(300);
   check(app.window.eval("LIVE") === false && /Demo data/i.test(app.window.document.body.textContent), "the demo dashboard on sonoranpoint.com runs on demo data, not the real database");
-  const con = open("platform/console.html", "<script>window.SP_DEMO = true;</script>", "https://sonoranpoint.com/try/console/"); await sleep(300);
-  check(con.window.eval("LIVE") === false && !/g\.ryan@/.test(con.window.document.body.innerHTML) && con.window.eval("OPERATOR.email").endsWith(".example"), "the demo console runs on demo data and shows no real email addresses");
   const st = open("station/station.html", "<script>window.SP_DEMO = true; window.SP_TRY = true;</script>", "https://sonoranpoint.com/try/station/"); await sleep(1800);
   const sd = st.window.document;
   check(/Tap your badge/.test(sd.querySelector("#screen").textContent) && sd.querySelector("#boxSetup").style.display === "none" && /Try the station/.test(sd.querySelector(".bench-head").textContent),

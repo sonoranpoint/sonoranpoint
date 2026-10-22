@@ -641,9 +641,9 @@ function buildDemo() {
   const rnd = mulberry32(1015);
   const now = Date.now();
   const tz = "America/Phoenix";
-  const org = { name: "Demo Air Services", logo_url: "", logo_dark_url: null, primary: "#1F4E79", accent: "#F2A900", timezone: tz, extended_hours: 9,
+  const org = { name: window.SP_DEMO ? "Northwind Logistics" : "Demo Air Services", logo_url: "", logo_dark_url: null, primary: "#1F4E79", accent: "#F2A900", timezone: tz, extended_hours: 9,
     settings: { allow_return_by_other: true, allow_checkout_while_held: false },
-    terminology: { equipment: "Equipment", employee: "Employee" }, modules: ["shifts"] };
+    terminology: { equipment: "Equipment", employee: "Employee", ...(window.SP_DEMO ? { contract: "Department", contract_plural: "Departments" } : {}) }, modules: ["shifts"] };
   const categories = [
     ["Vacuum", "hours", 8, null], ["Blower", "hours", 8, null], ["Battery", "hours", 12, 14],
     ["PDA", "hours", 10, null], ["Radio", "shift_end", 10, null], ["Van Keys", "none", null, null],
@@ -670,8 +670,8 @@ function buildDemo() {
     id: "e" + (i + 1), first, last, name: `${first} ${last}`, number, role, active,
     badge: "04BA0000" + String(i + 1).padStart(4, "0"), shifts: shift ? [shift] : [], pin: role !== "employee" }));
   const stations = [
-    { id: "st1", name: "Equipment Room 01", location: "Terminal 3", version: "station-0.1.0", last_seen: now - 40 * 1000, revoked: false, added: now - 30 * 86400000 },
-    { id: "st2", name: "Bag Room", location: "Terminal 4", version: "station-0.1.0", last_seen: now - 3.2 * HOUR, revoked: false, added: now - 12 * 86400000 },
+    { id: "st1", name: "Equipment Room 01", location: window.SP_DEMO ? "Phoenix site" : "Terminal 3", version: "station-0.1.0", last_seen: now - 40 * 1000, revoked: false, added: now - 30 * 86400000 },
+    { id: "st2", name: window.SP_DEMO ? "Tool Crib" : "Bag Room", location: window.SP_DEMO ? "Phoenix site" : "Terminal 4", version: "station-0.1.0", last_seen: now - 3.2 * HOUR, revoked: false, added: now - 12 * 86400000 },
   ];
   const cat = (id) => categories.find((c) => c.id === id);
   const limitFor = (q) => { const c = cat(q.cat); const rule = q.mode === "category" ? c.rule : q.mode;
@@ -779,7 +779,9 @@ function buildDemo() {
   // Checkouts of an item with an open problem are flagged (the station warns them to look it over).
   for (const p of problems) if (!p.cleared_at) txns.filter((t) => t.eq === p.eq && t.action === "checkout" && t.at > p.at).forEach((t) => t.flags.push("reported_problem"));
   // Contracts: below wing never crosses; above wing shares and items move to where they're returned.
-  const contracts = [["bw", null, "BW"], ["aw", null, "AW", true, true], ["dbw", "bw", "Delta BW"], ["ubw", "bw", "United BW"], ["daw", "aw", "Delta AW"], ["uaw", "aw", "United AW"]]
+  const contracts = (window.SP_DEMO   // the public demo (sonoranpoint.com/try) shows a general company
+    ? [["bw", null, "Phoenix site"], ["aw", null, "Field service", true, true], ["dbw", "bw", "Shipping"], ["ubw", "bw", "Maintenance"], ["daw", "aw", "North team"], ["uaw", "aw", "South team"]]
+    : [["bw", null, "BW"], ["aw", null, "AW", true, true], ["dbw", "bw", "Delta BW"], ["ubw", "bw", "United BW"], ["daw", "aw", "Delta AW"], ["uaw", "aw", "United AW"]])
     .map(([id, parent, name, share = false, move = false], i) => ({ id, parent, name, share, move, sort: i }));
   employees.forEach((e, i) => { if (e.role === "employee") e.contract = ["dbw", "ubw", "daw"][i % 3]; });
   equipment.forEach((q) => { q.contract = { c1: "dbw", c2: "dbw", c3: "ubw", c4: "ubw", c5: "daw", c6: "uaw" }[q.cat] || null; });
