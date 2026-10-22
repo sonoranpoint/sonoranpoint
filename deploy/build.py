@@ -91,7 +91,7 @@ SITE_HEADERS = """/*
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()
   Strict-Transport-Security: max-age=31536000; includeSubDomains
-  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self'; frame-ancestors 'self'; base-uri 'none'; form-action 'self'
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://qzzukfjefqwifnqzxhhu.supabase.co; frame-ancestors 'self'; base-uri 'none'; form-action 'self'
   Cache-Control: no-cache
 /try/app/*
   X-Robots-Tag: noindex
@@ -111,7 +111,7 @@ def build_site():
     # Demo copies: forced onto demo data, starting fresh on each visit.
     demo = '<script>window.SP_DEMO = true;</script>\n'
     for name, src, extra in [("app", ROOT / "dashboard" / "dashboard.html", ""),
-                             ("station", ROOT / "station" / "station.html", '<script>window.SP_TRY = true; try { localStorage.removeItem("station.v2"); } catch {}</script>\n')]:
+                             ("station", ROOT / "station" / "station.html", '<script>window.SP_TRY = true;</script>\n')]:
         d = out / "try" / name; d.mkdir(parents=True)
         (d / "index.html").write_text(HEAD + demo + extra + (src).read_text() + "\n</html>\n")
         (d / "brand").mkdir()

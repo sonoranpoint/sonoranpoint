@@ -1264,6 +1264,23 @@ select set_config('request.jwt.claim.sub', 'aaaaaaaa-0000-0000-0000-000000000001
 select pg_temp.ok((select count(*) from station_outages where station_id = :'ups') = 1, 'the customer sees their station''s outages');
 reset role;
 
+\echo '--- Contact form (sonoranpoint.com)'
+select count(*) as mails0 from private.email_batches \gset
+set role anon;
+select pg_temp.ok((submit_contact('Pat Lee', 'Pat@Example.com ', 'We have 40 radios to track.', 'Acme Tools', null, 'Pricing'))->>'ok' = 'true', 'anyone can send the contact form');
+select pg_temp.ok((submit_contact('Bot', 'bot@example.com', 'spam', p_website => 'http://spam'))->>'ok' = 'true', 'a bot that fills the hidden field is told ok');
+select pg_temp.ok((submit_contact('Pat', 'not-an-email', 'hi'))->>'error' = 'bad_email', 'a bad email address is refused');
+select pg_temp.ok((submit_contact('Pat', 'pat@example.com', '  '))->>'error' = 'bad_message', 'an empty message is refused');
+select submit_contact('Pat Lee', 'pat@example.com', 'again') \g /dev/null
+select submit_contact('Pat Lee', 'pat@example.com', 'and again') \g /dev/null
+select pg_temp.ok((submit_contact('Pat Lee', 'pat@example.com', 'one more'))->>'error' = 'too_many', 'at most 3 an hour from one address');
+select pg_temp.ok(pg_temp.raises($$select * from private.contact_requests$$), 'the messages themselves are private');
+reset role;
+select pg_temp.ok((select count(*) from private.contact_requests) = 3 and not exists (select 1 from private.contact_requests where name = 'Bot')
+                  and (select email from private.contact_requests order by id limit 1) = 'pat@example.com', 'saved (trimmed, lower case), the bot''s wasn''t');
+select pg_temp.ok((select count(*) from private.email_batches where id > :mails0 and subject like 'Website: Pricing from Pat Lee, Acme Tools' and reply_to = 'pat@example.com')
+                  = (select count(*) from private.platform_operators), 'every operator is emailed; replies go to the sender');
+
 \echo '--- Deleting a company removes all its data'
 delete from organizations where slug = 'demo';
 select pg_temp.ok((select count(*) from equipment) = 0 and (select count(*) from transactions) = 0, 'company delete cascades cleanly');

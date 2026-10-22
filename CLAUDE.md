@@ -14,6 +14,8 @@ See README.md for the full product description.
   swaps in a neutral company (Northwind Logistics, departments); `window.SP_TRY` starts the station set up. No real names or emails there.
   The home page's company tree mirrors the demo's departments and stations. Light/dark switch: `site/theme.js` (data-theme, saved as
   `sp.theme`, the dashboard's key; nothing saved = follow the device).
+  Contact form: `site/contact/` posts to `public.submit_contact` (migration 27; anon, honeypot + hourly limits), saved in
+  `private.contact_requests` and emailed to every operator with reply-to = sender. The try station clears its own storage on every visit.
 - `deploy/build.py` — builds `deploy/dist/{app,console,station,site}`; `deploy/email-templates/` — Supabase auth emails
 - `tests/run.sh` — runs everything; `tests/ui/` — jsdom screen tests
 
@@ -21,7 +23,7 @@ See README.md for the full product description.
 - Push to `main` → GitHub Actions runs `tests/run.sh db` + `ui`, then deploys app + console to Cloudflare Pages
   (projects `sonoranpoint-app`, `sonoranpoint-console`, `sonoranpoint-site`).
 - Database changes are NOT automatic. Add a new migration file (never edit one already run on the live
-  project), then tell Dez to run it in the Supabase SQL editor. Migrations 1–26 have been run (checked 2026-10-22;
+  project), then tell Dez to run it in the Supabase SQL editor. Migrations 1–26 have been run, 27 (contact form) not yet (checked 2026-10-22;
   ask if unsure). Alert emails are live (Resend key in Vault, first send
   confirmed 2026-10-20).
 - Station changes reach the Pis by themselves: every deploy publishes `app.sonoranpoint.com/station-release/latest.json` + a zip
@@ -70,8 +72,7 @@ See README.md for the full product description.
 ## Dashboard roles
 - Stored as viewer/supervisor/admin/owner (`org_members.role`, RLS, functions) but shown as View Only / Supervisor / Manager / Admin
   (`ROLE_NAME` in the dashboard; the console's customer pages say "admin" for the customer's top role). Copy follows the shown names.
-  Station fob roles (employee/manager/admin) are separate. The trial-reminder email (migration 19) still says "owner or admin":
-  fix it in the next migration that touches email.
+  Station fob roles (employee/manager/admin) are separate. The trial-reminder email says "admin or manager" since migration 27.
 
 ## Dashboard sidebar
 - Dark blue with the company's light logo (`organizations.logo_dark_url`, migration 22) when they have one; otherwise `.side.light`

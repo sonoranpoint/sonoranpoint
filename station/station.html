@@ -609,6 +609,8 @@ const store = {
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
   del(k) { try { localStorage.removeItem(k); } catch {} },
 };
+// The public "Try it" copy starts from scratch on every visit: its own setup, demo data and simulated Wi-Fi.
+if (window.SP_TRY) ["station.v2", "demoServer.v2", "device.v1"].forEach((k) => store.del(k));
 class NetError extends Error {}
 
 /* Shared pretend clock (in real life the Pi and server each use real time). */

@@ -143,8 +143,29 @@ kbd, .ui { font-family: var(--body); font-weight: 700; }
 .demo p { color: var(--muted); margin-top: 8px; }
 .demo .btn { margin-top: 18px; }
 
+/* Contact */
+main.contact { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 56px; align-items: start; padding-top: 56px; padding-bottom: 96px; }
+.contact h1 { font-size: clamp(36px, 5vw, 52px); font-weight: 600; }
+.contact .lede { margin-top: 14px; }
+.cform { display: grid; gap: 16px; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 28px; }
+.cform[hidden], .csent[hidden] { display: none; }
+.cform label { display: grid; gap: 6px; font-weight: 700; font-size: 15px; }
+.cform label small { font-weight: 400; color: var(--muted); }
+.cform .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.cform input, .cform select, .cform textarea { font: 400 16px/1.4 var(--body); color: var(--ink); background: var(--paper); border: 1.5px solid var(--line);
+  border-radius: 10px; padding: 11px 12px; width: 100%; }
+.cform textarea { resize: vertical; min-height: 140px; }
+.cform input:focus, .cform select:focus, .cform textarea:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue) 25%, transparent); }
+.cform .btn { justify-self: start; }
+.cform .hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+.cerr { color: #c0392b; font-weight: 700; min-height: 0; } .cerr:empty { display: none; }
+:root[data-theme="dark"] .cerr { color: #ff8a7a; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .cerr { color: #ff8a7a; } }
+.csent { background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--sun); border-radius: 16px; padding: 28px; outline: none; }
+.csent h2 { font-size: 30px; }
+
 @media (max-width: 900px) {
-  .hero .grid, .split, .demos, .doc { grid-template-columns: 1fr; }
+  .hero .grid, .split, .demos, .doc, main.contact { grid-template-columns: 1fr; }
   .split.flip > :first-child { order: 0; }
   .split.flip { grid-template-columns: 1fr; }
   .facts.two { grid-template-columns: 1fr; }
@@ -157,4 +178,6 @@ kbd, .ui { font-family: var(--body); font-weight: 700; }
   .wrap { padding: 0 16px; }
   .top nav { margin-left: 0; width: 100%; gap: 16px; }
   .top .logo img { width: 140px; }
+  .cform .row2 { grid-template-columns: 1fr; }
+  .cform { padding: 20px; }
 }
