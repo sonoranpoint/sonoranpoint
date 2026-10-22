@@ -138,6 +138,26 @@ const change = async (el, v) => { if (typeof v === "boolean") el.checked = v; el
   await click('[data-act="rmLogoDark"]');
   check(doc.querySelector("aside.side").classList.contains("light") && E("DB.org.logo_dark_url") === null, "removing it turns the menu white again");
   check(!!doc.querySelector('.sp-foot img.on-dark[src="brand/logo-light.png"]') && !!doc.querySelector('.sp-foot img.on-light[src="brand/logo.png"]'), "our logo has a light version for the dark menu");
+  // Barcodes on items and badges
+  const q0 = E("DB.equipment[0].id"); E(`openDrawer('equipment', '${q0}')`); await sleep(20);
+  check(/Barcode\s*PAS-10021/.test(drawer()), "an item's panel shows its barcode");
+  E(`openDrawer('eqForm', '${q0}')`); await sleep(20);
+  check(!!doc.querySelector('.drawer [name=barcode]') && /scan it/.test(drawer()), "the item form has a barcode field (scan or type)");
+  await submit('[data-form^="eq:"]', { name: "Scan-only radio", tag: "", barcode: " rad-777 " });
+  const nid = E("S.drawer.id");
+  E(`openEqNew = DB.equipment.find(q => q.id === '${nid}')`);
+  check(E("openEqNew.barcode") === "RAD-777" && E("openEqNew.tag") === E("barcodeUid('RAD-777')") && E("realTag(openEqNew.tag)") === null, "saved; it keeps its NFC tag (none was cleared) or gets one made from the barcode");
+  E("openDrawer('eqForm', null)"); await sleep(20);
+  await submit('[data-form="eq:"]', { name: "Barcode only", tag: "", barcode: "NEW-1" });
+  const x2 = E("DB.equipment.find(q => q.name === 'Barcode only')");
+  check(E("DB.equipment.find(q => q.name === 'Barcode only').tag") === E("barcodeUid('NEW-1')") && /No NFC tag \(uses its barcode\)/.test(drawer()), "a new item with only a barcode works at stations (tag made from it)");
+  E("openDrawer('eqForm', null)"); await sleep(20);
+  await submit('[data-form="eq:"]', { name: "Dup", tag: "", barcode: "new-1" });
+  check(/already on Barcode only/.test(drawer()), "two items can't share a barcode");
+  const e1 = E("DB.employees[1].id"); E(`openDrawer('employee', '${e1}')`); await sleep(20);
+  check(/Badge barcode\s*000102/.test(drawer()), "a person's panel shows their badge barcode");
+  await go("equipment"); const sq = doc.querySelector('[data-f="eqSearch"]');
+  if (sq) { sq.value = "rad-77"; sq.dispatchEvent(new dom.window.Event("input", { bubbles: true })); await sleep(30); check(/Scan-only radio/.test(page()), "search finds items by barcode"); }
   check(errors.length === 0, "no script errors " + errors.join(";"));
   process.exit();
 })();

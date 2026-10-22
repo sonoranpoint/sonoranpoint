@@ -588,6 +588,18 @@ applyTheme(getTheme());
 const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const fmtUid = (u) => (u || "").match(/.{1,2}/g)?.join(":") || "";
 // In lists, a badge or tag is "on file" plus its last two bytes (enough to tell two apart); the full code is in the detail panel.
+/* Barcodes (database update 24): something with only a barcode gets a tag ID made from it ("B0C0DE" + its bytes
+   in hex), like on the server, so stations treat a scan like a tap. Those made-up IDs aren't shown as tags. */
+const normCode = (c) => String(c || "").trim().toUpperCase();
+const barcodeUid = (code) => "B0C0DE" + [...unescape(encodeURIComponent(normCode(code)))].map((ch) => ch.charCodeAt(0).toString(16).padStart(2, "0")).join("").toUpperCase();
+const isBarcodeUid = (u) => !!u && /^B0C0DE([0-9A-F]{2})+$/.test(u) && (() => { try { return /^[\x20-\x7e]+$/.test(decodeURIComponent(escape(u.slice(6).match(/../g).map((h) => String.fromCharCode(parseInt(h, 16))).join("")))); } catch { return false; } })();
+const realTag = (u) => (isBarcodeUid(u) ? null : u || null);
+// What the database does to a record's tag ID when its barcode is set or changes.
+function withBarcode(oldTag, oldCode, tag, code) {
+  if (tag && oldCode !== code && tag === (oldCode ? barcodeUid(oldCode) : null) && tag === oldTag) return code ? barcodeUid(code) : null;
+  if (!tag && code) return barcodeUid(code);
+  return tag || null;
+}
 const shortUid = (u) => { const p = fmtUid(u).split(":"); return p.length > 2 ? "…" + p.slice(-2).join(":") : fmtUid(u); };
 // Spreadsheet download (opens in Excel, Numbers or Google Sheets).
 function downloadCsv(name, header, rows) {
@@ -664,6 +676,8 @@ function buildDemo() {
   const extFor = (q) => q.extended ?? cat(q.cat).extended ?? org.extended_hours;
 
   equipment.find((q) => q.name === "Vacuum 04").status = "maintenance";
+  equipment[0].barcode = "PAS-10021";                        // an existing asset-tag barcode, as well as its NFC tag
+  employees[1].barcode = "000102";                           // a current ID badge's barcode
   const txns = [], alerts = [], audit = [];
   let tid = 0; const T = (o) => txns.push({ id: "t" + (++tid), station: "st1", source: "station", flags: [], prev: null, notes: null, ...o });
 
@@ -971,27 +985,35 @@ const api = {
   setShiftActive(id, active) { const s = DB.shifts.find((x) => x.id === id); s.active = active; DB.audit.push({ at: Date.now(), actor: DB.me.name, text: `${active ? "resumed" : "stopped"} shift ${s.name}` }); },
   /* equipment insert / update */
   saveEquipment(id, d) {
-    const name = (d.name || "").trim(), tag = normUid(d.tag), asset = (d.asset || "").trim();
+    const name = (d.name || "").trim(), asset = (d.asset || "").trim(), x0 = id ? eqOf(id) : null;
+    const code = "barcode" in d ? normCode(d.barcode) || null : x0?.barcode || null;
+    if (code && code.length > 40) return { ok: false, error: "Barcodes are up to 40 characters." };
+    if (code && DB.equipment.some((q) => q.barcode === code && q.id !== id)) return { ok: false, error: `That barcode is already on ${DB.equipment.find((q) => q.barcode === code).name}.` };
+    const tag = withBarcode(x0?.tag || null, x0?.barcode || null, normUid(d.tag) || (x0 && isBarcodeUid(x0.tag) ? x0.tag : ""), code);
     if (!name) return { ok: false, error: "Enter a name." };
     if (!catOf(d.cat)) return { ok: false, error: "Pick a category." };
     if (tag) { const own = uidOwner(tag, id); if (own) return { ok: false, error: `That tag ID is already on ${own}.` }; }
     if (asset && DB.equipment.some((q) => q.asset === asset && q.id !== id)) return { ok: false, error: "That asset tag is already used." };
-    if (id) { Object.assign(eqOf(id), { name, cat: d.cat, tag: tag || null, asset: asset || null, notes: d.notes || null, ...("contract" in d ? { contract: d.contract || null } : {}) }); return { ok: true, id }; }
+    if (id) { Object.assign(eqOf(id), { name, cat: d.cat, tag: tag || null, barcode: code, asset: asset || null, notes: d.notes || null, ...("contract" in d ? { contract: d.contract || null } : {}) }); return { ok: true, id }; }
     const nid = "q" + Date.now();
-    DB.equipment.push({ id: nid, cat: d.cat, name, tag: tag || null, asset: asset || null, notes: d.notes || null, contract: d.contract || null, status: "available", mode: "category", hours: null, extended: null, holder: null, out_at: null, due_at: null });
+    DB.equipment.push({ id: nid, cat: d.cat, name, tag: tag || null, barcode: code, asset: asset || null, notes: d.notes || null, contract: d.contract || null, status: "available", mode: "category", hours: null, extended: null, holder: null, out_at: null, due_at: null });
     DB.audit.push({ at: Date.now(), actor: DB.me.name, text: `added equipment ${name}` });
     return { ok: true, id: nid };
   },
   /* employees insert / update; station fob role via set_employee_station_role rpc */
   saveEmployee(id, d) {
-    const first = (d.first || "").trim(), last = (d.last || "").trim(), number = (d.number || "").trim(), badge = normUid(d.badge);
+    const first = (d.first || "").trim(), last = (d.last || "").trim(), number = (d.number || "").trim(), p0 = id ? empOf(id) : null;
+    const code = "barcode" in d ? normCode(d.barcode) || null : p0?.barcode || null;
+    if (code && code.length > 40) return { ok: false, error: "Barcodes are up to 40 characters." };
+    if (code && DB.employees.some((x) => x.barcode === code && x.id !== id)) return { ok: false, error: `That barcode is already on ${DB.employees.find((x) => x.barcode === code).name}'s badge.` };
+    const badge = withBarcode(p0?.badge || null, p0?.barcode || null, normUid(d.badge) || (p0 && isBarcodeUid(p0.badge) ? p0.badge : ""), code);
     if (!first) return { ok: false, error: "Enter a first name." };
     if (number && DB.employees.some((e) => e.number === number && e.id !== id)) return { ok: false, error: `Employee # ${number} is already used by ${DB.employees.find((e) => e.number === number).name}.` };
     if (badge) { const own = uidOwner(badge, id); if (own) return { ok: false, error: `That badge ID is already used by ${own}.` }; }
     const e0 = id ? empOf(id) : null; const role = d.role || "employee";
     if (role !== "employee" && !(e0 && e0.pin) && !/^[0-9]{4,8}$/.test(d.pin || "")) return { ok: false, error: "A manager or admin fob needs a PIN of 4 to 8 digits." };
     if (d.pin && !/^[0-9]{4,8}$/.test(d.pin)) return { ok: false, error: "PINs are 4 to 8 digits." };
-    const patch = { first, last, name: [first, last].filter(Boolean).join(" "), number: number || null, badge: badge || null, shifts: d.shifts || [], ...("contract" in d ? { contract: d.contract || null } : {}) };
+    const patch = { first, last, name: [first, last].filter(Boolean).join(" "), number: number || null, badge: badge || null, barcode: code, shifts: d.shifts || [], ...("contract" in d ? { contract: d.contract || null } : {}) };
     if (can("admin")) { patch.role = role; if (d.pin) patch.pin = true; if (role === "employee") patch.pin = false; }
     if (id) { Object.assign(e0, patch); return { ok: true, id }; }
     const nid = "e" + Date.now();
@@ -1297,8 +1319,8 @@ function companyMark() {
 // Search across equipment and people from the top bar.
 function searchResults(q) {
   q = q.trim().toLowerCase(); if (!q) return "";
-  const eq = api.equipment().filter((x) => `${x.name} ${x.asset} ${x.tag} ${x.holderName || ""}`.toLowerCase().includes(q)).slice(0, 6);
-  const em = api.employees().filter((e) => `${e.name} ${e.number || ""}`.toLowerCase().includes(q)).slice(0, 5);
+  const eq = api.equipment().filter((x) => `${x.name} ${x.asset} ${x.tag} ${x.barcode || ""} ${x.holderName || ""}`.toLowerCase().includes(q)).slice(0, 6);
+  const em = api.employees().filter((e) => `${e.name} ${e.number || ""} ${e.barcode || ""}`.toLowerCase().includes(q)).slice(0, 5);
   if (!eq.length && !em.length) return `<div class="none">Nothing matches “${esc(q)}”.</div>`;
   return eq.map((x) => `<button role="option" data-open="equipment:${x.id}" data-act="gsPick">${ic("box")}${esc(x.name)}<small>${x.holderName ? "With " + esc(x.holderName) : esc(x.category)}</small></button>`).join("")
     + em.map((e) => `<button role="option" data-open="employee:${e.id}" data-act="gsPick">${ic("user")}${esc(e.name)}<small>${e.out ? `${e.out} out` : esc(e.number || "")}</small></button>`).join("");
@@ -1410,13 +1432,13 @@ function vEquipment() {
   const rows = all.filter((x) => (!f.eqCat || x.cat === f.eqCat) && (!f.eqContract || inBranch(x.contract, f.eqContract))
     && (f.eqStatus === "all" || (f.eqStatus === "out" && x.holder && x.status !== "lost") || (f.eqStatus === "available" && x.status === "available")
         || (f.eqStatus === "overdue" && x.is_overdue) || (f.eqStatus === "extended" && x.is_extended) || (f.eqStatus === x.status && ["lost", "maintenance"].includes(x.status)) || (f.eqStatus === "problem" && x.problem) || (f.eqStatus === "loan" && x.loan))
-    && (!q || `${x.name} ${x.asset} ${x.holderName || ""} ${x.tag}`.toLowerCase().includes(q)))
+    && (!q || `${x.name} ${x.asset} ${x.holderName || ""} ${x.tag} ${x.barcode || ""}`.toLowerCase().includes(q)))
     .sort((a, b) => (b.is_overdue - a.is_overdue) || (b.is_extended - a.is_extended) || a.name.localeCompare(b.name, undefined, { numeric: true }));
   const seg = [["all", "All"], ["out", "Out"], ["overdue", "Overdue"], ["extended", "Out too long"], ["available", "Available"], ["lost", "Lost"], ["maintenance", "Maintenance"], ["problem", "Problems"], ...((DB.loans || []).some((l) => !l.ended_at) ? [["loan", "On loan"]] : [])];
   S.eqRows = rows;
   return head("Equipment", `${all.length} items · also addable at a station with a manager or admin fob`, `<span class="actions"><button class="btn" data-act="csvEquipment">${ic("download")}Download CSV</button>${can("admin") ? `<button class="btn primary" data-act="newEq">Add equipment</button>` : ""}</span>`) + `
     <div class="filters">
-      <input class="field" id="eqSearch" type="search" aria-label="Search equipment" placeholder="Search name, asset tag or person" value="${esc(f.eqSearch)}" data-f="eqSearch">
+      <input class="field" id="eqSearch" type="search" aria-label="Search equipment" placeholder="Search name, asset tag, barcode or person" value="${esc(f.eqSearch)}" data-f="eqSearch">
       <select class="field" id="eqCat" aria-label="Category" data-f="eqCat"><option value="">All categories</option>${DB.categories.map((c) => `<option value="${c.id}" ${f.eqCat === c.id ? "selected" : ""}>${esc(c.name)}</option>`).join("")}</select>
       ${DB.contracts?.length ? `<select class="field" id="eqContract" aria-label="${esc(CTERM().one)}" data-f="eqContract">${contractOptions(f.eqContract || "", `All ${CTERM().many.toLowerCase()}`)}</select>` : ""}
       <div class="seg" role="group" aria-label="Status">${seg.map(([k, l]) => `<button class="${f.eqStatus === k ? "on" : ""}" data-seg="eqStatus:${k}">${l}</button>`).join("")}</div>
@@ -1435,7 +1457,7 @@ function vEquipment() {
 /* ---------------- Employees ---------------- */
 function vEmployees() {
   const q = S.f.empSearch.trim().toLowerCase();
-  const rows = api.employees().filter((e) => (!q || `${e.name} ${e.number}`.toLowerCase().includes(q)) && (!S.f.empContract || inBranch(e.contract, S.f.empContract)))
+  const rows = api.employees().filter((e) => (!q || `${e.name} ${e.number} ${e.barcode || ""}`.toLowerCase().includes(q)) && (!S.f.empContract || inBranch(e.contract, S.f.empContract)))
     .sort((a, b) => (b.active - a.active) || (b.out - a.out) || a.name.localeCompare(b.name));
   return head("Employees", `${rows.filter((e) => e.active).length} active · also addable at a station with a manager or admin fob`, can("supervisor") ? `<button class="btn primary" data-act="newEmp">Add employee</button>` : "") + `
     <div class="filters"><input class="field" type="search" id="empSearch" aria-label="Search employees" placeholder="Search name or employee #" value="${esc(S.f.empSearch)}" data-f="empSearch">${DB.contracts?.length ? `<select class="field" id="empContract" aria-label="${esc(CTERM().one)}" data-f="empContract">${contractOptions(S.f.empContract || "", `All ${CTERM().many.toLowerCase()}`)}</select>` : ""}</div>
@@ -1444,7 +1466,7 @@ function vEmployees() {
       <tbody>${rows.map((e) => `<tr class="click" data-open="employee:${e.id}" tabindex="0" ${e.active ? "" : 'style="opacity:.55"'}>
         <td class="lead"><b>${esc(e.name)}</b><span class="sub">${esc([e.number, contractName(e.contract)].filter(Boolean).join(" · "))}${e.active ? "" : " · Inactive"}</span></td>
         <td class="pin">${e.role === "employee" ? `<span class="muted">Employee</span>` : `<span class="chip brand">${ROLE[e.role]} fob</span>`}</td>
-        <td data-label="Shift">${esc(e.shiftNames.join(", ") || "—")}</td><td data-label="Badge">${e.badge ? `On file <span class="muted mono" title="${esc(fmtUid(e.badge))}">${esc(shortUid(e.badge))}</span>` : `<span class="muted">No badge</span>`}</td>
+        <td data-label="Shift">${esc(e.shiftNames.join(", ") || "—")}</td><td data-label="Badge">${realTag(e.badge) ? `On file <span class="muted mono" title="${esc(fmtUid(e.badge))}">${esc(shortUid(e.badge))}</span>` : e.barcode ? `Barcode <span class="muted mono">${esc(e.barcode)}</span>` : `<span class="muted">No badge</span>`}</td>
         <td class="num" data-label="Has out">${e.out ? `<b>${e.out}</b>` : `<span class="muted">0</span>`}</td><td class="num ${e.last ? "" : "empty-sm"}" data-label="Last tap">${e.last ? esc(fmtWhen(e.last)) : ""}</td></tr>`).join("")}</tbody></table></div></section>`;
 }
 
@@ -1777,7 +1799,7 @@ function dEquipment(id) {
       ${x.holder && x.due_at ? `<dt>Due</dt><dd class="${x.is_overdue ? "late" : ""}">${esc(fmtWhen(x.due_at))}</dd>` : ""}
       <dt>Time limit</dt><dd>${esc(limitText(x.limit))}${x.mode === "category" ? ` <span class="muted">(from ${esc(x.category)})</span>` : ""}</dd>
       <dt>Out-too-long alert</dt><dd>${x.extended_hours != null ? x.extended_hours + " h" : "Off"}</dd>
-      <dt>Tag</dt><dd class="mono">${x.tag ? esc(fmtUid(x.tag)) : `<span class="muted" style="font-family:var(--body)">Not tagged yet</span>`}</dd>${x.notes ? `<dt>Notes</dt><dd>${esc(x.notes)}</dd>` : ""}
+      <dt>Tag</dt><dd class="mono">${realTag(x.tag) ? esc(fmtUid(x.tag)) : `<span class="muted" style="font-family:var(--body)">${x.barcode ? "No NFC tag (uses its barcode)" : "Not tagged yet"}</span>`}</dd>${x.barcode ? `<dt>Barcode</dt><dd class="mono">${esc(x.barcode)}</dd>` : ""}${x.notes ? `<dt>Notes</dt><dd>${esc(x.notes)}</dd>` : ""}
       ${DB.contracts?.length ? `<dt>Belongs to</dt><dd>${esc(contractName(x.contract) || "Whole company")}</dd>` : ""}</dl></div>
     ${loanSect(x)}
     ${can("admin") ? `<div class="actions"><button class="btn" data-act="editEq">Edit details</button></div>` : ""}
@@ -1848,7 +1870,7 @@ function dEmployee(id) {
       `<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">${e.active ? `<span class="chip ok">Active</span>` : `<span class="chip quiet">Inactive</span>`}${e.role !== "employee" ? `<span class="chip brand">${ROLE[e.role]} fob</span>` : ""}</div>`) + `<div class="drawer-b">
     <div class="sect"><h3>Has out now (${items.length})</h3>${items.length ? `<div class="list" style="border:1px solid var(--line);border-radius:10px">${items.map((q) => `<button class="row" data-open="equipment:${q.id}" style="grid-template-columns:minmax(0,1fr) auto">
         <span><b>${esc(q.name)}</b><span class="sub">Since ${esc(fmtWhen(q.out_at))}${q.due_at ? " · due " + esc(fmtWhen(q.due_at)) : ""}</span></span>${statusChip(q)}</button>`).join("")}</div>` : `<p class="muted" style="margin:0">Nothing checked out.</p>`}</div>
-    <div class="sect"><dl class="kv"><dt>Badge</dt><dd class="mono">${e.badge ? esc(fmtUid(e.badge)) : `<span class="muted" style="font-family:var(--body)">No badge yet</span>`}</dd><dt>Late returns (7 days)</dt><dd>${lateCount}</dd>
+    <div class="sect"><dl class="kv"><dt>Badge</dt><dd class="mono">${realTag(e.badge) ? esc(fmtUid(e.badge)) : `<span class="muted" style="font-family:var(--body)">${e.barcode ? "No NFC badge (uses its barcode)" : "No badge yet"}</span>`}</dd>${e.barcode ? `<dt>Badge barcode</dt><dd class="mono">${esc(e.barcode)}</dd>` : ""}<dt>Late returns (7 days)</dt><dd>${lateCount}</dd>
       <dt>Last tap</dt><dd>${e.last ? esc(fmtWhen(e.last)) : "Never"}</dd></dl></div>
     ${can("supervisor") ? `<div class="actions"><button class="btn" data-act="editEmp">Edit details</button></div>
     <div class="sect"><h3>Access</h3>${c === "deactivate" ? `<div class="confirm">Deactivate ${esc(e.name)}? Their badge stops working right away. Their history stays.
@@ -1904,7 +1926,9 @@ function dEqForm(id) {
       <label>Category<select class="field" name="cat">${DB.categories.map((c) => `<option value="${c.id}" ${x.cat === c.id ? "selected" : ""}>${esc(c.name)}</option>`).join("")}</select></label>
       <label>Asset tag<small>Your own ID, optional</small><input class="field" name="asset" maxlength="40" value="${esc(x.asset || "")}" placeholder="RAD-007"></label>
       <label class="full">NFC tag ID<small>Printed on the tag or shown when it's tapped at a station. Leave blank to tag it later.</small>
-        <input class="field mono" name="tag" maxlength="40" value="${esc(fmtUid(x.tag || ""))}" placeholder="04:DE:00:05:07"></label>
+        <input class="field mono" name="tag" maxlength="40" value="${esc(fmtUid(realTag(x.tag) || ""))}" placeholder="04:DE:00:05:07"></label>
+      ${DB.hasBarcode === false ? "" : `<label class="full">Barcode<small>The barcode on an asset tag or label it already has. Click here and scan it, or type it. Works instead of an NFC tag, or as well.</small>
+        <input class="field mono" name="barcode" maxlength="40" value="${esc(x.barcode || "")}" placeholder="Scan or type" autocomplete="off"></label>`}
       ${DB.contracts?.length ? `<label class="full">${esc(CTERM().one)}<small>Who it belongs to. Stations from other ${esc(CTERM().many.toLowerCase())} won't check it out unless they share.</small>
         <select class="field" name="contract">${contractOptions(x.contract ?? S.f.eqContract ?? "")}</select></label>` : ""}
       <label class="full">Notes<input class="field" name="notes" maxlength="200" value="${esc(x.notes || "")}" placeholder="Optional"></label>
@@ -1920,7 +1944,8 @@ function dEmpForm(id) {
       <label>First name<input class="field" name="first" required maxlength="40" value="${esc(e.first)}"></label>
       <label>Last name<input class="field" name="last" maxlength="40" value="${esc(e.last)}"></label>
       <label>Employee #<small>Optional</small><input class="field" name="number" maxlength="20" value="${esc(e.number || "")}"></label>
-      <label>Badge ID<small>Leave blank to give them a badge at a station</small><input class="field mono" name="badge" maxlength="40" value="${esc(fmtUid(e.badge || ""))}" placeholder="04:BA:00:00:00:21"></label>
+      <label>Badge ID<small>Leave blank to give them a badge at a station</small><input class="field mono" name="badge" maxlength="40" value="${esc(fmtUid(realTag(e.badge) || ""))}" placeholder="04:BA:00:00:00:21"></label>
+      ${DB.hasBarcode === false ? "" : `<label>Badge barcode<small>On their current ID badge. Click here and scan it, or type it.</small><input class="field mono" name="barcode" maxlength="40" value="${esc(e.barcode || "")}" placeholder="Scan or type" autocomplete="off"></label>`}
       ${DB.contracts?.length ? `<label class="full">${esc(CTERM().one)}<small>Their badge works at this ${esc(CTERM().one.toLowerCase())}'s stations, and any it shares with.</small>
         <select class="field" name="contract">${contractOptions(e.contract ?? S.f.empContract ?? "", "Whole company (works everywhere)")}</select></label>` : ""}
       <div class="full" style="display:flex;flex-direction:column;gap:5px"><b style="font-size:13.5px">Shifts</b>
@@ -2282,9 +2307,9 @@ const live = {
         extended: c.extended_alert_hours == null ? null : Number(c.extended_alert_hours), sort: c.sort_order })),
       equipment: eq.map((x) => ({ id: x.id, cat: x.category_id, name: x.name, tag: x.nfc_uid, asset: x.asset_tag, notes: x.notes, status: x.status, mode: x.time_limit_mode,
         hours: x.checkout_hours == null ? null : Number(x.checkout_hours), extended: x.extended_alert_hours == null ? null : Number(x.extended_alert_hours),
-        holder: x.current_employee_id, out_at: ms(x.checked_out_at), due_at: ms(x.due_at), lost_at: x.status === "lost" ? ms(x.last_event_at) : null, contract: x.contract_id || null })),
+        holder: x.current_employee_id, out_at: ms(x.checked_out_at), due_at: ms(x.due_at), lost_at: x.status === "lost" ? ms(x.last_event_at) : null, contract: x.contract_id || null, barcode: x.barcode || null })),
       employees: emps.map((e) => ({ id: e.id, first: e.first_name, last: e.last_name, name: [e.first_name, e.last_name].filter(Boolean).join(" "), number: e.employee_number,
-        role: e.station_role, active: e.active, badge: e.badge_uid, pin: pinSet.has(e.id), shifts: assigns.filter((a) => a.employee_id === e.id).map((a) => a.shift_id), contract: e.contract_id || null })),
+        role: e.station_role, active: e.active, badge: e.badge_uid, pin: pinSet.has(e.id), shifts: assigns.filter((a) => a.employee_id === e.id).map((a) => a.shift_id), contract: e.contract_id || null, barcode: e.barcode || null })),
       shifts: shifts.map((s) => ({ id: s.id, name: s.name, start: hhmm(s.start_time), end: hhmm(s.end_time), grace: s.grace_minutes, early: s.early_checkout_minutes, contract: s.contract_id || null,
         days: s.days_of_week && s.days_of_week.length < 7 ? s.days_of_week : null, active: s.active })),
       stations: stations.map((s) => ({ id: s.id, name: s.name, location: s.location || "", version: s.software_version, last_seen: ms(s.last_seen_at) || 0, revoked: !!s.revoked_at,
@@ -2302,6 +2327,8 @@ const live = {
     });
     DB.stationEvents = (await q(sb.from("station_events").select("station_id,at,kind,details,by_name").eq("org_id", org).order("at", { ascending: false }).limit(1000)).catch(() => []))
       .map((e) => ({ station: e.station_id, at: ms(e.at), kind: e.kind, details: e.details || {}, by: e.by_name }));
+    // Barcodes need database update 24; until it's run the fields stay hidden.
+    DB.hasBarcode = await q(sb.from("equipment").select("barcode").limit(1)).then(() => true).catch(() => false);
     DB.me.contracts = coversOf(L.user.id); DB.members.forEach((m) => { m.contracts = coversOf(m.id); });
     try { const v = localStorage.getItem("sp.view." + org); S.view = v && DB.contracts.some((c) => c.id === v) ? v : null; } catch {}
     const empName = (id) => { const e = DB.employees.find((x) => x.id === id); return e ? e.name : null; };
@@ -2398,13 +2425,13 @@ const REMOTE = {
     if (crew) await syncAssignments("shift_id", sid, crew, "employee_id");
   },
   saveEquipment: async ([id, d], r) => {
-    const x = eqOf(r.id); const row = { category_id: x.cat, name: x.name, nfc_uid: x.tag || null, asset_tag: x.asset || null, notes: x.notes || null, ...(DB.contracts?.length ? { contract_id: x.contract || null } : {}) };
+    const x = eqOf(r.id); const row = { category_id: x.cat, name: x.name, nfc_uid: x.tag || null, asset_tag: x.asset || null, notes: x.notes || null, ...(DB.hasBarcode ? { barcode: x.barcode || null } : {}), ...(DB.contracts?.length ? { contract_id: x.contract || null } : {}) };
     if (id) return upd("equipment", id, row);
     const nid = (await q(sb.from("equipment").insert({ org_id: ORG(), ...row }).select("id").single())).id;
     L.idMap[r.id] = nid; x.id = nid; if (S.drawer?.id === r.id) S.drawer.id = nid;
   },
   saveEmployee: async ([id, d], r) => {
-    const e = empOf(r.id); const row = { first_name: e.first, last_name: e.last || "", employee_number: e.number || null, badge_uid: e.badge || null, ...(DB.contracts?.length ? { contract_id: e.contract || null } : {}) };
+    const e = empOf(r.id); const row = { first_name: e.first, last_name: e.last || "", employee_number: e.number || null, badge_uid: e.badge || null, ...(DB.hasBarcode ? { barcode: e.barcode || null } : {}), ...(DB.contracts?.length ? { contract_id: e.contract || null } : {}) };
     let eid = id;
     if (id) await upd("employees", id, row); else { eid = (await q(sb.from("employees").insert({ org_id: ORG(), ...row }).select("id").single())).id; L.idMap[r.id] = eid; e.id = eid; if (S.drawer?.id === r.id) S.drawer.id = eid; }
     await syncAssignments("employee_id", eid, e.shifts || [], "shift_id");

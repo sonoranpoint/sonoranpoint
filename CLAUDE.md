@@ -16,7 +16,7 @@ See README.md for the full product description.
 - Push to `main` → GitHub Actions runs `tests/run.sh db` + `ui`, then deploys app + console to Cloudflare Pages
   (projects `sonoranpoint-app`, `sonoranpoint-console`).
 - Database changes are NOT automatic. Add a new migration file (never edit one already run on the live
-  project), then tell Dez to run it in the Supabase SQL editor. Migrations 1–22 have been run (checked 2026-10-22); 23 handed over
+  project), then tell Dez to run it in the Supabase SQL editor. Migrations 1–22 have been run (checked 2026-10-22); 23–24 handed over
   (ask if unsure). Alert emails are live (Resend key in Vault, first send
   confirmed 2026-10-20).
 - Station changes reach the Pis by themselves: every deploy publishes `app.sonoranpoint.com/station-release/latest.json` + a zip
@@ -45,6 +45,12 @@ See README.md for the full product description.
   removed, renamed, moved location/contract) plus `private.station_event()` for new codes; `by_name` is "Sonoran Point" for operators.
   Console edits go through `platform_update_station`. Taps store `station_contract_id` at insert, so moving a station
   doesn't move its past taps (RLS: `private.can_see_tap`). `station_overview` must be recreated when `stations` gets columns.
+
+## Barcodes (migration 24)
+- `employees.barcode`, `equipment.barcode` (trimmed, upper case, unique per company). Something with only a barcode gets a tag ID
+  made from it (`private.barcode_uid`: "B0C0DE" + hex of the code), so station functions take scans unchanged. Station: a
+  scanner types like a keyboard; `scanToUid` maps the code to the record's NFC uid via the cache (offline too), else
+  `barcodeUid`. Dashboard hides made-up IDs (`realTag`) and shows the barcode; `DB.hasBarcode` hides the fields before 24 runs.
 
 ## Dashboard sidebar
 - Dark blue with the company's light logo (`organizations.logo_dark_url`, migration 22) when they have one; otherwise `.side.light`

@@ -1191,6 +1191,34 @@ select platform_update_customer('00000000-0000-0000-0000-00000000d3e0', '{"logo_
 select pg_temp.ok((platform_customer('00000000-0000-0000-0000-00000000d3e0')->'organization'->>'logo_dark_url') is null, 'and you can clear it from the console');
 reset role;
 
+\echo '--- Barcodes'
+insert into equipment (org_id, category_id, name, barcode) select org_id, category_id, 'Scanned Radio', ' ab-123 ' from equipment where org_id = '00000000-0000-0000-0000-00000000d3e0' limit 1;
+select pg_temp.ok((select barcode = 'AB-123' and nfc_uid = private.barcode_uid('AB-123') and nfc_uid = 'B0C0DE41422D313233' from equipment where name = 'Scanned Radio'),
+                  'an item with only a barcode gets a tag ID made from it');
+insert into employees (org_id, employee_number, first_name, last_name, barcode) values ('00000000-0000-0000-0000-00000000d3e0', 'E9001', 'Bar', 'Code', '000123');
+select pg_temp.ok((select badge_uid from employees where employee_number = 'E9001') = private.barcode_uid('000123'), 'so does a badge with only a barcode');
+select private.barcode_uid('000123') as bcb, private.barcode_uid('ab-123') as bci \gset
+set role anon;
+select pg_temp.ok(station_tap(:'key4', gen_random_uuid(), :'bcb', :'bci')->>'action' = 'checkout', 'scanning both checks the item out (the station sends the ID made from the barcode)');
+reset role;
+update equipment set barcode = 'AB-124' where name = 'Scanned Radio';
+select pg_temp.ok((select nfc_uid from equipment where name = 'Scanned Radio') = private.barcode_uid('AB-124'), 'changing the barcode moves the made-up tag ID with it');
+update equipment set nfc_uid = '04DE0000BEEF' where name = 'Scanned Radio';
+update equipment set barcode = 'AB-125' where name = 'Scanned Radio';
+select pg_temp.ok((select nfc_uid = '04DE0000BEEF' and barcode = 'AB-125' from equipment where name = 'Scanned Radio'), 'an item with a real NFC tag keeps it when its barcode changes');
+do $$ begin insert into equipment (org_id, category_id, name, barcode) select org_id, category_id, 'Dup', 'ab-125' from equipment where org_id = '00000000-0000-0000-0000-00000000d3e0' limit 1;
+  raise exception 'FAIL: two items shared a barcode'; exception when unique_violation then null; end $$;
+select 'pass  two items can''t share a barcode';
+insert into equipment (org_id, category_id, name, nfc_uid) select org_id, category_id, 'Registered by scan', private.barcode_uid('ZZ-9') from equipment where org_id = '00000000-0000-0000-0000-00000000d3e0' limit 1;
+select pg_temp.ok((select barcode from equipment where name = 'Registered by scan') = 'ZZ-9', 'an item registered at a station by scanning shows its barcode');
+select pg_temp.ok((select e->>'barcode' from jsonb_array_elements(station_sync_cache(:'key4')->'equipment') e where e->>'name' = 'Scanned Radio') = 'AB-125'
+                  and exists (select 1 from jsonb_array_elements(station_sync_cache(:'key4')->'employees') e where e->>'barcode' = '000123'), 'stations get the barcodes to match scans offline');
+set role authenticated;
+select set_config('request.jwt.claim.sub', 'aaaaaaaa-0000-0000-0000-000000000001', false) \g /dev/null
+update equipment set barcode = 'AB-200' where name = 'Scanned Radio';
+reset role;
+select pg_temp.ok((select barcode from equipment where name = 'Scanned Radio') = 'AB-200', 'admins set barcodes from the dashboard');
+
 \echo '--- Deleting a company removes all its data'
 delete from organizations where slug = 'demo';
 select pg_temp.ok((select count(*) from equipment) = 0 and (select count(*) from transactions) = 0, 'company delete cascades cleanly');

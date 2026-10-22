@@ -98,6 +98,17 @@ const ALEX = "04BA00000001", JORDAN = "04BA00000002", SAM = "04BA00000003", DANA
   check(css("--bar") === "#ffffff", "dark main color, normal logo only: white bar");
   E("Object.assign(S.saved.config.organization, { primary_color: '#1F4E79', logo_url: null, logo_dark_url: null }); applyBrand(); renderTop()");
   check(css("--bar") === "#1f4e79" && css("--brand") === "#1f4e79" && /Demo Air Services/.test(doc.querySelector("#logo").textContent), "no logo: main color bar with their name; a dark main color is used as is");
+  // Barcode scanners: a scan works like a tap, for badges and items (with or without an NFC tag)
+  E("S.saved.config.station.contract = null; demo.db.stations[0].contract_id = null; demo.db.employees.forEach(e => e.contract_id = null); demo.db.equipment.forEach(q => q.contract_id = null)");
+  await E("refreshData(true)"); await sleep(300);
+  const type = async (str) => { for (const ch of str) doc.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: ch, bubbles: true })); doc.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Enter", bubbles: true })); await sleep(450); };
+  check(E("scanToUid('000102')") === "04BA00000002" && E("scanToUid('pas-10021')") === E("barcodeUid('PAS-10021')") && E("scanToUid('04:BA:00:00:00:01')") === "04BA00000001",
+        "a scanned code is matched to the badge or item it belongs to (NFC readers that type still work)");
+  await type("000102");
+  check(/Jordan/.test(text()), "scanning a badge's barcode signs that person in");
+  await type("PAS-10021");
+  check(/Headset 01/.test(text()) && E("demo.db.equipment.find(q => q.name === 'Headset 01').current_employee_id") === "e2", "scanning an item's barcode checks it out (an item with only a barcode)");
+  E("endSession(); endSummary(); S.check = null; S.screen = 'idle'; render()"); await sleep(50);
   // Self-updates: switch to a waiting version only when nobody's using the station
   E(`window.__upd = []; updater.enabled = true; updater.reload = () => window.__upd.push("reload");
      window.fetch = async (url, o) => { window.__upd.push((o?.method || "GET") + " " + url); return { json: async () => url === "/update/status" ? { current: VERSION, staged: "station-9.9.9+abc" } : { ok: true } }; };`);

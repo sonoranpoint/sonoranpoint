@@ -550,7 +550,7 @@ select, .field { background: var(--chip); border: 1px solid var(--line); border-
         <label for="sound">Confirmation sounds<small>Beep on success, buzz on errors</small></label>
         <span class="switch"><input type="checkbox" id="sound"><span></span></span>
       </div>
-      <label for="readerInput" style="font-weight:700;font-size:14px">Reader input<small style="display:block;font-weight:400;color:var(--muted);font-size:12px">USB readers type the tag ID and press Enter. Type one here, or just type on the page.</small></label>
+      <label for="readerInput" style="font-weight:700;font-size:14px">Reader input<small style="display:block;font-weight:400;color:var(--muted);font-size:12px">USB NFC readers and barcode scanners type the ID or code and press Enter. Type one here (try barcode <b>000102</b> for Jordan or <b>PAS-10021</b> for Headset 01), or just type on the page.</small></label>
       <input class="field" id="readerInput" placeholder="04:BA:00:00:00:01" autocomplete="off" spellcheck="false">
     </div>
 
@@ -581,6 +581,22 @@ const SUPPORT = { name: "Station support", email: "support@sonoranpoint.com" };
 const $ = (s) => document.querySelector(s);
 const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const normUid = (u) => String(u || "").replace(/[^0-9a-f]/gi, "").toUpperCase();
+/* Barcodes (handheld scanner, wired or wireless, types the code + Enter). A barcode stands for the badge or item's
+   NFC tag when it has one (matched in the saved lists, so it works offline); otherwise for a tag ID made from the
+   barcode ("B0C0DE" + its bytes in hex), the same one the server gives things that only have a barcode. */
+const barcodeUid = (code) => "B0C0DE" + [...unescape(encodeURIComponent(String(code).trim().toUpperCase()))].map((ch) => ch.charCodeAt(0).toString(16).padStart(2, "0")).join("").toUpperCase();
+function scanToUid(raw) {
+  const code = String(raw || "").trim().toUpperCase(); if (!code) return "";
+  const c = S.saved.cache || { employees: [], equipment: [] };
+  const emp = c.employees.find((x) => x.barcode === code); if (emp?.badge_uid) return emp.badge_uid;
+  const eq = c.equipment.find((x) => x.barcode === code); if (eq?.nfc_uid) return eq.nfc_uid;
+  const hex = normUid(code);
+  // An NFC tag ID typed by a USB NFC reader: one we know, bytes with separators (04:BA:…), or hex with letters.
+  if (/^[0-9A-F:\s-]+$/.test(code) && hex.length >= 8
+      && (c.employees.some((x) => x.badge_uid === hex) || c.equipment.some((x) => x.nfc_uid === hex)
+          || /^([0-9A-F]{2}[:\s-]){3,}[0-9A-F]{2}$/.test(code) || /^[0-9A-F]+$/.test(code) && /[A-F]/.test(code))) return hex;
+  return barcodeUid(code);
+}
 const normCode = (c) => String(c || "").replace(/[^0-9a-z]/gi, "").toUpperCase();
 const fmtUid = (u) => ((u || "").match(/.{1,2}/g) || []).join(":");
 const uuid = () => (crypto.randomUUID ? crypto.randomUUID() :
@@ -633,6 +649,9 @@ function demoSeed() {
     nfc_uid: "04DE00" + String(c.sort).padStart(2, "0") + String(n).padStart(2, "0"),
     status: "available", mode: "category", hours: null, extended: null,
     current_employee_id: null, checked_out_at: null, due_at: null, last_event_at: null }); });
+  // An item that only has a barcode (an existing asset tag): its tag ID is made from the barcode, as on the server.
+  equipment.push({ id: "q71", category_id: "c5", name: "Headset 01", barcode: "PAS-10021", nfc_uid: barcodeUid("PAS-10021"),
+    status: "available", mode: "category", hours: null, extended: null, current_employee_id: null, checked_out_at: null, due_at: null, last_event_at: null });
   return {
     org: { name: "Demo Air Services", timezone: "America/Phoenix", primary_color: "#1F4E79", accent_color: "#F2A900", logo_url: null,
       extended_checkout_hours: 9, enabled_modules: ["shifts"],
@@ -641,7 +660,7 @@ function demoSeed() {
     categories: cats,
     employees: [
       { id: "e1", employee_number: "E1001", name: "Alex Rivera", badge_uid: "04BA00000001", active: true },
-      { id: "e2", employee_number: "E1002", name: "Jordan Lee", badge_uid: "04BA00000002", active: true },
+      { id: "e2", employee_number: "E1002", name: "Jordan Lee", badge_uid: "04BA00000002", barcode: "000102", active: true },
       { id: "e3", employee_number: "E1003", name: "Sam Patel", badge_uid: "04BA00000003", active: true },
       { id: "e4", employee_number: "M2001", name: "Dana Brooks", badge_uid: "04BA0000000A", active: true, role: "manager", pin: "2468" },
       { id: "e5", employee_number: "A3001", name: "Morgan Reyes", badge_uid: "04BA0000000B", active: true, role: "admin", pin: "1357" },
@@ -744,9 +763,9 @@ const demo = {
       return { ok: true, generated_at: new Date(clock.now()).toISOString(),
         contract_names: Object.fromEntries(demo.db.contracts.map((c) => [c.id, c.name])),
         reach: st.contract_id ? demo.db.contracts.filter((c) => demo.shares(st.contract_id, c.id)).map((c) => c.id) : null,
-        employees: demo.db.employees.filter((e) => e.active && e.badge_uid).map((e) => ({ id: e.id, badge_uid: e.badge_uid, name: e.name, role: e.role, has_pin: !!e.pin, contract_id: e.contract_id || null })),
+        employees: demo.db.employees.filter((e) => e.active && e.badge_uid).map((e) => ({ id: e.id, badge_uid: e.badge_uid, barcode: e.barcode || null, name: e.name, role: e.role, has_pin: !!e.pin, contract_id: e.contract_id || null })),
         equipment: demo.db.equipment.filter((q) => q.nfc_uid && q.status !== "retired").map((q) => ({
-          id: q.id, nfc_uid: q.nfc_uid, name: q.name, category_id: q.category_id, status: q.status, contract_id: q.contract_id || null, loan_to: demo.loanOf(q.id)?.to || null,
+          id: q.id, nfc_uid: q.nfc_uid, barcode: q.barcode || null, name: q.name, category_id: q.category_id, status: q.status, contract_id: q.contract_id || null, loan_to: demo.loanOf(q.id)?.to || null,
           current_employee_id: q.current_employee_id, checked_out_at: q.checked_out_at, due_at: q.due_at,
           extended_alert_hours: demo.extendedHours(q), problem: demo.openProblem(q.id) })) };
     },
@@ -2641,8 +2660,8 @@ document.addEventListener("keydown", (e) => {
     const k = e.key === "Backspace" ? "DEL" : e.key === "Enter" ? "NEXT" : e.key === " " ? "SPACE" : /^[0-9a-zA-Z-]$/.test(e.key) ? e.key.toUpperCase() : null;
     if (k) { e.preventDefault(); return kbPress(k); }
   }
-  if (e.key === "Enter") { if (kb.length >= 4) handleTag(kb); kb = ""; return; }
-  if (/^[0-9a-fA-F:]$/.test(e.key)) { if (Date.now() - kbAt > 1500) kb = ""; kb += e.key; kbAt = Date.now(); }
+  if (e.key === "Enter") { if (kb.trim().length >= 3) handleTag(scanToUid(kb)); kb = ""; return; }
+  if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) { if (Date.now() - kbAt > 1500) kb = ""; kb += e.key; kbAt = Date.now(); }
 });
 
 /* ================= Test bench panel ================= */
@@ -2709,7 +2728,7 @@ document.querySelectorAll("[data-status]").forEach((b) => b.addEventListener("cl
 }));
 $("#acct").addEventListener("change", (e) => { demo.db.org.status = e.target.checked ? "active" : "paused"; demo.save();
   if (S.saved.deviceKey) call("station_heartbeat", { p_device_key: S.saved.deviceKey, p_software_version: VERSION }).catch(() => {}); });
-$("#readerInput").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); handleTag(e.target.value); e.target.value = ""; } });
+$("#readerInput").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); handleTag(scanToUid(e.target.value)); e.target.value = ""; } });
 $("#btnMenu").addEventListener("click", () => { S.overlay = "menu"; renderLayer(); });
 $("#btnNewCode").addEventListener("click", () => {
   const st = demo.db.stations[0]; Object.assign(st, { code: "DEMO0001", key_hash: null, activated: false }); demo.save();
