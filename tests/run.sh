@@ -27,6 +27,8 @@ if [[ $what == all || $what == ui ]]; then
   run console.js platform/console.html
   for f in dashboard1.js dashboard2.js dashboard3.js dashboard4.js dashboard5.js; do run $f dashboard/dashboard.html; done
   for i in 1 2 3 4 5 6 7 8 9 10 11; do run station$i.js station/station.html; done
+  echo "== station updater (Pi)"
+  python3 station/pi/test_station_updater.py | grep -E "^(FAIL|ALL)" || { echo "FAIL station updater"; exit 1; }
 fi
 
 if [[ $what == all ]] && [[ -x ${POSTGREST_BIN:-.tools/postgrest} ]]; then

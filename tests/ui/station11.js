@@ -98,6 +98,16 @@ const ALEX = "04BA00000001", JORDAN = "04BA00000002", SAM = "04BA00000003", DANA
   check(css("--bar") === "#ffffff", "dark main color, normal logo only: white bar");
   E("Object.assign(S.saved.config.organization, { primary_color: '#1F4E79', logo_url: null, logo_dark_url: null }); applyBrand(); renderTop()");
   check(css("--bar") === "#1f4e79" && css("--brand") === "#1f4e79" && /Demo Air Services/.test(doc.querySelector("#logo").textContent), "no logo: main color bar with their name; a dark main color is used as is");
+  // Self-updates: switch to a waiting version only when nobody's using the station
+  E(`window.__upd = []; updater.enabled = true; updater.reload = () => window.__upd.push("reload");
+     window.fetch = async (url, o) => { window.__upd.push((o?.method || "GET") + " " + url); return { json: async () => url === "/update/status" ? { current: VERSION, staged: "station-9.9.9+abc" } : { ok: true } }; };`);
+  E("S.screen = 'session'; S.session = { emp: { name: 'Test' } }");
+  await E("updater.tick()");
+  check(!E("window.__upd.length"), "no update while someone is using the station");
+  E("S.session = null; S.screen = 'idle'; S.overlay = null; render()"); await sleep(50);
+  await E("updater.tick()");
+  check(E("window.__upd.join('|')") === "GET /update/status|POST /update/apply|reload", "idle: applies the waiting version and reloads", );
+  E("updater.enabled = false; document.querySelector('.updating')?.remove()");
   check(errors.length === 0, "no script errors " + errors.join(";"));
   process.exit();
 })();

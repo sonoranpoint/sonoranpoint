@@ -2,11 +2,63 @@
 
 Three pieces run on each station:
 
-1. **The station app**: the `deploy/dist/station` folder from `python3 deploy/build.py` (its `index.html` plus the `brand/` folder, which holds the Sonoran Point logo shown when a company has none), opened full-screen in Chromium kiosk mode. Copy the whole folder, not just the page.
+1. **The station app and its updater**: `station_updater.py` serves the app at `http://localhost/` for Chromium (kiosk mode) and keeps it up to date by itself. The first version comes from the `deploy/dist/station` folder (`python3 deploy/build.py`); after that, new versions download on their own.
 2. **The NFC reader service**: `nfc_reader.py`. Reads the PN532 board built into the case and sends each tap to the app (`127.0.0.1:8766`).
 3. **The Wi-Fi helper**: `wifi_helper.py`. It lets the app list and join Wi-Fi networks during first-time setup and from Admin menu › Station. It listens only on `127.0.0.1:8765`.
 
 Requires Raspberry Pi OS Bookworm or later (uses NetworkManager / `nmcli`).
+
+## Install the app and the updater
+
+Run these in the `deploy/dist/station` folder copied onto the Pi:
+
+```bash
+sudo useradd --system --home /opt/sp-station --shell /usr/sbin/nologin sp-station 2>/dev/null || true
+VER=$(grep -o 'const VERSION = "[^"]*"' index.html | cut -d'"' -f2)
+sudo mkdir -p "/opt/sp-station/releases/$VER"
+sudo cp -r index.html brand "/opt/sp-station/releases/$VER/"
+sudo ln -sfn "releases/$VER" /opt/sp-station/current
+sudo chown -R sp-station: /opt/sp-station
+sudo install -m 755 station_updater.py /usr/local/bin/station-updater
+sudo tee /etc/systemd/system/station-updater.service >/dev/null <<'UNIT'
+[Unit]
+Description=Equipment station app server and updater
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/bin/python3 /usr/local/bin/station-updater
+Restart=always
+User=sp-station
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+sudo systemctl enable --now station-updater
+curl -s http://127.0.0.1/update/status     # {"current": "station-0.2.0+…", ...}
+```
+
+Then point the kiosk at it (for example in `~/.config/labwc/autostart` or your autostart file):
+
+```bash
+chromium-browser --kiosk --noerrdialogs --disable-session-crashed-bubble --check-for-update-interval=31536000 http://localhost/
+```
+
+**How updates work.** Every 30 minutes the updater checks `https://app.sonoranpoint.com/station-release/latest.json`
+(published by every deploy). A new version downloads in the background, is checked against its SHA-256 and kept
+ready. The station switches to it the next time nobody is using it (it shows "Updating" for a second), and
+taps saved while offline carry over. If the new version doesn't start properly within 5 minutes, the updater goes
+back to the one before and skips that version. The console's Stations page shows which version each station runs.
+
+`curl -X POST http://127.0.0.1/update/check` checks right away. `python3 test_station_updater.py` tests the updater
+without a Pi.
+
+**Moving a Pi that's already set up onto the updater:** the station keeps its setup only if the page's address stays
+`http://localhost/`. If it was opened another way before (a file, or another port), it starts at the setup screen
+once: give it a new activation code from the console or dashboard.
+
+The updater only replaces the app (the page and its logos). The NFC reader and Wi-Fi helper below are installed by hand.
 
 ## Install the Wi-Fi helper
 

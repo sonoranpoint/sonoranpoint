@@ -680,7 +680,7 @@ function buildDemo() {
       ...(x.activated_at ? [{ station: x.id, at: x.activated_at, kind: "set_up", details: {}, by: null }] : [])]);
     c.locations = [...new Set(c.stations.map((x) => x.location).filter(Boolean))].sort();
   });
-  return { customers, log, team, hw };
+  return { customers, log, team, hw, latestStation: "station-0.1.0" };
 }
 const DB = buildDemo();
 
@@ -961,6 +961,8 @@ const mapStation = (s) => ({ id: s.id, name: s.name, location: s.location || "",
   revoked: !!s.revoked_at, created: ms(s.created_at) || Date.now(), contract_id: s.contract_id || null, replaced: ms(s.replaced_at) || null });
 const live = {
   async load() {
+    // The newest station version (published with each deploy); stations update themselves to it.
+    fetch("station-release/latest.json", { cache: "no-store" }).then((r) => r.ok ? r.json() : null).then((m) => { if (m?.version) { DB.latestStation = m.version; render(); } }).catch(() => {});
     const [cs, fleet, lg, team, hw] = await Promise.all([rpc("platform_customers"), rpc("platform_fleet"), rpc("platform_log", { p_limit: 300 }),
       rpc("platform_team").catch(() => null),   // null until the team migration is run
       rpc("platform_hardware").catch(() => null)]);   // null until the hardware migration is run
@@ -1665,7 +1667,8 @@ function vFleet() {
   const counts = { problems: all.filter(problem).length, online: all.filter((s) => s.state.key === "online").length, waiting: all.filter((s) => ["waiting", "expired"].includes(s.state.key)).length, all: everything.length };
   return `<div class="head"><div><h1>Stations</h1><p>Every station at every customer. Disconnected ones are under All.</p></div></div>
     <section class="panel"><div class="panel-h"><div class="seg" role="group" aria-label="Show">${[["problems", "Needs a look"], ["online", "Online"], ["waiting", "Waiting for setup"], ["all", "All"]].map(([k, l]) => `<button data-seg="fleet:${k}" class="${S.f.fleet === k ? "on" : ""}" aria-pressed="${S.f.fleet === k}">${l} (${counts[k]})</button>`).join("")}</div>
-      <span class="muted" style="font-size:13px">Software: ${Object.entries(versions).map(([v, n]) => `<span class="mono">${esc(v)}</span> × ${n}`).join(", ")}</span></div>
+      <span class="muted" style="font-size:13px">${DB.latestStation ? `Newest: <span class="mono">${esc(DB.latestStation)}</span>${(() => { const behind = all.filter((s) => s.version && s.version !== DB.latestStation && !s.revoked).length; return behind ? ` · ${behind} not on it yet` : " · all up to date"; })()} · ` : ""}Software: ${Object.entries(versions).map(([v, n]) => `<span class="mono">${esc(v)}</span> × ${n}`).join(", ")}</span></div>
+      ${DB.latestStation ? `<p class="muted" style="margin:0;padding:0 18px 12px;font-size:12.5px">Stations set up with the updater pick up a new version within about half an hour, the next time nobody is using them.</p>` : ""}
       <div class="tablewrap"><table><thead><tr><th>Station</th><th>Status</th><th>Last seen</th><th>Software</th><th>Unit</th><th>Admin tag</th></tr></thead><tbody>
       ${byCustomer(rows).map(([org, list]) => `<tr class="grp"><td colspan="6"><a class="glink" href="#customer/${org}">${esc(list[0].customer)}</a>
           <span class="muted" style="font-weight:400"> · ${list.length} station${list.length === 1 ? "" : "s"}${list.some((x) => x.revoked) ? `, ${list.filter((x) => x.revoked).length} disconnected` : ""}${list[0].customer_status === "paused" ? ", account paused" : list.some((x) => x.state.tone === "bad" || x.state.tone === "warn") ? "" : list.every((x) => x.revoked) ? "" : ", all fine"}</span></td></tr>`

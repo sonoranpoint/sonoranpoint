@@ -224,6 +224,8 @@ const api_set = async (id) => { E(`api.updateCustomer('${id}', { logo_dark_url: 
   E(`Object.assign(custOf('${da}'), { primary: "#FBFAFF", logo_dark_url: "data:image/png;base64,BBB" })`); await go("customers"); await go("customer/" + da);
   check(doc.querySelector(".pv-top img")?.getAttribute("src") === "data:image/png;base64,AAA", "preview: a light main color keeps the normal logo even with a light one uploaded");
   check(E("stContrast(stUi('#FFFFFF'), '#f7f8fa')") >= 3, "preview rings use a color that shows on the screen");
+  await go("fleet"); await click('[data-seg="fleet:all"]');
+  check(/Newest: station-0\.1\.0 · 1 not on it yet/.test(page()), "Stations shows the newest station version and how many aren't on it");
   check(errors.length === 0, "no script errors " + errors.join(";"));
   process.exit();
 })();

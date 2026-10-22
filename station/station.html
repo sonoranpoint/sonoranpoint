@@ -107,6 +107,8 @@ html.kiosk .screen { border-radius: 0; }
 .main { flex: 1; min-height: 0; position: relative; display: flex; }
 
 /* idle */
+.updating { position: absolute; inset: 0; z-index: 50; display: grid; place-items: center; background: color-mix(in srgb, var(--screen) 92%, transparent); }
+.updating div { text-align: center; } .updating b { display: block; font-family: var(--display); font-size: 5cqw; color: var(--screen-ink); } .updating span { font-size: 2.4cqw; color: var(--screen-muted); }
 .idle { flex: 1; display: grid; grid-template-columns: 1fr 1.1fr; align-items: center; gap: 4.5cqw; padding: 3cqw 5cqw; }
 .rings { position: relative; aspect-ratio: 1; width: 100%; max-width: 26cqw; justify-self: center; display: grid; place-items: center; }
 .rings span { position: absolute; inset: 0; border-radius: 50%; border: .5cqw solid var(--brand); opacity: 0; animation: ring 2.4s ease-out infinite; }
@@ -571,7 +573,7 @@ select, .field { background: var(--chip); border: 1px solid var(--line); border-
 
 <script>
 "use strict";
-const VERSION = "station-0.1.0";
+const VERSION = "station-0.2.0";   // the build adds "+<hash>"; bump this for notable releases
 /* Shown on the setup screens. Replace with your real support details before shipping. */
 const SUPPORT = { name: "Station support", email: "support@sonoranpoint.com" };
 
@@ -2706,7 +2708,7 @@ document.querySelectorAll("[data-status]").forEach((b) => b.addEventListener("cl
   demo.db.org.settings[k] = e.target.checked; demo.save(); refreshData(true);
 }));
 $("#acct").addEventListener("change", (e) => { demo.db.org.status = e.target.checked ? "active" : "paused"; demo.save();
-  if (S.saved.deviceKey) call("station_heartbeat", { p_device_key: S.saved.deviceKey }).catch(() => {}); });
+  if (S.saved.deviceKey) call("station_heartbeat", { p_device_key: S.saved.deviceKey, p_software_version: VERSION }).catch(() => {}); });
 $("#readerInput").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); handleTag(e.target.value); e.target.value = ""; } });
 $("#btnMenu").addEventListener("click", () => { S.overlay = "menu"; renderLayer(); });
 $("#btnNewCode").addEventListener("click", () => {
@@ -2760,6 +2762,31 @@ setInterval(() => {               // clock + sign-out timer
 if (device === piDevice) connectReader();
 setInterval(() => { if (S.saved.queue.length) flush(); }, 3000);                     // retry saved taps
 setInterval(() => { if (S.saved.deviceKey && !S.session) refreshData(); }, 45000);   // fresh badge/tag lists
-setInterval(() => { if (S.saved.deviceKey) call("station_heartbeat", { p_device_key: S.saved.deviceKey }).then((r) => { if (!r.ok && r.error === "station_not_authorized") lockedOut(); }).catch(() => {}); }, 10000);
+setInterval(() => { if (S.saved.deviceKey) call("station_heartbeat", { p_device_key: S.saved.deviceKey, p_software_version: VERSION }).then((r) => { if (!r.ok && r.error === "station_not_authorized") lockedOut(); }).catch(() => {}); }, 10000);
+
+/* ---------- Self-updates (on the Pi: station/pi/station_updater.py serves this page) ----------
+   The updater downloads new versions in the background. This page tells it it started fine (or the
+   updater goes back to the version before after 5 minutes), and switches to a waiting version only when
+   nobody is using the station. Taps saved while offline are kept: they're stored in the browser, not the page. */
+const updater = {
+  enabled: device === piDevice, reload: () => location.reload(),
+  async post(path, body) { const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) }); return r.json(); },
+  idle: () => S.screen === "idle" && !S.session && !S.staff && !S.overlay && !S.lookup && !S.summary && !S.check && !S.pinEntry && !S.flushing && !S.busy,
+  async tick() {
+    if (!updater.enabled || !updater.idle()) return;
+    try {
+      const st = await (await fetch("/update/status", { cache: "no-store" })).json();
+      if (!st.staged || st.staged === VERSION || !updater.idle()) return;
+      const note = document.createElement("div"); note.className = "updating"; note.setAttribute("role", "status");
+      note.innerHTML = "<div><b>Updating</b><span>Back in a few seconds.</span></div>"; $("#screen").appendChild(note);
+      const r = await updater.post("/update/apply");
+      if (r.ok) updater.reload(); else note.remove();
+    } catch { /* no updater (set up by hand): nothing to do */ }
+  },
+};
+if (updater.enabled) {
+  setTimeout(() => updater.post("/update/ok", { version: VERSION }).catch(() => {}), 15000);   // this version started fine
+  setInterval(() => updater.tick(), 60000);
+}
 try { navigator.wakeLock?.request("screen").catch(() => {}); } catch {}
 </script>

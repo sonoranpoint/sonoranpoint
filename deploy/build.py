@@ -5,9 +5,12 @@
 
   dist/app/       -> Cloudflare Pages project "sonoranpoint-app",     domain app.sonoranpoint.com
   dist/console/   -> Cloudflare Pages project "sonoranpoint-console", domain console.sonoranpoint.com
-  dist/station/   -> copied onto each Pi (served at http://localhost/)
+  dist/station/   -> the station app, for setting up a Pi by hand (served at http://localhost/)
+  dist/app/station-release/latest.json + station-<hash>.zip
+                  -> what stations update themselves to (station/pi/station_updater.py checks it)
+                     (latest.json is copied to the console too, so it can show the newest version)
 """
-import pathlib, shutil
+import hashlib, io, json, pathlib, re, shutil, zipfile
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 DIST = ROOT / "deploy" / "dist"
@@ -47,12 +50,36 @@ def build():
         for f in ["logo.png", "logo@2x.png", "logo-light.png", "logo-light@2x.png", "mark-64.png", "mark-180.png", "mark-512.png", "favicon.ico", "apple-touch-icon.png", "app-icon-512.png"]:
             shutil.copy(ROOT / "brand" / f, out / "brand" / f)
     st = DIST / "station"; st.mkdir(parents=True)
-    (st / "index.html").write_text(page(ROOT / "station" / "station.html"))
-    for f in ["wifi_helper.py", "nfc_reader.py", "README.md"]:
+    # The station's version: the number in station.html plus a hash of what's in the bundle, so a
+    # station only updates when the station itself changed (not on every dashboard push).
+    html = page(ROOT / "station" / "station.html")
+    base = re.search(r'const VERSION = "([^"]+)";', html).group(1)
+    brand = ["logo.png", "logo-light.png", "mark-180.png", "favicon.ico"]
+    h = hashlib.sha256(html.encode())
+    for f in brand: h.update((ROOT / "brand" / f).read_bytes())
+    version = f"{base}+{h.hexdigest()[:8]}"
+    html = html.replace(f'const VERSION = "{base}";', f'const VERSION = "{version}";', 1)
+    (st / "index.html").write_text(html)
+    for f in ["wifi_helper.py", "nfc_reader.py", "test_station_updater.py", "README.md"]:
         shutil.copy(ROOT / "station" / "pi" / f, st / f)
     (st / "brand").mkdir()   # the station shows Sonoran Point's logo when a company has none
-    for f in ["logo.png", "logo-light.png", "mark-180.png", "favicon.ico"]:
+    for f in brand:
         shutil.copy(ROOT / "brand" / f, st / "brand" / f)
+    shutil.copy(ROOT / "station" / "pi" / "station_updater.py", st / "station_updater.py")
+    # The release stations download: just the app (index.html + brand/), zipped with fixed dates.
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        for rel in ["index.html"] + [f"brand/{f}" for f in brand]:
+            info = zipfile.ZipInfo(rel, date_time=(2026, 1, 1, 0, 0, 0)); info.external_attr = 0o644 << 16
+            z.writestr(info, (st / rel).read_bytes(), zipfile.ZIP_DEFLATED)
+    data = buf.getvalue()
+    rel_dir = DIST / "app" / "station-release"; rel_dir.mkdir()
+    name = f"station-{h.hexdigest()[:8]}.zip"
+    (rel_dir / name).write_bytes(data)
+    manifest = json.dumps({"version": version, "file": name, "sha256": hashlib.sha256(data).hexdigest(), "size": len(data)}, indent=2)
+    (rel_dir / "latest.json").write_text(manifest)
+    (DIST / "console" / "station-release").mkdir(); (DIST / "console" / "station-release" / "latest.json").write_text(manifest)
+    print("station", version)
     print("built", ", ".join(str(p.relative_to(ROOT)) for p in sorted(DIST.iterdir())))
 
 if __name__ == "__main__":

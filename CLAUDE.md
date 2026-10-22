@@ -19,7 +19,11 @@ See README.md for the full product description.
   project), then tell Dez to run it in the Supabase SQL editor. Migrations 1–22 have been run (checked 2026-10-22); 23 handed over
   (ask if unsure). Alert emails are live (Resend key in Vault, first send
   confirmed 2026-10-20).
-- Station changes reach the Pis by copying `deploy/dist/station` onto each Pi (not automatic yet).
+- Station changes reach the Pis by themselves: every deploy publishes `app.sonoranpoint.com/station-release/latest.json` + a zip
+  (version = `VERSION` in station.html + a content hash, so only station changes count). `station/pi/station_updater.py` on each
+  Pi serves the app at http://localhost/, downloads/verifies/stages new versions, and the page switches when idle
+  (`updater` in station.html; rollback if the page doesn't POST /update/ok within 5 min). Pis set up before the updater was
+  installed still need the folder copied by hand once.
 
 ## Contracts
 - A company's work is split into contracts (customer's own word: `terminology.contract`), a tree in `public.contracts`.
