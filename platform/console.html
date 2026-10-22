@@ -530,12 +530,12 @@ const OPERATOR = { name: "Dez", role: "owner", email: "g.ryan@sonoranpoint.com" 
 const ROLES = { owner: ["Owner", "Everything, plus adding and removing people on this team."], operator: ["Operator", "Customers, stations and codes. Can't change this team."] };
 const HW_KIND = { station: "Station kit", reader: "NFC reader", display: "Screen", spare: "Spare part", other: "Other" };
 const HW_STATUS = { building: ["Building", "quiet"], ready: ["In stock", "ok"], shipped: ["Shipped", "info"], installed: ["Installed", "ok"],
-  repair: ["In repair", "warn"], returned: ["Returned", "warn"], retired: ["Retired", "quiet"] };
+  returning: ["Coming back", "warn"], repair: ["In repair", "warn"], returned: ["Returned", "warn"], retired: ["Retired", "quiet"] };
 const CARRIERS = { UPS: "https://www.ups.com/track?tracknum=", USPS: "https://tools.usps.com/go/TrackConfirmAction?tLabels=",
   FedEx: "https://www.fedex.com/fedextrack/?trknbr=", DHL: "https://www.dhl.com/us-en/home/tracking/tracking-express.html?tracking-id=", "Hand delivered": null, Other: null };
 const PLANS = [{ id: "pilot", name: "Pilot" }, { id: "standard", name: "Standard" }, { id: "enterprise", name: "Enterprise" }];   // rename to your price list
 const MODULES = [{ id: "shifts", name: "Shifts", desc: "Assign people to shifts, end-of-shift reports, items due at end of shift" }];
-const STATUS = { trial: ["Trial", "info"], active: ["Active", "ok"], paused: ["Paused", "bad"], cancelled: ["Cancelled", "quiet"] };
+const STATUS = { trial: ["Trial", "info"], active: ["Active", "ok"], paused: ["Paused", "bad"], cancelled: ["Closed", "quiet"] };
 const TERMS = [["equipment", "Equipment (one)", "Radio"], ["equipment_plural", "Equipment (many)", "Radios"], ["employee", "Person (one)", "Agent"],
   ["employee_plural", "People (many)", "Agents"], ["checkout", "Check out button", "Check Out"], ["checkin", "Return button", "Return"]];
 const DEFAULT_TERMS = { equipment: "Equipment", equipment_plural: "Equipment", employee: "Employee", employee_plural: "Employees", checkout: "Check Out", checkin: "Return" };
@@ -878,6 +878,16 @@ const api = {
   },
   /* rpc platform_revoke_station(station) */
   revokeStation(orgId, stId) { const c = custOf(orgId); const s = c.stations.find((x) => x.id === stId); s.revoked = true; s.code = null; stEvent(c, s.id, "disconnected"); log(c, "disconnected station", s.name); },
+  /* rpc platform_close_customer(org): cancelled, stations disconnected, units coming back, invites cancelled; history stays */
+  closeCustomer(orgId) {
+    const c = custOf(orgId); let st = 0, hw = 0;
+    for (const s of c.stations.filter((x) => !x.revoked)) { s.revoked = true; s.code = null; stEvent(c, s.id, "disconnected"); st++; }
+    for (const u of (DB.hw || []).filter((x) => x.org_id === c.id && ["ready", "shipped", "installed"].includes(x.status))) {
+      u.status = "returning"; u.events?.unshift({ at: Date.now(), by: OPERATOR.name, action: "status: returning", details: { reason: "customer closed out", customer: c.name } }); hw++; }
+    c.invites = []; c.status = "cancelled";
+    log(c, "closed out customer", `${st} station${st === 1 ? "" : "s"} disconnected, ${hw} unit${hw === 1 ? "" : "s"} coming back`);
+    return { ok: true, stations: st, units: hw };
+  },
   /* rpc platform_update_station(station, {name, location, contract_id}) — rename, move to another location or contract */
   updateStation(orgId, stId, d) {
     const c = custOf(orgId); const s = c.stations.find((x) => x.id === stId); if (!s) return { ok: false, error: STATION_ERR.not_found };
@@ -1059,6 +1069,10 @@ const liveApi = {
   async revokeStation(orgId, stId) {
     try { await rpc("platform_revoke_station", { p_station: stId }); } catch (e) { toast(nice(e)); }
     await live.refresh(orgId).catch(() => {});
+  },
+  async closeCustomer(orgId) {
+    let r; try { r = await rpc("platform_close_customer", { p_org: orgId }); } catch (e) { return { ok: false, error: nice(e) }; }
+    await live.refresh(orgId).catch(() => {}); return { ok: !!r.ok, stations: r.stations, units: r.units, error: r.error };
   },
   async updateStation(orgId, stId, d) {
     let r; try { r = await rpc("platform_update_station", { p_station: stId, p: d }); } catch (e) { return { ok: false, error: nice(e) }; }
@@ -1330,7 +1344,7 @@ function vCustomers() {
       <div class="stack">
         <section class="panel"><div class="panel-h"><h2>Customers<small>Every company using ${esc(VENDOR.name)}: their stations and account status.</small></h2>
           <div class="ctools"><label class="search">${ic("search")}<input class="field" type="search" data-f="q" placeholder="Search name, station or serial" aria-label="Search customers by name, short ID, station or hardware serial" value="${esc(S.f.q)}"></label>
-            <div class="seg" role="group" aria-label="Status">${[["all", "All"], ["active", "Active"], ["trial", "Trial"], ["paused", "Paused"]].map(([k, l]) => `<button data-seg="status:${k}" class="${S.f.status === k ? "on" : ""}" aria-pressed="${S.f.status === k}">${l}</button>`).join("")}</div>
+            <div class="seg" role="group" aria-label="Status">${[["all", "All"], ["active", "Active"], ["trial", "Trial"], ["paused", "Paused"], ["cancelled", "Closed"]].map(([k, l]) => `<button data-seg="status:${k}" class="${S.f.status === k ? "on" : ""}" aria-pressed="${S.f.status === k}">${l}</button>`).join("")}</div>
             <a class="btn primary" href="#new">${ic("plus")}Add customer</a></div></div>
           <div class="tablewrap"><table class="ctable"><thead><tr><th>Company</th><th>Plan</th><th>Status</th><th>Stations</th><th>Trial ends</th><th aria-label="Actions"></th></tr></thead><tbody>
           ${shown.map((c) => { const d = c.trial_ends ? daysLeft(c.trial_ends) : null; return `<tr data-preview="${c.id}" tabindex="0">
@@ -1486,10 +1500,16 @@ function vCustomer() {
   return `<div><a class="back" href="#customers">‹ All customers</a></div>
     <div class="head"><div class="cust" style="gap:14px">${swatch(c, true)}
       <div><h1>${esc(c.name)}</h1><p>${statusChip(c.status)} · ${esc(planName(c.plan))} plan${c.status === "trial" && c.trial_ends ? ` · trial ${esc(untilText(c.trial_ends))}` : ""} · customer since ${esc(fmtDate(c.created))}</p></div></div>
-      <div class="actions">${c.status === "paused"
-        ? `<button class="btn primary" data-act="resume">Resume account</button>`
+      <div class="actions">${c.status === "cancelled"
+        ? `<button class="btn" data-act="reopen">Reopen account</button>`
+        : cf === "close" ? (() => { const n = c.stations.filter((x) => !x.revoked).length, h = (DB.hw || []).filter((u) => u.org_id === c.id && ["ready", "shipped", "installed"].includes(u.status)).length;
+            return `<span class="confirm">Close out ${esc(c.name)}? Their account is cancelled, ${n} station${n === 1 ? "" : "s"} disconnect${n === 1 ? "s" : ""} for good${DB.hw ? ` and ${h} unit${h === 1 ? " is" : "s are"} marked as coming back` : ""}. Their history stays, and their team can still sign in to see and download it.
+              <button class="btn sm danger" data-act="doClose">Close out</button><button class="btn sm" data-act="noConfirm">Cancel</button></span>`; })()
+        : c.status === "paused"
+        ? `<button class="btn primary" data-act="resume">Resume account</button><button class="btn danger" data-act="askClose">Close out</button>`
         : cf === "pause" ? `<span class="confirm">Pause ${esc(c.name)}? Their stations stop recording right away (they keep their setup). <button class="btn sm danger" data-act="doPause">Pause</button><button class="btn sm" data-act="noConfirm">Cancel</button></span>`
-        : `<button class="btn danger" data-act="askPause">Pause account</button>`}</div></div>
+        : `<button class="btn danger" data-act="askPause">Pause account</button><button class="btn danger" data-act="askClose">Close out</button>`}</div></div>
+    ${c.status === "cancelled" ? `<div class="warnbox">Closed out: their stations are disconnected and their units are marked as coming back (Hardware). Their team can still sign in to see and download their history. To bring them back, reopen the account and give each station a new code.</div>` : ""}
     ${c.status === "paused" ? `<div class="warnbox">Paused: their stations show "This station is paused" and nothing is recorded. Their dashboard still opens. Resume to switch everything back on (no new codes needed).</div>` : ""}
     <div class="cols"><div class="stack">
 
@@ -1743,9 +1763,9 @@ function vHardware() {
   const all = api.hardware();
   if (!all) return `<div class="head"><div><h1>Hardware</h1></div></div><div class="warnbox">Run the database update <span class="mono">20261016000009_hardware.sql</span> in Supabase to turn on hardware tracking.</div>`;
   const live = all.filter((u) => u.status !== "retired"), cnt = (st) => all.filter((u) => u.status === st).length;
-  const fix = cnt("repair") + cnt("returned");
+  const fix = cnt("repair") + cnt("returned") + cnt("returning");
   const groups = { all: (u) => u.status !== "retired", ready: (u) => u.status === "ready", building: (u) => u.status === "building", shipped: (u) => u.status === "shipped",
-    installed: (u) => u.status === "installed", fix: (u) => u.status === "repair" || u.status === "returned", retired: (u) => u.status === "retired" };
+    installed: (u) => u.status === "installed", fix: (u) => ["repair", "returned", "returning"].includes(u.status), retired: (u) => u.status === "retired" };
   const q = S.f.hwq.trim().toLowerCase();
   const rows = all.filter(groups[S.f.hw] || groups.all).filter((u) => !q || [u.serial, u.pi_serial, u.tracking, hwCustomer(u), hwStation(u)?.name, HW_KIND[u.kind], u.notes].join(" ").toLowerCase().includes(q));
   const oldShip = all.filter((u) => u.status === "shipped" && u.shipped_at && Date.now() - Date.parse(u.shipped_at) > 10 * DAY);
@@ -1773,7 +1793,7 @@ function vHardware() {
     <p class="muted" style="font-size:13px;margin:0">${live.length} unit${live.length === 1 ? "" : "s"} in service, ${cnt("retired")} retired. A shipped unit linked to a station turns Installed by itself when that station is activated.</p>`;
 }
 const NEXT = { building: [["ready", "Mark in stock"]], ready: [], shipped: [["installed", "Mark installed"], ["returned", "Mark returned"]],
-  installed: [["repair", "Send to repair"], ["returned", "Mark returned"]], repair: [["ready", "Back in stock"], ["retired", "Retire"]],
+  installed: [["repair", "Send to repair"], ["returned", "Mark returned"]], returning: [["returned", "Arrived back"], ["installed", "Not coming back after all"]], repair: [["ready", "Back in stock"], ["retired", "Retire"]],
   returned: [["ready", "Back in stock"], ["repair", "Send to repair"], ["retired", "Retire"]], retired: [["ready", "Back in stock"]] };
 function vUnit() {
   const isNew = S.id === "new"; const u = isNew ? null : api.hardwareUnit(S.id); const e = S.formErr; const cf = S.confirm;
@@ -1992,6 +2012,9 @@ document.addEventListener("click", async (e) => {
   if (a === "pvPause" || a === "pvResume") { const pc = custOf(S.preview); const r = await api.updateCustomer(pc.id, { status: a === "pvPause" ? "paused" : "active" }); S.confirm = null;
     toast(!r.ok ? r.error : a === "pvPause" ? "Account paused" : "Account resumed. Their stations come back on their own."); return render(); }
   if (a === "noConfirm") { S.confirm = null; return render(); }
+  if (a === "askClose") { S.confirm = "close"; return render(); }
+  if (a === "doClose") { const r = await api.closeCustomer(c.id); S.confirm = null; toast(r.ok ? `${c.name} closed out` : r.error); return render(); }
+  if (a === "reopen") { const r = await api.updateCustomer(c.id, { status: "active" }); toast(r.ok ? "Account reopened. Give each station a new code to bring it back." : r.error); return render(); }
   if (a === "askPause") { S.confirm = "pause"; return render(); }
   if (a === "signOut") { await sb.auth.signOut(); return; }
   if (a === "magic" || a === "forgot") return authAction(a);

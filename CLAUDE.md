@@ -16,7 +16,7 @@ See README.md for the full product description.
 - Push to `main` → GitHub Actions runs `tests/run.sh db` + `ui`, then deploys app + console to Cloudflare Pages
   (projects `sonoranpoint-app`, `sonoranpoint-console`).
 - Database changes are NOT automatic. Add a new migration file (never edit one already run on the live
-  project), then tell Dez to run it in the Supabase SQL editor. Migrations 1–22 have been run (checked 2026-10-22); 23–24 handed over
+  project), then tell Dez to run it in the Supabase SQL editor. Migrations 1–22 have been run (checked 2026-10-22); 23–25 handed over
   (ask if unsure). Alert emails are live (Resend key in Vault, first send
   confirmed 2026-10-20).
 - Station changes reach the Pis by themselves: every deploy publishes `app.sonoranpoint.com/station-release/latest.json` + a zip
@@ -45,6 +45,10 @@ See README.md for the full product description.
   removed, renamed, moved location/contract) plus `private.station_event()` for new codes; `by_name` is "Sonoran Point" for operators.
   Console edits go through `platform_update_station`. Taps store `station_contract_id` at insert, so moving a station
   doesn't move its past taps (RLS: `private.can_see_tap`). `station_overview` must be recreated when `stations` gets columns.
+
+## Closing out a customer (migration 25)
+- `platform_close_customer(org)`: status cancelled, stations revoked (not removed), invites deleted, units ready/shipped/installed ->
+  hardware status `returning` ("Coming back"). Members and history stay; the dashboard shows `accountNote()`. Reopen = status active + new codes.
 
 ## Barcodes (migration 24)
 - `employees.barcode`, `equipment.barcode` (trimmed, upper case, unique per company). Something with only a barcode gets a tag ID

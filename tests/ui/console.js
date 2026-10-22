@@ -226,6 +226,20 @@ const api_set = async (id) => { E(`api.updateCustomer('${id}', { logo_dark_url: 
   check(E("stContrast(stUi('#FFFFFF'), '#f7f8fa')") >= 3, "preview rings use a color that shows on the screen");
   await go("fleet"); await click('[data-seg="fleet:all"]');
   check(/Newest: station-0\.1\.0 · 1 not on it yet/.test(page()), "Stations shows the newest station version and how many aren't on it");
+  // Closing out a customer
+  const sky = E("DB.customers.find(c => c.name === 'Sky Harbor Catering').id");
+  E(`DB.hw.push({ id: "hwsky", serial: "SP-0950", kind: "station", status: "installed", org_id: "${sky}", station_id: custOf("${sky}").stations[0].id, events: [] })`);
+  await go("customer/" + sky); await click('[data-act="askClose"]');
+  check(/Close out Sky Harbor Catering\? Their account is cancelled, \d+ stations? disconnects? for good and \d+ units? (is|are) marked as coming back/.test(page()), "closing out asks first and says what will happen", doc.querySelector(".confirm")?.textContent);
+  await click('[data-act="doClose"]'); await sleep(20);
+  check(E(`custOf("${sky}").status`) === "cancelled" && E(`custOf("${sky}").stations.every(s => s.revoked)`) && E(`DB.hw.find(u => u.id === "hwsky").status`) === "returning",
+        "closed out: cancelled, every station disconnected, its unit coming back");
+  check(/Closed out: their stations are disconnected/.test(page()) && !!doc.querySelector('[data-act="reopen"]'), "the customer page says so, with a way to reopen");
+  await go("hardware"); await click('[data-seg="hw:fix"]'); check(/SP-0950/.test(page()) && /Coming back/.test(page()), "Hardware lists units coming back under Repairs and returns");
+  await go("customers"); await click('[data-seg="status:cancelled"]'); check(/Sky Harbor Catering/.test(page().split("Every company")[1] || page()), "the customer list has a Closed filter");
+  await click('[data-seg="status:all"]');
+  await go("customer/" + sky); await click('[data-act="reopen"]'); await sleep(20);
+  check(E(`custOf("${sky}").status`) === "active", "reopen sets them back to active");
   check(errors.length === 0, "no script errors " + errors.join(";"));
   process.exit();
 })();

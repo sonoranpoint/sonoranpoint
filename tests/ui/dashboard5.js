@@ -158,6 +158,13 @@ const change = async (el, v) => { if (typeof v === "boolean") el.checked = v; el
   check(/Badge barcode\s*000102/.test(drawer()), "a person's panel shows their badge barcode");
   await go("equipment"); const sq = doc.querySelector('[data-f="eqSearch"]');
   if (sq) { sq.value = "rad-77"; sq.dispatchEvent(new dom.window.Event("input", { bubbles: true })); await sleep(30); check(/Scan-only radio/.test(page()), "search finds items by barcode"); }
+  // A closed or paused account says so
+  E("DB.org.status = 'cancelled'; render()"); await sleep(20);
+  check(/This account is closed/.test(page()), "a closed account shows a note on every page");
+  E("DB.org.status = 'paused'; render()"); await sleep(20);
+  check(/This account is paused/.test(page()), "so does a paused one");
+  E("DB.org.status = 'active'; render()"); await sleep(20);
+  check(!/This account is/.test(page()), "and nothing when it's active");
   check(errors.length === 0, "no script errors " + errors.join(";"));
   process.exit();
 })();

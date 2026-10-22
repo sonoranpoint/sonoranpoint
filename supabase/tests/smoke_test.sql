@@ -1219,6 +1219,28 @@ update equipment set barcode = 'AB-200' where name = 'Scanned Radio';
 reset role;
 select pg_temp.ok((select barcode from equipment where name = 'Scanned Radio') = 'AB-200', 'admins set barcodes from the dashboard');
 
+\echo '--- Closing out a customer'
+select id as dg from organizations where slug = 'desertground' \gset
+insert into private.hardware_units (serial, kind, status, org_id, station_id) select 'SP-CLOSE', 'station', 'installed', :'dg', id from stations where org_id = :'dg' limit 1;
+insert into private.hardware_units (serial, kind, status, org_id) values ('SP-SPARE', 'reader', 'shipped', :'dg');
+set role authenticated;
+select set_config('request.jwt.claim.sub', 'aaaaaaaa-0000-0000-0000-000000000001', false) \g /dev/null
+select pg_temp.ok(pg_temp.raises($$select platform_close_customer('$$ || :'dg' || $$')$$), 'customers can''t close accounts');
+select set_config('request.jwt.claim.sub', '99999999-0000-0000-0000-000000000009', false) \g /dev/null
+select platform_close_customer(:'dg') as closed \gset
+reset role;
+select pg_temp.ok((:'closed'::jsonb->>'ok')::boolean and (select status from organizations where id = :'dg') = 'cancelled', 'closing out cancels the account');
+select pg_temp.ok(not exists (select 1 from stations where org_id = :'dg' and revoked_at is null) and (:'closed'::jsonb->>'stations')::int > 0
+                  and not exists (select 1 from private.station_keys k join stations s on s.id = k.station_id where s.org_id = :'dg' and (k.device_key_hash is not null or k.activation_code_hash is not null)),
+                  'every station is disconnected (codes and keys stop working)');
+select pg_temp.ok((select count(*) from private.hardware_units where org_id = :'dg' and status = 'returning') = 2
+                  and exists (select 1 from private.hardware_events e join private.hardware_units u on u.id = e.unit_id where u.serial = 'SP-CLOSE' and e.details->>'reason' = 'customer closed out'),
+                  'their units are marked as coming back');
+select pg_temp.ok(not exists (select 1 from org_invites where org_id = :'dg' and accepted_at is null), 'open invites are cancelled');
+select pg_temp.ok(exists (select 1 from station_events e join stations s on s.id = e.station_id where s.org_id = :'dg' and e.kind = 'disconnected' and e.by_name = 'Sonoran Point')
+                  and (select action from private.platform_log where org_id = :'dg' order by id desc limit 1) = 'closed out customer', 'it shows in their station history and your log');
+select pg_temp.ok(exists (select 1 from org_members where org_id = :'dg'), 'their team stays (they can still sign in to see their history)');
+
 \echo '--- Deleting a company removes all its data'
 delete from organizations where slug = 'demo';
 select pg_temp.ok((select count(*) from equipment) = 0 and (select count(*) from transactions) = 0, 'company delete cascades cleanly');

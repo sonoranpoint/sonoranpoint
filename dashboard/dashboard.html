@@ -298,6 +298,9 @@ label.btn { cursor: pointer; } label.btn.disabled { opacity: .55; cursor: defaul
 .viewas { display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
 .viewas select { background: rgba(255,255,255,.14); color: inherit; border: 1px solid rgba(255,255,255,.3); border-radius: 7px; padding: 3px 6px; font-size: 13px; }
 .viewas select option { color: #111; }
+.acct-note { border-radius: 10px; padding: 11px 14px; margin-bottom: 18px; font-size: 14px; line-height: 1.45; }
+.acct-note.bad { background: var(--bad-bg); color: var(--bad); } .acct-note.warn { background: var(--warn-bg); color: var(--warn); }
+.acct-note a { color: inherit; font-weight: 700; }
 .readonly-note { background: var(--surface-2); border: 1px dashed var(--line); border-radius: 10px; padding: 9px 12px; color: var(--muted); font-size: 13.5px; }
 .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(22px + env(safe-area-inset-bottom, 0px)); background: var(--ink); color: var(--bg);
          padding: 10px 18px; border-radius: 10px; font-weight: 700; z-index: 40; box-shadow: var(--shadow); max-width: calc(100% - 32px); }
@@ -1278,7 +1281,7 @@ function render() {
             <a href="mailto:${esc(SP.support)}">${ic("help")}Help and support</a>
           </div></div>
       </header>
-      <div class="wrap">${VIEWS[S.route]()}</div></main>`;
+      <div class="wrap">${accountNote()}${VIEWS[S.route]()}</div></main>`;
   renderLayer();
 }
 function viewSwitch() {
@@ -1309,6 +1312,13 @@ async function uploadLogo(file) {
   const { error } = await sb.storage.from("logos").upload(path, png, { contentType: "image/png", cacheControl: "31536000", upsert: false });
   if (error) throw new Error(/row-level|not allowed|unauthor/i.test(error.message) ? "Only admins can change the logo." : error.message);
   return sb.storage.from("logos").getPublicUrl(path).data.publicUrl;
+}
+// A paused or closed account says so on every page.
+function accountNote() {
+  const st = DB.org.status;
+  if (st === "cancelled") return `<div class="acct-note bad" role="status"><b>This account is closed.</b> Your stations no longer record taps. Everything up to now is still here to look at and download. To reopen it, email <a href="mailto:support@sonoranpoint.com">support@sonoranpoint.com</a>.</div>`;
+  if (st === "paused") return `<div class="acct-note warn" role="status"><b>This account is paused.</b> Your stations aren't recording right now; taps made meanwhile are saved on the station and sync when it's back on. Questions: <a href="mailto:support@sonoranpoint.com">support@sonoranpoint.com</a>.</div>`;
+  return "";
 }
 // The company at the top of the menu: their light logo on the dark sidebar, their normal logo on the light one,
 // or their name when there's no logo (or it doesn't load).
