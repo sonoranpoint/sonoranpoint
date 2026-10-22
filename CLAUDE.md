@@ -16,7 +16,7 @@ See README.md for the full product description.
 - Push to `main` → GitHub Actions runs `tests/run.sh db` + `ui`, then deploys app + console to Cloudflare Pages
   (projects `sonoranpoint-app`, `sonoranpoint-console`).
 - Database changes are NOT automatic. Add a new migration file (never edit one already run on the live
-  project), then tell Dez to run it in the Supabase SQL editor. Migrations 1–18 have been run (checked 2026-10-21); 19–20 handed over
+  project), then tell Dez to run it in the Supabase SQL editor. Migrations 1–20 have been run (checked 2026-10-21); 21 handed over
   (ask if unsure). Alert emails are live (Resend key in Vault, first send
   confirmed 2026-10-20).
 - Station changes reach the Pis by copying `deploy/dist/station` onto each Pi (not automatic yet).
@@ -37,6 +37,10 @@ See README.md for the full product description.
   history keeps its name. Lists leave removed stations out (`api.stations()`, `platform_fleet`, `platform_customer`); its hardware goes to "returned".
 - Replacing (`platform_replace_station(station, unit)`) keeps the station, gives a new code, sets `replaced_at`; old unit -> "repair",
   new unit (must be a ready/returned station unit) -> assigned and "ready".
+- History (migration 21): `public.station_events`, written by triggers on `stations` (added, set up, disconnected, replaced,
+  removed, renamed, moved location/contract) plus `private.station_event()` for new codes; `by_name` is "Sonoran Point" for operators.
+  Console edits go through `platform_update_station`. Taps store `station_contract_id` at insert, so moving a station
+  doesn't move its past taps (RLS: `private.can_see_tap`). `station_overview` must be recreated when `stations` gets columns.
 
 ## Email
 - Sign-in and invite emails: Supabase Auth sends through Resend SMTP (smtp.resend.com, from no-reply@sonoranpoint.com,

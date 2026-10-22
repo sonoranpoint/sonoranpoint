@@ -276,6 +276,10 @@ body { background: var(--bg); color: var(--ink); }
 
 tr.grp td { background: var(--surface-2); font-weight: 700; font-size: 13px; padding: 8px 14px; }
 tr.gone td { opacity: .55; }
+.linkbtn { background: none; border: 0; padding: 0; font: inherit; color: inherit; cursor: pointer; text-align: left; }
+.linkbtn:hover b, .linkbtn:focus-visible b { text-decoration: underline; }
+tr.histrow > td, tr.editrow > td { background: var(--bg); padding-top: 4px; padding-bottom: 12px; }
+tr.histrow .list .row { padding-top: 7px; padding-bottom: 7px; }
 tr.grp .glink { color: var(--ink); font-family: var(--head); font-size: 14.5px; text-decoration: none; } tr.grp .glink:hover { color: var(--brand-text); text-decoration: underline; }
 /* ---- Page type ---- */
 .head h1 { font-family: var(--display); font-weight: 600; font-size: 36px; letter-spacing: -.01em; line-height: 1.05; color: var(--ink); }
@@ -589,7 +593,7 @@ function buildDemo() {
   const waiting = (name, location, daysAgo) => st(name, location, { activated_at: null, last_seen: null, version: null, admin_claimed_at: null,
     code: newCode(), code_expires: now - daysAgo * DAY + 7 * DAY, created: now - daysAgo * DAY });
   const C = (o) => ({ id: uid("org"), logo_url: "", timezone: "America/Phoenix", terms: { ...DEFAULT_TERMS }, modules: [], station_limit: null,
-    trial_ends: null, notes: "", invites: [], log: [], contracts: [], ...o });
+    trial_ends: null, notes: "", invites: [], log: [], contracts: [], locations: [], events: [], ...o });
   const demoContracts = [{ id: "bw", parent_id: null, name: "BW" }, { id: "aw", parent_id: null, name: "AW", share: true, move: true },
     { id: "dbw", parent_id: "bw", name: "Delta BW" }, { id: "ubw", parent_id: "bw", name: "United BW" }, { id: "daw", parent_id: "aw", name: "Delta AW" }, { id: "uaw", parent_id: "aw", name: "United AW" }];
   const customers = [
@@ -672,6 +676,12 @@ function buildDemo() {
   ];
   hw.forEach((u) => { if (u.status === "repair") u.events.unshift({ at: now - 4 * DAY, by: OPERATOR.name, action: "status: repair", details: { customer: null } }); });
   hw.sort((a, b) => b.created_at - a.created_at);
+  // Each station's history so far, and the places they use
+  customers.forEach((c) => {
+    c.events = c.stations.flatMap((x) => [{ station: x.id, at: x.created, kind: "added", details: {}, by: "Sonoran Point" },
+      ...(x.activated_at ? [{ station: x.id, at: x.activated_at, kind: "set_up", details: {}, by: null }] : [])]);
+    c.locations = [...new Set(c.stations.map((x) => x.location).filter(Boolean))].sort();
+  });
   return { customers, log, team, hw };
 }
 const DB = buildDemo();
@@ -859,32 +869,58 @@ const api = {
   addStation(id, name) {
     const c = custOf(id); name = (name || "").trim(); if (!name) return { ok: false, error: "Name the station." };
     const s = { id: uid("st"), name, location: "", activated_at: null, last_seen: null, version: null, admin_claimed_at: null, code: newCode(), code_expires: Date.now() + 7 * DAY, revoked: false, created: Date.now() };
-    c.stations.push(s); log(c, "added station", name);
+    c.stations.push(s); stEvent(c, s.id, "added"); log(c, "added station", name);
     return { ok: true, station: s };
   },
   /* rpc platform_station_code(station) — the station's old key stops working */
   stationCode(orgId, stId) {
     const c = custOf(orgId); const s = c.stations.find((x) => x.id === stId);
     Object.assign(s, { code: newCode(), code_expires: Date.now() + 7 * DAY, activated_at: null, last_seen: null, admin_claimed_at: null, revoked: false });
-    log(c, "new activation code", s.name); return { ok: true, code: s.code };
+    stEvent(c, s.id, "new_code"); log(c, "new activation code", s.name); return { ok: true, code: s.code };
   },
   /* rpc platform_revoke_station(station) */
-  revokeStation(orgId, stId) { const c = custOf(orgId); const s = c.stations.find((x) => x.id === stId); s.revoked = true; s.code = null; log(c, "disconnected station", s.name); },
+  revokeStation(orgId, stId) { const c = custOf(orgId); const s = c.stations.find((x) => x.id === stId); s.revoked = true; s.code = null; stEvent(c, s.id, "disconnected"); log(c, "disconnected station", s.name); },
+  /* rpc platform_update_station(station, {name, location, contract_id}) — rename, move to another location or contract */
+  updateStation(orgId, stId, d) {
+    const c = custOf(orgId); const s = c.stations.find((x) => x.id === stId); if (!s) return { ok: false, error: STATION_ERR.not_found };
+    const name = (d.name ?? s.name).trim().replace(/\s+/g, " "), location = (d.location ?? s.location ?? "").trim(), contract = "contract_id" in d ? d.contract_id || null : s.contract_id || null;
+    if (!name || name.length > 60) return { ok: false, error: STATION_ERR.name_required };
+    if (c.stations.some((x) => x !== s && !x.revoked && x.name.toLowerCase() === name.toLowerCase())) return { ok: false, error: STATION_ERR.duplicate_name };
+    const cname = (id) => c.contracts.find((x) => x.id === id)?.name || null;
+    if (name !== s.name) stEvent(c, s.id, "renamed", { from: s.name, to: name });
+    if (location !== (s.location || "")) stEvent(c, s.id, "moved_location", { from: s.location || null, to: location || null });
+    if (contract !== (s.contract_id || null)) stEvent(c, s.id, "moved_contract", { from: cname(s.contract_id), to: cname(contract) });
+    if (location && !c.locations.some((l) => l.toLowerCase() === location.toLowerCase())) c.locations = [...c.locations, location].sort();
+    const changed = name !== s.name || location !== (s.location || "") || contract !== (s.contract_id || null);
+    Object.assign(s, { name, location, contract_id: contract }); if (changed) log(c, "updated station", name); return { ok: true };
+  },
+  /* station_events for one station, newest first */
+  stationHistory(orgId, stId) { return (custOf(orgId)?.events || []).filter((e) => e.station === stId).sort((a, b) => b.at - a.at); },
   /* rpc platform_remove_station(station) — leaves every list; its taps stay in the customer's history; its box comes back */
   removeStation(orgId, stId) {
     const c = custOf(orgId); const s = c.stations.find((x) => x.id === stId); if (!s) return { ok: false, error: "That station is already gone." };
-    hwRelease(c, s, "returned", "station removed"); c.stations = c.stations.filter((x) => x !== s); log(c, "removed station", s.name); return { ok: true };
+    hwRelease(c, s, "returned", "station removed"); stEvent(c, s.id, "removed"); c.stations = c.stations.filter((x) => x !== s); log(c, "removed station", s.name); return { ok: true };
   },
   /* rpc platform_replace_station(station, unit) — same station on a new box; the old box goes to repair */
   replaceStation(orgId, stId, unitId) {
     const c = custOf(orgId); const s = c.stations.find((x) => x.id === stId); const u = unitId ? (DB.hw || []).find((x) => x.id === unitId) : null;
     if (unitId && (!u || !inStock(u, c))) return { ok: false, error: HW_ERR.unit_not_in_stock };
-    hwRelease(c, s, "repair", "replaced");
+    hwRelease(c, s, "repair", "replaced"); stEvent(c, s.id, "replaced", u ? { unit: u.serial } : {});
     if (u) { Object.assign(u, { org_id: c.id, station_id: s.id, status: "ready" }); u.events?.unshift({ at: Date.now(), by: OPERATOR.name, action: "replacement", details: { station: s.name, customer: c.name } }); }
     Object.assign(s, { code: newCode(), code_expires: Date.now() + 7 * DAY, activated_at: null, last_seen: null, admin_claimed_at: null, revoked: false, replaced: Date.now() });
     log(c, "replaced station hardware", changeText({ station: s.name, ...(u ? { unit: u.serial } : {}) })); return { ok: true, code: s.code, unit: u?.serial || null };
   },
 };
+// Station history (the database writes these itself; the demo keeps them here)
+function stEvent(c, stId, kind, details = {}) { (c.events ||= []).push({ station: stId, at: Date.now(), kind, details, by: "Sonoran Point" }); }
+function stEventText(e) {
+  const d = e.details || {};
+  return { added: "Added", set_up: "Set up at the station", new_code: "New activation code made", disconnected: "Disconnected",
+    replaced: `Hardware replaced${d.unit ? ` (new box ${d.unit})` : ""}`, removed: "Removed", renamed: `Renamed from ${d.from} to ${d.to}`,
+    moved_location: `Moved ${d.from ? `from ${d.from} ` : ""}to ${d.to || "no location"}`, moved_contract: `Moved ${d.from ? `from ${d.from} ` : ""}to ${d.to || "the whole company"}` }[e.kind] || e.kind;
+}
+const STATION_ERR = { not_found: "That station no longer exists.", removed: "That station was removed.", name_required: "Give it a name (up to 60 characters).",
+  duplicate_name: "They already have a station with that name.", unknown_contract: "Pick one of their contracts.", location_too_long: "Keep the location under 60 characters." };
 // The box a station ran on goes back to you (returned) or to the bench (repair).
 function hwRelease(c, s, status, reason) {
   for (const u of (DB.hw || []).filter((x) => x.station_id === s.id && x.status !== "retired")) {
@@ -950,7 +986,8 @@ const live = {
     const r = await rpc("platform_customer", { p_org: id }); const c = custOf(id); if (!r.ok || !c) return;
     const o = r.organization;
     Object.assign(c, { detail: true, terms: { ...DEFAULT_TERMS, ...(o.terminology || {}) }, timezone: o.timezone, contact_phone: o.contact_phone || "", notes: o.notes || "",
-      logo_url: o.logo_url || "", stations: r.stations.map(mapStation), contracts: r.contracts || [],
+      logo_url: o.logo_url || "", stations: r.stations.map(mapStation), contracts: r.contracts || [], locations: r.locations || [],
+      events: (r.station_events || []).map((e) => ({ station: e.station_id, at: ms(e.at), kind: e.kind, details: e.details || {}, by: e.by })),
       members: r.members.map((m) => ({ email: m.email, name: m.name || "", role: m.role, last_sign_in: ms(m.last_sign_in_at) })),
       invites: r.invites.map((i) => ({ id: i.id, email: i.email, role: i.role, expires: ms(i.expires_at) })) });
     if (c.members.length) c.has_owner = c.members.some((m) => m.role === "owner");
@@ -1022,6 +1059,10 @@ const liveApi = {
   async revokeStation(orgId, stId) {
     try { await rpc("platform_revoke_station", { p_station: stId }); } catch (e) { toast(nice(e)); }
     await live.refresh(orgId).catch(() => {});
+  },
+  async updateStation(orgId, stId, d) {
+    let r; try { r = await rpc("platform_update_station", { p_station: stId, p: d }); } catch (e) { return { ok: false, error: nice(e) }; }
+    await live.refresh(orgId).catch(() => {}); return { ok: !!r.ok, error: STATION_ERR[r.error] || r.error };
   },
   async removeStation(orgId, stId) {
     let r; try { r = await rpc("platform_remove_station", { p_station: stId }); } catch (e) { return { ok: false, error: nice(e) }; }
@@ -1394,6 +1435,22 @@ function stationRows(c, list, row) {
   const groups = [...tree.map((k) => ({ k, items: list.filter((s) => s.contract_id === k.id) })), { k: null, items: list.filter((s) => !s.contract_id || !tree.some((t) => t.id === s.contract_id)) }];
   return groups.filter((g) => g.items.length).map((g) => `<tr class="grp"><td colspan="4">${g.k ? `${"\u2003".repeat(g.k.depth)}${esc(g.k.name)}` : `<span class="muted">${esc(c.terms?.contract ? "No " + c.terms.contract.toLowerCase() : "No contract")}: serves everyone</span>`}</td></tr>${g.items.map(row).join("")}`).join("");
 }
+// Rename a station, or move it to another location or contract. History stays where it was.
+function stationEditRow(c, s) {
+  const tree = contractTreeOf(c), word = c.terms?.contract || "Contract";
+  return `<tr class="editrow"><td colspan="4"><form class="inline-form" data-form="stEdit:${s.id}" style="flex-wrap:wrap">
+    <input class="field" name="name" aria-label="Station name" required maxlength="60" value="${esc(s.name)}">
+    <input class="field" name="location" aria-label="Location" placeholder="Location (optional)" maxlength="60" list="locs-${esc(c.id)}" value="${esc(s.location || "")}">
+    <datalist id="locs-${esc(c.id)}">${(c.locations || []).map((l) => `<option value="${esc(l)}">`).join("")}</datalist>
+    ${tree.length ? `<select class="field" name="contract_id" aria-label="${esc(word)}"><option value="">Whole company (serves everyone)</option>${tree.map((k) => `<option value="${esc(k.id)}" ${k.id === s.contract_id ? "selected" : ""}>${"\u2003".repeat(k.depth)}${esc(k.name)}</option>`).join("")}</select>` : ""}
+    <button class="btn primary">Save</button><button class="btn" type="button" data-act="noConfirm">Cancel</button><span class="err" role="alert">${esc(S.formErr || "")}</span></form>
+    ${tree.length ? `<p class="muted" style="margin:8px 0 0;font-size:13px">Moving it to another ${esc(word.toLowerCase())}: past taps stay with the one it had; new taps count for the new one.</p>` : ""}</td></tr>`;
+}
+function stationHistRow(c, s) {
+  const h = api.stationHistory(c.id, s.id);
+  return `<tr class="histrow"><td colspan="4"><div class="list">${h.map((e) => `<div class="row"><span class="dot ${e.kind === "disconnected" || e.kind === "removed" ? "" : "ok"}"></span><span>${esc(stEventText(e))}<span class="sub">${esc(fmtWhen(e.at))}${e.by ? ` · ${esc(e.by)}` : ""}</span></span><span></span></div>`).join("")
+    || `<div class="empty" style="text-align:left">No history yet. It starts once the database update with station history is run.</div>`}</div></td></tr>`;
+}
 function contractTreeOf(c) {
   const out = []; const all = c.contracts || [];
   const walk = (pid, d) => all.filter((x) => (x.parent_id || null) === pid).forEach((x) => { out.push({ ...x, depth: d }); if (d < 20) walk(x.id, d + 1); });
@@ -1423,7 +1480,7 @@ function vCustomer() {
 
       <section class="panel"><div class="panel-h"><h2>Stations</h2><span class="muted" style="font-size:13px">${live.length}${c.station_limit != null ? ` of ${c.station_limit} allowed` : ""}</span></div>
         ${live.length ? `<div class="tablewrap"><table><thead><tr><th>Station</th><th>Status</th><th>Admin tag</th><th></th></tr></thead><tbody>
-          ${stationRows(c, live, (s) => { const st = stationState(s, c); return `<tr><td><b>${esc(s.name)}</b><span class="sub">${esc([s.location, s.version].filter(Boolean).join(" · "))}</span></td>
+          ${stationRows(c, live, (s) => { const st = stationState(s, c); return `<tr><td><button class="linkbtn" data-act="stHist" data-id="${s.id}" aria-expanded="${S.stHist === s.id}" title="Show its history"><b>${esc(s.name)}</b></button><span class="sub">${esc([s.location, s.version].filter(Boolean).join(" · "))}</span></td>
             <td><span class="chip ${st.tone}">${esc(st.label)}</span>${st.key === "waiting" || st.key === "expired" ? `<span class="sub">${s.code ? `Code <span class="code">${esc(s.code)}</span> · ` : ""}${s.code_expires > now ? "expires " + esc(fmtDate(s.code_expires)) : "expired"}</span>` : s.last_seen && st.key === "online" ? "" : s.last_seen ? `<span class="sub">Last seen ${esc(ago(s.last_seen))}</span>` : ""}</td>
             <td>${s.admin_claimed_at ? `<span class="chip ok">Registered</span>` : `<span class="muted">Not yet</span>`}</td>
             <td style="text-align:right;white-space:nowrap">${cf === "code:" + s.id
@@ -1432,7 +1489,8 @@ function vCustomer() {
               : cf === "replace:" + s.id ? `<span class="confirm" style="padding:5px 8px;flex-wrap:wrap">New box for ${esc(s.name)}:
                   <select class="field" id="replUnit" aria-label="Replacement unit" style="width:auto;padding:4px 8px">${(DB.hw || []).filter((u) => inStock(u, c)).map((u) => `<option value="${esc(u.id)}">${esc(u.serial)} (${esc(HW_STATUS[u.status][0].toLowerCase())})</option>`).join("")}<option value="">One I'm not tracking</option></select>
                   <button class="btn sm danger" data-act="doReplace" data-id="${s.id}">Replace</button><button class="btn sm" data-act="noConfirm">Cancel</button></span>`
-              : `<button class="btn sm" data-act="askCode" data-id="${s.id}">New code</button> <button class="btn sm" data-act="askReplace" data-id="${s.id}">Replace</button> <button class="btn sm danger" data-act="askRevoke" data-id="${s.id}">Disconnect</button>`}</td></tr>`; })}
+              : `<button class="btn sm" data-act="askEditStation" data-id="${s.id}">Edit</button> <button class="btn sm" data-act="askCode" data-id="${s.id}">New code</button> <button class="btn sm" data-act="askReplace" data-id="${s.id}">Replace</button> <button class="btn sm danger" data-act="askRevoke" data-id="${s.id}">Disconnect</button>`}</td></tr>`
+            + (cf === "edit:" + s.id ? stationEditRow(c, s) : "") + (S.stHist === s.id ? stationHistRow(c, s) : ""); })}
         </tbody></table></div>` : `<div class="empty">No stations yet.</div>`}
         ${S.lastCode ? `<div class="panel-b" style="border-top:1px solid var(--line);display:flex;flex-direction:column;gap:10px">
           <b>Activation code for ${esc(S.lastCode.name)}</b><div class="codebox" aria-label="Activation code">${esc(S.lastCode.code)}</div>
@@ -1921,6 +1979,8 @@ document.addEventListener("click", async (e) => {
   if (a === "doCode") { const stName = c.stations.find((s) => s.id === t.dataset.id).name; const r = await api.stationCode(c.id, t.dataset.id); S.confirm = null; if (!r.ok) { toast(r.error || "Couldn't make a code"); return render(); } S.lastCode = { name: stName, code: r.code }; toast("New code made"); return render(); }
   if (a === "doRevoke") { await api.revokeStation(c.id, t.dataset.id); S.confirm = null; toast("Station disconnected"); return render(); }
   if (a === "hideCode") { S.lastCode = null; return render(); }
+  if (a === "stHist") { S.stHist = S.stHist === t.dataset.id ? null : t.dataset.id; return render(); }
+  if (a === "askEditStation") { S.confirm = "edit:" + t.dataset.id; S.formErr = null; render(); $(`[data-form="stEdit:${t.dataset.id}"] [name=name]`)?.focus(); return; }
   if (a === "askReplace") { S.confirm = "replace:" + t.dataset.id; return render(); }
   if (a === "askRemove") { S.confirm = "remove:" + t.dataset.id; return render(); }
   if (a === "doReplace") { const stName = c.stations.find((s) => s.id === t.dataset.id).name; const r = await api.replaceStation(c.id, t.dataset.id, $("#replUnit")?.value || null); S.confirm = null;
@@ -1950,6 +2010,8 @@ document.addEventListener("submit", async (e) => {
 });
 async function onSubmit(f, kind, fd, d) {
   const c = S.id ? custOf(S.id) : null;
+  if (kind.startsWith("stEdit:")) { const id = kind.slice(7); const r = await api.updateStation(c.id, id, { name: d.name, location: d.location || "", ...("contract_id" in d ? { contract_id: d.contract_id || null } : {}) });
+    if (!r.ok) { S.formErr = r.error; return render(); } S.confirm = null; S.formErr = null; toast("Station saved"); return render(); }
   if (kind === "addStation") { const r = await api.addStation(c.id, d.name); if (!r.ok) return toast(r.error); S.lastCode = { name: r.station.name, code: r.station.code }; toast(`Added ${r.station.name}`); return render(); }
   if (kind === "invite") { const r = await api.inviteOwner(c.id, d.email); if (!r.ok) { $("#invErr").textContent = r.error; return; } S.lastInvite = r; toast(r.mailErr ? "Invite made, but the email didn't send. Copy the link below." : `Invite sent to ${r.email}`); return render(); }
   if (kind === "account") {

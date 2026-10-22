@@ -116,6 +116,16 @@ const change = async (el, v) => { if (typeof v === "boolean") el.checked = v; el
   check(E(`api.activity().some(a => a.station === '${st2}')`) === E(`DB.txns.some(t => t.station === '${st2}')`), "its taps stay in Activity");
   E("DB.stations[0].replaced = Date.now() - 86400000"); E(`openDrawer('station', DB.stations[0].id)`); await sleep(20);
   check(/Replaced.*New hardware, same station and history/.test(drawer()), "a replaced station says when", drawer().slice(0, 300));
+  // Station history in its details
+  const st1 = E("DB.stations[0].id"); E(`openDrawer('station', '${st1}')`); await sleep(20);
+  check(/History/.test(drawer()) && /Set up at the station/.test(drawer()) && /Added/.test(drawer()), "a station's details show its history");
+  await submit(`[data-form="stationEdit:${st1}"]`, { name: "Equipment Room 1A", location: "Terminal 3 South" });
+  check(/Renamed from Equipment Room 01 to Equipment Room 1A/.test(drawer()) && /Moved from Terminal 3 to Terminal 3 South/.test(drawer()) && /Morgan Reyes/.test(drawer()), "renames and moves show up there, with who did it");
+  // A tap keeps the station's contract from when it happened
+  E("S.view = 'ubw'");
+  const t0 = E(`DB.txns.find(t => t.station === '${st1}' && !['ubw'].includes(eqOf(t.eq)?.contract) && !['ubw'].includes(empOf(t.emp)?.contract))?.id`);
+  if (t0) { E(`DB.txns.find(t => t.id === '${t0}').stc = 'ubw'`); check(E(`txnInView(DB.txns.find(t => t.id === '${t0}'))`) === true, "a tap counts for the contract its station had then"); }
+  E("S.view = null");
   check(errors.length === 0, "no script errors " + errors.join(";"));
   process.exit();
 })();

@@ -74,6 +74,13 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   check(await P.until(() => b.psql(`select revoked_at is not null from stations where id = '${sid}'`) === "t" && /Disconnected.*Ramp Office/.test(P.text()) && !!P.doc.querySelector(`[data-act="askRemove"][data-id="${sid}"]`)), "disconnect a station");
   P.click(`[data-act="askRemove"][data-id="${sid}"]`); await sleep(30); P.click(`[data-act="doRemove"][data-id="${sid}"]`);
   check(await P.until(() => b.psql(`select removed_at is not null from stations where id = '${sid}'`) === "t" && !P.doc.querySelector(`[data-id="${sid}"]`)), "remove it for good (live)");
+  { const bag = b.psql(`select id from stations where org_id = '${org}' and name = 'Bag Room'`);
+    P.click(`[data-act="askEditStation"][data-id="${bag}"]`); await P.until(() => P.doc.querySelector(`[data-form="stEdit:${bag}"]`));
+    P.doc.querySelector(`[data-form="stEdit:${bag}"] [name=name]`).value = "Bag Room North"; P.doc.querySelector(`[data-form="stEdit:${bag}"] [name=location]`).value = "Terminal 4";
+    P.submit(`[data-form="stEdit:${bag}"]`);
+    check(await P.until(() => b.psql(`select s.name || '|' || l.name from stations s join locations l on l.id = s.location_id where s.id = '${bag}'`) === "Bag Room North|Terminal 4"), "rename and move a station from the console (live)");
+    await P.until(() => P.doc.querySelector(`[data-act="stHist"][data-id="${bag}"]`)); P.click(`[data-act="stHist"][data-id="${bag}"]`);
+    check(await P.until(() => /Renamed from Bag Room to Bag Room North/.test(P.doc.querySelector("tr.histrow")?.textContent || "") && /Sonoran Point/.test(P.doc.querySelector("tr.histrow")?.textContent || "")), "its history (live)"); }
   // resend invite
   P.type('[data-form="invite"] [name=email]', "second@cactusair.example"); P.submit('[data-form="invite"]');
   check(await P.until(() => /Invite for second@cactusair.example/.test(P.text()) && b.outbox.some((m) => m.email === "second@cactusair.example")), "invite another owner (email sent)");
@@ -126,7 +133,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   P.type('[data-form="hwnew"] [name=pi_serial]', "10000000cafe0001"); P.submit('[data-form="hwnew"]');
   check(await P.until(() => /SP-0001/.test(P.text()) && /added this unit/.test(P.text())), "add a unit to the database", P.text().slice(0, 400));
   const hid = b.psql("select id from private.hardware_units where serial = 'SP-0001'");
-  const bag = b.psql(`select id from stations where org_id = '${org}' and name = 'Bag Room'`);
+  const bag = b.psql(`select id from stations where org_id = '${org}' and name = 'Bag Room North'`);
   const cs = P.doc.querySelector('[data-form="hwship"] [name=org_id]'); cs.value = org; cs.dispatchEvent(new P.dom.window.Event("change", { bubbles: true })); await sleep(30);
   P.doc.querySelector('[data-form="hwship"] [name=station_id]').value = bag;
   P.type('[data-form="hwship"] [name=tracking]', "1Z999AA10000000002"); P.submit('[data-form="hwship"]');

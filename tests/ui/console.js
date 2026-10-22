@@ -192,6 +192,24 @@ const submit = async (sel) => { doc.querySelector(sel).dispatchEvent(new dom.win
   check(/Ship SP-0903 with this code/.test(page()) && /old box is marked for repair/.test(page()) && /^[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(E("S.lastCode.code")), "replace gives a code to ship with the new box");
   check(E(`(() => { const o = DB.hw.find(x => x.id === "hwold"), n = DB.hw.find(x => x.id === "hwnew"), s = custOf('${cc}').stations.find(x => x.id === '${live1}');
     return o.status === "repair" && !o.station_id && n.station_id === s.id && n.org_id === '${cc}' && !s.activated_at && !!s.replaced; })()`), "old box to repair, new box on the same station, waiting for setup");
+  // Station history and editing from the console
+  await click(`[data-act="stHist"][data-id="${live1}"]`);
+  check(/Hardware replaced \(new box SP-0903\)/.test(doc.querySelector("tr.histrow").textContent) && /Added/.test(doc.querySelector("tr.histrow").textContent), "click a station's name for its history");
+  await click(`[data-act="stHist"][data-id="${live1}"]`); check(!doc.querySelector("tr.histrow"), "click again to hide it");
+  const other = E(`custOf('${cc}').stations.find(s => !s.revoked && s.id !== '${live1}').name`);
+  await click(`[data-act="askEditStation"][data-id="${live1}"]`);
+  doc.querySelector(`[data-form="stEdit:${live1}"] [name=name]`).value = other; await submit(`[data-form="stEdit:${live1}"]`);
+  check(/already have a station with that name/.test(doc.querySelector("tr.editrow").textContent), "two stations can't share a name");
+  doc.querySelector(`[data-form="stEdit:${live1}"] [name=name]`).value = "  Ramp   Office B "; doc.querySelector(`[data-form="stEdit:${live1}"] [name=location]`).value = "Gate B";
+  await submit(`[data-form="stEdit:${live1}"]`);
+  check(E(`(() => { const s = custOf('${cc}').stations.find(x => x.id === '${live1}'); return s.name === "Ramp Office B" && s.location === "Gate B"; })()`) && !doc.querySelector("tr.editrow"), "rename and move to another location");
+  check(E(`custOf('${cc}').locations.includes("Gate B")`) && /Renamed from .* to Ramp Office B/.test(E(`api.stationHistory('${cc}', '${live1}').map(stEventText).join("|")`))
+        && /Moved .*to Gate B/.test(E(`api.stationHistory('${cc}', '${live1}').map(stEventText).join("|")`)), "both are in its history, and the new place is offered next time");
+  const da = E("DB.customers.find(c => c.name === 'Demo Air Services').id"), dst = E(`custOf('${da}').stations.find(s => !s.revoked).id`);
+  await go("customer/" + da); await click(`[data-act="askEditStation"][data-id="${dst}"]`);
+  check(!!doc.querySelector(`[data-form="stEdit:${dst}"] select[name=contract_id]`) && /past taps stay with the one it had/.test(doc.querySelector("tr.editrow").textContent), "customers with contracts get a contract picker, with what a move means");
+  doc.querySelector(`[data-form="stEdit:${dst}"] [name=contract_id]`).value = "uaw"; await submit(`[data-form="stEdit:${dst}"]`);
+  check(E(`custOf('${da}').stations.find(x => x.id === '${dst}').contract_id`) === "uaw" && /to United AW/.test(E(`stEventText(api.stationHistory('${da}', '${dst}')[0])`)), "move a station to another contract");
   check(errors.length === 0, "no script errors " + errors.join(";"));
   process.exit();
 })();

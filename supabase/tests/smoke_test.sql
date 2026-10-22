@@ -1143,6 +1143,44 @@ select pg_temp.ok(platform_station_code(:'oldst')->>'error' = 'removed' and plat
 select pg_temp.ok((platform_customer('00000000-0000-0000-0000-00000000d3e0')->'log'->0->>'action') = 'removed station', 'the customer''s console log notes it');
 reset role;
 
+\echo '--- Station history and moving stations'
+select pg_temp.ok((select string_agg(kind, ',' order by id) from station_events where station_id = :'oldst') = 'added,replaced,removed'
+                  and (select details->>'unit' = 'SP-T2' and by_name = 'Sonoran Point' from station_events where station_id = :'oldst' and kind = 'replaced')
+                  and (select by_name from station_events where station_id = :'oldst' and kind = 'removed') = 'owner-a@example.com',
+                  'a station''s history: added, replaced (with the new box), removed, and who did it');
+insert into stations (org_id, name, contract_id) values ('00000000-0000-0000-0000-00000000d3e0', 'Gate Room', :'ubw') returning id as gate \gset
+insert into transactions (org_id, equipment_id, employee_id, station_id, action, source, occurred_at)
+select org_id, (select id from equipment where org_id = s.org_id limit 1), (select id from employees where org_id = s.org_id limit 1), s.id, 'checkout', 'dashboard', now()
+from stations s where s.id = :'gate' returning id as gatetap \gset
+select pg_temp.ok((select station_contract_id from transactions where id = :'gatetap') = :'ubw', 'a tap remembers the station''s contract');
+set role authenticated;
+select set_config('request.jwt.claim.sub', '99999999-0000-0000-0000-000000000009', false) \g /dev/null
+select pg_temp.ok(platform_update_station(:'gate', '{"name":"equipment room 02"}')->>'error' = 'duplicate_name', 'two working stations can''t share a name');
+select pg_temp.ok(platform_update_station(:'gate', '{"contract_id":"00000000-0000-0000-0000-000000000000"}')->>'error' = 'unknown_contract', 'only their own contracts');
+select pg_temp.ok((platform_update_station(:'gate', jsonb_build_object('name', '  Gate   Room B ', 'location', 'Terminal 4 North', 'contract_id', :'dbw'))->>'ok')::boolean, 'rename and move from the console');
+reset role;
+select pg_temp.ok((select name = 'Gate Room B' and contract_id = :'dbw' from stations where id = :'gate')
+                  and (select l.name from stations s join locations l on l.id = s.location_id where s.id = :'gate') = 'Terminal 4 North', 'saved, with a new location made for it');
+select pg_temp.ok((select string_agg(kind || ':' || coalesce(details->>'from', '-') || '>' || coalesce(details->>'to', '-'), ',' order by id) from station_events where station_id = :'gate' and kind like 'moved%' or (station_id = :'gate' and kind = 'renamed'))
+                  = 'renamed:Gate Room>Gate Room B,moved_location:->Terminal 4 North,moved_contract:United BW>Delta BW', 'the moves are in its history: ' || (select string_agg(kind, ',') from station_events where station_id = :'gate'));
+select pg_temp.ok((select station_contract_id from transactions where id = :'gatetap') = :'ubw', 'past taps stay with the contract it had');
+set role authenticated;
+select set_config('request.jwt.claim.sub', '99999999-0000-0000-0000-000000000009', false) \g /dev/null
+select platform_station_code(:'gate') \g /dev/null
+reset role;
+select pg_temp.ok((select kind = 'new_code' and by_name = 'Sonoran Point' from station_events where station_id = :'gate' order by id desc limit 1), 'new codes are in the history');
+set role authenticated;
+select pg_temp.ok(platform_customer('00000000-0000-0000-0000-00000000d3e0')->'locations' ? 'Terminal 4 North'
+                  and exists (select 1 from jsonb_array_elements(platform_customer('00000000-0000-0000-0000-00000000d3e0')->'station_events') e where e->>'station_id' = :'gate'),
+                  'the console gets their locations and station history');
+set role authenticated;
+select set_config('request.jwt.claim.sub', 'aaaaaaaa-0000-0000-0000-000000000001', false) \g /dev/null
+select pg_temp.ok((select count(*) from station_events where station_id = :'gate') >= 5 and (select count(*) from station_overview where id = :'gate' and contract_id = :'dbw') = 1,
+                  'the customer sees the history, and the station list now has its contract');
+select pg_temp.ok(pg_temp.raises($$insert into station_events (org_id, station_id, kind) values ('00000000-0000-0000-0000-00000000d3e0', '$$ || :'gate' || $$', 'removed')$$), 'customers can''t write history');
+update stations set name = 'Gate Room C' where id = :'gate';
+reset role;
+select pg_temp.ok((select by_name from station_events where station_id = :'gate' order by id desc limit 1) = 'owner-a@example.com', 'a dashboard rename is logged with who did it');
 \echo '--- Deleting a company removes all its data'
 delete from organizations where slug = 'demo';
 select pg_temp.ok((select count(*) from equipment) = 0 and (select count(*) from transactions) = 0, 'company delete cascades cleanly');

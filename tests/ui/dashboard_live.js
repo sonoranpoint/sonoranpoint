@@ -234,6 +234,16 @@ const ORG = "00000000-0000-0000-0000-00000000d3e0";
     P.click(".drawer [data-act=endLoan]");
     check(await P.until(() => one(`select count(*) from equipment_loans where equipment_id='${eid}' and ended_at is null`) === "0"), "and end the loan");
     await P.settled(); if (P.doc.querySelector('[data-act="close"]')) P.click('[data-act="close"]'); }
+  // stations: their contract comes through, history shows, and a rename keeps the contract
+  { const sid = one(`select id from stations where org_id='${ORG}' and name='Ramp Room'`), dbw = one(`select id from contracts where name='Delta BW' and org_id='${ORG}'`);
+    one(`update stations set contract_id='${dbw}' where id='${sid}'`); await P.E("live.reload()"); await P.settled();
+    check(P.E(`DB.stations.find(x => x.id === '${sid}').contract`) === dbw, "the live station list has each station's contract");
+    P.go("stations"); await new Promise((r) => setTimeout(r, 150)); P.E(`openDrawer('station', '${sid}')`);
+    const dtext = () => P.doc.querySelector(".drawer")?.textContent.replace(/\s+/g, " ") || "";
+    check(await P.until(() => /History/.test(dtext()) && /Renamed from .* to Ramp Room/.test(dtext()) && /Moved to Delta BW/.test(dtext())), "a station's history (live)", dtext().slice(0, 300));
+    P.set(`[data-form="stationEdit:${sid}"] [name=name]`, "Ramp Room 1"); P.submit(`[data-form="stationEdit:${sid}"]`);
+    check(await P.until(() => one(`select name || '|' || coalesce(contract_id::text, '') from stations where id='${sid}'`) === "Ramp Room 1|" + dbw), "renaming keeps its contract");
+    await P.settled(); if (P.doc.querySelector('[data-act="close"]')) P.click('[data-act="close"]'); }
   // a failed save is reported and the screen goes back to the database's version
   one(`update equipment set nfc_uid = '04DEADBEEF01' where name = 'Radio 09'`);
   P.go("equipment"); await P.E("live.reload()"); await P.until(() => /Radio/.test(P.text()));
