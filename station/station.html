@@ -1785,15 +1785,15 @@ function overlayHtml() {
       <h2>Station menu</h2>
       <dl>
         <dt>Station</dt><dd>${esc(c ? c.station.name : "Not set up")}</dd>
-        <dt>Server</dt><dd>${S.saved.mode === "demo" ? "Demo server" : esc(S.saved.url || "Not set")}</dd>
+        ${window.SP_TRY ? "" : `<dt>Server</dt><dd>${S.saved.mode === "demo" ? "Demo server" : esc(S.saved.url || "Not set")}</dd>`}
         <dt>Connection</dt><dd>${S.online ? "Online" : "Offline"}</dd>
         <dt>Last synced</dt><dd>${S.saved.lastSync ? esc(fmtTime(S.saved.lastSync)) : "Never"}</dd>
         <dt>Waiting to sync</dt><dd>${q} tap${q === 1 ? "" : "s"}</dd>
         ${S.saved.syncIssues.length ? `<dt>Sync problems</dt><dd>${S.saved.syncIssues.slice(-2).map(esc).join("; ")}</dd>` : ""}
       </dl>
-      ${c && S.staff?.emp.role !== "admin" ? `<p style="margin:0;font-size:1.6cqw;color:var(--screen-muted)">Unpairing needs an admin fob.</p>` : ""}
+      ${c && S.staff?.emp.role !== "admin" && !window.SP_TRY ? `<p style="margin:0;font-size:1.6cqw;color:var(--screen-muted)">Unpairing needs an admin fob.</p>` : ""}
       <div class="row">
-        ${c ? `<button class="sbtn primary" data-a="sync">Sync now</button><button class="sbtn" data-a="refresh">Refresh data</button>${S.staff?.emp.role === "admin" ? `<button class="sbtn danger" data-a="confirmUnpair">Unpair…</button>` : ""}` : ""}
+        ${c ? `<button class="sbtn primary" data-a="sync">Sync now</button><button class="sbtn" data-a="refresh">Refresh data</button>${S.staff?.emp.role === "admin" && !window.SP_TRY ? `<button class="sbtn danger" data-a="confirmUnpair">Unpair…</button>` : ""}` : ""}
         <button class="sbtn" data-a="close">Close</button>
       </div></div></div>`;
 }
@@ -2453,11 +2453,11 @@ function stationSettingsHtml() {
   const srvTxt = S.saved.mode === "demo" ? "Hosted <i>(default)</i>" : esc(S.saved.url);
   return `<div class="setrows">
       <div class="setrow"><small>Wi-Fi</small><span class="v">${wifiTxt}</span><button class="sbtn" data-act="changeWifi">Change</button></div>
-      <div class="setrow"><small>Server</small><span class="v">${srvTxt}</span><button class="sbtn" data-act="changeServer">Change</button></div>
+      ${window.SP_TRY ? "" : `<div class="setrow"><small>Server</small><span class="v">${srvTxt}</span><button class="sbtn" data-act="changeServer">Change</button></div>`}
       <div class="setrow"><small>Sync</small><span class="v">${S.online ? "Online" : "Offline"} · ${q ? `${q} waiting` : S.saved.lastSync ? "synced " + esc(fmtTime(S.saved.lastSync)) : "not synced yet"}</span>
         <button class="sbtn" data-act="syncNow">Sync now</button></div>
       <div class="setrow"><small>Station</small><span class="v">${esc(S.saved.config?.station.name || "")} <i>· ${VERSION}</i></span>
-        <button class="sbtn danger" data-act="askUnpair">Unpair…</button></div>
+        ${window.SP_TRY ? "" : `<button class="sbtn danger" data-act="askUnpair">Unpair…</button>`}</div>
     </div>`;
 }
 function serverHtml() {
@@ -2688,10 +2688,10 @@ function renderBench() {
   $("#acct").checked = db.org.status !== "paused";
   $("#badgeList").innerHTML = db.employees.filter((e) => e.badge_uid).map((e) => {
     const shifts = db.assignments.filter(([, eid]) => eid === e.id).map(([sid]) => db.shifts.find((s) => s.id === sid).name).join(", ") || "No shift";
-    const sub = e.role !== "employee" ? `<span class="who">${e.role === "admin" ? "Admin" : "Manager"} fob${e.pin ? " · PIN " + e.pin : ""}</span>` : `${esc(shifts)} · ${fmtUid(e.badge_uid)}`;
+    const sub = e.role !== "employee" ? `<span class="who">${e.role === "admin" ? "Admin" : "Manager"} fob${e.pin ? " · PIN " + e.pin : ""}</span>` : (window.SP_TRY ? esc(shifts) : `${esc(shifts)} · ${fmtUid(e.badge_uid)}`);
     return `<button class="tag" data-uid="${e.badge_uid}" ${e.active ? "" : 'style="opacity:.5"'}><b>${esc(e.name)}${e.active ? "" : " (inactive)"}</b><small>${sub}</small></button>`;
   }).join("") + `<button class="tag unknown" data-blank="badge"><b>Blank badge</b><small>Not registered yet</small></button>`
-    + (db.employees.some((e) => e.badge_uid === "04BA0000AD01") ? "" : `<button class="tag unknown" data-uid="04BA0000AD01"><b>Admin tag (in the box)</b><small>Ships with the station</small></button>`);
+    + (window.SP_TRY || db.employees.some((e) => e.badge_uid === "04BA0000AD01") ? "" : `<button class="tag unknown" data-uid="04BA0000AD01"><b>Admin tag (in the box)</b><small>Ships with the station</small></button>`);
   const out = db.equipment.filter((q) => q.current_employee_id).length;
   $("#outCount").textContent = out ? `${out} out (server)` : "";
   $("#itemList").innerHTML = [...db.categories].sort((a, b) => a.sort - b.sort).map((c) => {
@@ -2699,7 +2699,7 @@ function renderBench() {
     return `<div class="cat">${esc(c.name)} · ${lim}</div><div class="tags">` +
       db.equipment.filter((q) => q.category_id === c.id).map((q) => `<button class="tag${q.nfc_uid ? "" : " unknown"}" ${q.nfc_uid ? `data-uid="${q.nfc_uid}"` : "disabled"}><b>${esc(q.name)}</b>
         <small>${q.status === "lost" ? `<span class="who lost">LOST</span>` : q.status === "maintenance" ? `<span class="who">MAINTENANCE</span>`
-          : q.current_employee_id ? `<span class="who">${esc(demo.emp(q.current_employee_id).name)}</span>` : q.nfc_uid ? fmtUid(q.nfc_uid) : "No tag yet"}</small></button>`).join("") + `</div>`;
+          : q.current_employee_id ? `<span class="who">${esc(demo.emp(q.current_employee_id).name)}</span>` : q.nfc_uid ? (window.SP_TRY ? "Available" : fmtUid(q.nfc_uid)) : "No tag yet"}</small></button>`).join("") + `</div>`;
   }).join("") + `<div class="cat">Other</div><div class="tags"><button class="tag unknown" data-blank="tag"><b>Blank tag</b><small>Not registered yet</small></button></div>`;
 }
 document.addEventListener("click", (e) => {
@@ -2759,6 +2759,11 @@ if (window.SP_TRY) {
   $(".bench-head h1").textContent = "Try the station";
   $(".bench-head p").innerHTML = "This is the screen by the equipment room door. Tap a badge in the panel, then tap equipment to check it out. Tap it again to bring it back. Everything is made-up demo data and starts fresh when you reload.";
   $("#boxSetup").style.display = "none";
+  // Only what a customer has: their badges, equipment, a scanner and the dashboard. No operator or test-bench switches.
+  for (const id of ["acct", "timeSel"]) $("#" + id).closest(".ctrl").style.display = "none";
+  $("#btnReset").closest(".box").style.display = "none";   // server calls and the reset are for us, not customers
+  const scan = $("#readerInput"); scan.placeholder = "000102";
+  scan.previousElementSibling.innerHTML = 'Barcode scanner<small style="display:block;font-weight:400;color:var(--muted);font-size:12px">A handheld scanner types the code and presses Enter. Try <b>000102</b> for Jordan or <b>PAS-10021</b> for Headset 01.</small>';
   if (!S.saved.deviceKey) (async () => { demoDevice.skip(); wizStart(); S.wiz.code = "DEMO0001"; await activate(); await new Promise((r) => setTimeout(r, 250)); finishSetup(); })().catch(() => {});
 }
 

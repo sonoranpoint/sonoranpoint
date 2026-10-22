@@ -13,6 +13,11 @@ const open = (file, pre, url) => new JSDOM("<!doctype html><html><body>" + pre +
   const sd = st.window.document;
   check(/Tap your badge/.test(sd.querySelector("#screen").textContent) && sd.querySelector("#boxSetup").style.display === "none" && /Try the station/.test(sd.querySelector(".bench-head").textContent),
         "the demo station starts already set up, with the setup panel hidden");
+  const shown = (id) => sd.getElementById(id).closest(".ctrl").style.display !== "none";
+  check(!shown("acct") && !shown("timeSel") && shown("wifi") && sd.getElementById("btnReset").closest(".box").style.display === "none" && !/04:BA|04:DE/.test(sd.querySelector(".panel").textContent) && !/Admin tag/.test(sd.getElementById("badgeList").textContent),
+        "the demo station leaves out what customers don't have: account switch, time travel, the setup admin tag, server log, tag IDs");
+  st.window.eval("S.overlay = 'menu'; renderLayer()");
+  check(sd.querySelector(".overlay") && !/Server|Unpair/.test(sd.querySelector(".overlay").textContent), "the demo station menu has no server or unpair");
   // Links between the site's pages and to its images all exist.
   const site = path.join(ROOT, "site"); const pages = ["index.html", "help/index.html", "try/index.html"];
   const missing = [];
