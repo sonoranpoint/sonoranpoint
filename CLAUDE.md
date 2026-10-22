@@ -16,8 +16,8 @@ See README.md for the full product description.
 - Push to `main` → GitHub Actions runs `tests/run.sh db` + `ui`, then deploys app + console to Cloudflare Pages
   (projects `sonoranpoint-app`, `sonoranpoint-console`).
 - Database changes are NOT automatic. Add a new migration file (never edit one already run on the live
-  project), then tell Dez to run it in the Supabase SQL editor. Migrations 1–22 have been run (checked 2026-10-22;
-  ask if unsure). Alert emails are live (Resend key in Vault, first send
+  project), then tell Dez to run it in the Supabase SQL editor. Migrations 1–22 have been run (checked 2026-10-22); 23 handed over
+  (ask if unsure). Alert emails are live (Resend key in Vault, first send
   confirmed 2026-10-20).
 - Station changes reach the Pis by copying `deploy/dist/station` onto each Pi (not automatic yet).
 
@@ -45,6 +45,9 @@ See README.md for the full product description.
 ## Dashboard sidebar
 - Dark blue with the company's light logo (`organizations.logo_dark_url`, migration 22) when they have one; otherwise `.side.light`
   (white, their normal logo or name). Dark appearance keeps it dark either way. Sonoran Point's logo sits at the bottom (`.sp-foot`).
+- Station colors (`applyBrand` in station.html, mirrored by `stationPreview` in the console): top bar is white with the normal logo
+  unless there's a light logo (then main color + light logo; no logo at all = main color + name). Rings/buttons use the main
+  color darkened to 3:1 against the screen (`uiColor`). The accent color is no longer offered (kept in the DB; manager tag is fixed).
 
 ## Email
 - Sign-in and invite emails: Supabase Auth sends through Resend SMTP (smtp.resend.com, from no-reply@sonoranpoint.com,

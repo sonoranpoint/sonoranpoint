@@ -29,9 +29,12 @@
   --warn: #9a5b00;    --warn-bg: #fdf1dc;
   --bad: #b3261e;     --bad-bg: #fbe6e4;
   /* brand (replaced from the company's settings at runtime) */
-  --brand: #1f4e79;
+  --brand: #1f4e79;       /* the company's main color, darkened if needed so it shows on the light screen */
   --brand-ink: #ffffff;
-  --brand-accent: #f2a900;
+  --brand-accent: #f2a900; /* manager/admin tag (fixed) */
+  --bar: #1f4e79;         /* top bar: their main color with their light logo, or white with their normal logo */
+  --bar-ink: #ffffff;
+  --bar-edge: transparent;
   /* type */
   --display: "Plus Jakarta Sans", "Segoe UI", system-ui, sans-serif;
   --body: "Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -80,7 +83,7 @@ html.kiosk .device { background: none; border: 0; padding: 0; box-shadow: none; 
 html.kiosk .screen { border-radius: 0; }
 .screen { aspect-ratio: 5 / 3; max-width: 100%; width: 100%; background: var(--screen); color: var(--screen-ink); border-radius: 6px; overflow: hidden; position: relative; container-type: inline-size; display: flex; flex-direction: column; font-size: 2.3cqw; user-select: none; }
 
-.topbar { background: var(--brand); color: var(--brand-ink); display: flex; align-items: center; gap: 1.8cqw; padding: 1.4cqw 2.4cqw; min-height: 11.5cqw; }
+.topbar { background: var(--bar); color: var(--bar-ink); box-shadow: inset 0 -1px 0 var(--bar-edge); display: flex; align-items: center; gap: 1.8cqw; padding: 1.4cqw 2.4cqw; min-height: 11.5cqw; }
 .topbar .grow { flex: 1; }
 .logo { width: 6.2cqw; height: 6.2cqw; border-radius: 1.2cqw; background: #fff; color: #1a1a1a; display: grid; place-items: center; font-family: var(--display); font-weight: 700; font-size: 3cqw; flex: none; overflow: hidden; touch-action: none; padding: .4cqw; }
 .logo img { width: 100%; height: 100%; object-fit: contain; }
@@ -294,7 +297,7 @@ html.kiosk .screen { border-radius: 0; }
 .codebox b { width: 4.6cqw; height: 6cqw; border: 2px solid var(--screen-line); border-radius: .8cqw; display: grid; place-items: center; font-family: var(--mono); font-size: 3.2cqw; background: var(--screen-card); }
 .codebox b.cur { border-color: var(--brand); }
 .codebox span { font-size: 3cqw; color: var(--screen-muted); }
-.brandcard { display: flex; align-items: center; gap: 1.6cqw; background: var(--brand); color: var(--brand-ink); border-radius: 1.4cqw; padding: 1.6cqw 2cqw; margin: .6cqw 0 1.2cqw; }
+.brandcard { display: flex; align-items: center; gap: 1.6cqw; background: var(--bar); color: var(--bar-ink); box-shadow: inset 0 0 0 1px var(--bar-edge); border-radius: 1.4cqw; padding: 1.6cqw 2cqw; margin: .6cqw 0 1.2cqw; }
 .brandcard .logo { width: 7cqw; height: 7cqw; font-size: 3.4cqw; }
 .brandcard b { font-family: var(--display); font-size: 3.4cqw; line-height: 1; display: block; } .brandcard span { font-size: 1.8cqw; opacity: .9; }
 .setrows { display: flex; flex-direction: column; gap: .8cqw; }
@@ -714,7 +717,7 @@ const demo = {
     const o = this.db.org;
     return { ok: true,
       station: { id: st.id, name: st.name, location: st.location, contract: st.contract_id ? { id: st.contract_id, name: this.cname(st.contract_id) } : null },
-      organization: { name: o.name, logo_url: o.logo_url, primary_color: o.primary_color, accent_color: o.accent_color,
+      organization: { name: o.name, logo_url: o.logo_url, logo_dark_url: o.logo_dark_url || null, primary_color: o.primary_color, accent_color: o.accent_color,
         timezone: o.timezone, terminology: o.terminology, settings: o.settings, enabled_modules: o.enabled_modules },
       categories: [...this.db.categories].sort((a, b) => a.sort - b.sort).map((c) => ({ id: c.id, name: c.name, icon: null })),
       contracts: this.db.contracts.map((c) => ({ id: c.id, name: c.name, parent_id: c.parent_id })),
@@ -1134,13 +1137,30 @@ const hoursOut = (iso) => (clock.now() - Date.parse(iso)) / 3600000;
 const empName = (id) => S.saved.cache?.employees.find((e) => e.id === id)?.name || demo.emp(id)?.name || "someone else";
 
 /* ---------- Branding ---------- */
+// Colors from the company's settings:
+//  * the rings, icon, step dots and buttons use their main color, darkened until it shows on the light screen;
+//  * the top bar follows the logos: main color + light logo when they have one, white + normal logo when they don't
+//    (main color + their name when they have no logo at all).
+const lum = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4))
+  .reduce((a, c, i) => a + c * [0.2126, 0.7152, 0.0722][i], 0);
+const contrast = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((m, n) => n - m); return (x + 0.05) / (y + 0.05); };
+const shade = (hex, k) => "#" + [1, 3, 5].map((i) => Math.round(parseInt(hex.slice(i, i + 2), 16) * k).toString(16).padStart(2, "0")).join("");
+const inkOn = (hex) => (lum(hex) > 0.4 ? "#111111" : "#ffffff");
+function uiColor(hex) {   // their color, made dark enough to see on the light screen (3:1 against it)
+  let c = /^#[0-9a-f]{6}$/i.test(hex || "") ? hex : "#1F4E79";
+  for (let k = 0.92; contrast(c, "#f7f8fa") < 3 && k > 0.1; k -= 0.06) c = shade(hex, k);
+  return c;
+}
+function barStyle(o) {
+  const main = /^#[0-9a-f]{6}$/i.test(o?.primary_color || "") ? o.primary_color : "#1F4E79";
+  if (o?.logo_url && !o?.logo_dark_url) return { bar: "#ffffff", ink: "#121820", edge: "#dde2e8", logo: o.logo_url };
+  return { bar: main, ink: inkOn(main), edge: lum(main) > 0.85 ? "#dde2e8" : "transparent", logo: o?.logo_dark_url || null };
+}
 function applyBrand() {
   const o = S.saved.config?.organization; const r = document.documentElement.style;
-  const brand = o?.primary_color || "#1F4E79";
-  r.setProperty("--brand", brand);
-  r.setProperty("--brand-accent", o?.accent_color || "#F2A900");
-  const [R, G, B] = [1, 3, 5].map((i) => parseInt(brand.slice(i, i + 2), 16) / 255).map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
-  r.setProperty("--brand-ink", 0.2126 * R + 0.7152 * G + 0.0722 * B > 0.4 ? "#111" : "#fff");
+  const ui = uiColor(o?.primary_color), b = barStyle(o);
+  r.setProperty("--brand", ui); r.setProperty("--brand-ink", inkOn(ui));
+  r.setProperty("--bar", b.bar); r.setProperty("--bar-ink", b.ink); r.setProperty("--bar-edge", b.edge);
 }
 const initials = (n) => (n || "?").split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
 
@@ -1216,17 +1236,17 @@ function renderMain() {
     </div>`;
 }
 // The company's logo; Sonoran Point's when they have none (or it won't load).
-const SP_LOGO = "brand/logo.png";
+const SP_LOGO = "brand/logo.png", SP_LOGO_LIGHT = "brand/logo-light.png";
 function topLogo(o) {
-  const name = `<b>${esc(o?.name || "Equipment Station")}</b>`;
-  if (!o?.logo_url) return `<div class="toplogo name" id="logo" title="Hold for station menu">${name}</div>`;
+  const name = `<b>${esc(o?.name || "Equipment Station")}</b>`; const src = barStyle(o).logo;
+  if (!src) return `<div class="toplogo name" id="logo" title="Hold for station menu">${name}</div>`;
   // A logo that won't load turns into the company's name.
-  return `<div class="toplogo" id="logo" title="Hold for station menu"><img src="${esc(o.logo_url)}" alt="${esc(o.name || "")}" onerror="this.onerror=null;this.parentNode.classList.add('name');this.outerHTML='${esc(name)}'"></div>`;
+  return `<div class="toplogo" id="logo" title="Hold for station menu"><img src="${esc(src)}" alt="${esc(o.name || "")}" onerror="this.onerror=null;this.parentNode.classList.add('name');this.outerHTML='${esc(name)}'"></div>`;
 }
 function logoImg(o) {
-  const sp = `<img src="${SP_LOGO}" alt="Sonoran Point">`;
-  if (!o?.logo_url) return sp;
-  return `<img src="${esc(o.logo_url)}" alt="${esc(o.name || "")}" onerror="this.onerror=null;this.src='${SP_LOGO}';this.alt='Sonoran Point'">`;
+  const b = barStyle(o), src = b.logo, sp = `<img src="${lum(b.bar) < 0.4 ? SP_LOGO_LIGHT : SP_LOGO}" alt="Sonoran Point">`;
+  if (!src) return sp;
+  return `<img src="${esc(src)}" alt="${esc(o.name || "")}" onerror="this.onerror=null;this.src='${SP_LOGO}';this.alt='Sonoran Point'">`;
 }
 const TAP_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8.32a7.43 7.43 0 0 1 0 7.36"/><path d="M9.46 6.21a11.76 11.76 0 0 1 0 11.58"/><path d="M12.91 4.1a15.91 15.91 0 0 1 .01 15.8"/><path d="M16.37 2a20.16 20.16 0 0 1 0 20"/></svg>`;
 const BADGE_SVG = `<svg class="badge-ico" viewBox="0 0 64 64" fill="none" aria-hidden="true">

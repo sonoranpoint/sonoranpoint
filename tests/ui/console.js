@@ -218,6 +218,10 @@ const api_set = async (id) => { E(`api.updateCustomer('${id}', { logo_dark_url: 
   check(!!doc.querySelector('[data-act="rmLogoDark"]'), "it shows once set");
   await click('[data-act="rmLogoDark"]'); await sleep(20);
   check(E(`custOf('${da}').logo_dark_url`) === "" && !doc.querySelector('[data-act="rmLogoDark"]'), "and can be removed");
+  // Station preview follows the same color rules
+  E(`Object.assign(custOf('${da}'), { primary: "#FFFFFF", logo_url: "data:image/png;base64,AAA", logo_dark_url: "" })`); await go("customers"); await go("customer/" + da);
+  check(/background:#ffffff/.test(doc.querySelector(".pv-top").getAttribute("style")) && !doc.querySelector('[data-pair="accent"]'), "preview: white top bar with their logo; no accent color to pick");
+  check(E("stContrast(stUi('#FFFFFF'), '#f7f8fa')") >= 3, "preview rings use a color that shows on the screen");
   check(errors.length === 0, "no script errors " + errors.join(";"));
   process.exit();
 })();

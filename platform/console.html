@@ -1416,15 +1416,25 @@ function vPreview() {
         : `<button class="btn danger" data-act="pvAskPause">${ic("pause")}Pause account</button>`}
     </div></section></aside>`;
 }
+// Same rules as the station (station.html applyBrand): rings and buttons use the main color darkened until it shows
+// on the light screen; the top bar is white with their normal logo unless they have a light logo.
+const stLum = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16) / 255).map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4)).reduce((a, c, i) => a + c * [0.2126, 0.7152, 0.0722][i], 0);
+const stContrast = (a, b) => { const [x, y] = [stLum(a), stLum(b)].sort((m, n) => n - m); return (x + 0.05) / (y + 0.05); };
+function stUi(h) { const base = hex(h) ? h : "#1F4E79"; let c = base;
+  for (let k = 0.92; stContrast(c, "#f7f8fa") < 3 && k > 0.1; k -= 0.06) c = "#" + [1, 3, 5].map((i) => Math.round(parseInt(base.slice(i, i + 2), 16) * k).toString(16).padStart(2, "0")).join("");
+  return c; }
+function stBar(c) { const main = hex(c.primary) ? c.primary : "#1F4E79";
+  if (c.logo_url && !c.logo_dark_url) return { bar: "#ffffff", ink: "#121820", edge: "#dde2e8", logo: c.logo_url };
+  return { bar: main, ink: stLum(main) > 0.4 ? "#121820" : "#ffffff", edge: stLum(main) > 0.85 ? "#dde2e8" : "transparent", logo: c.logo_dark_url || null }; }
 function stationPreview(c, terms) {
   const t = { ...DEFAULT_TERMS, ...terms };
-  const pri = hex(c.primary) ? c.primary : "#1F4E79";
-  const logo = c.logo_url ? `<span class="pv-logo"><img src="${esc(c.logo_url)}" alt=""></span>` : `<span class="pv-logo name"><b>${esc(c.name || "Company name")}</b></span>`;
+  const pri = stUi(c.primary), b = stBar(c);
+  const logo = b.logo ? `<span class="pv-logo"><img src="${esc(b.logo)}" alt=""></span>` : `<span class="pv-logo name"><b>${esc(c.name || "Company name")}</b></span>`;
   return `<div class="pv" aria-label="Preview of their station's start screen">
-    <div class="pv-top" style="background:${esc(pri)};color:${inkOn(pri)}">${logo}<span style="flex:1"></span><span class="pv-clock"><b>8:03 AM</b><small>Mon, Oct 19</small></span></div>
+    <div class="pv-top" style="background:${esc(b.bar)};color:${b.ink};box-shadow:inset 0 -1px 0 ${b.edge}">${logo}<span style="flex:1"></span><span class="pv-clock"><b>8:03 AM</b><small>Mon, Oct 19</small></span></div>
     <div class="pv-body"><div class="pv-ring" aria-hidden="true"><svg viewBox="0 0 64 64" fill="none"><circle cx="32" cy="32" r="30" stroke="${esc(pri)}" stroke-opacity=".25" stroke-width="2"/><circle cx="32" cy="32" r="22" stroke="${esc(pri)}" stroke-opacity=".45" stroke-width="2"/><rect x="22" y="14" width="20" height="36" rx="3" fill="#fff" stroke="${esc(pri)}" stroke-width="2.5"/><circle cx="32" cy="28" r="4.5" fill="${esc(pri)}"/><rect x="26" y="37" width="12" height="2.5" rx="1.2" fill="#5b6573"/></svg></div>
       <div><h4>Tap your badge</h4><p>Then tap what you're taking or bringing back.</p>
-        <div class="pv-steps">${["Badge", t.equipment, "Done"].map((w, i) => `<span><i style="background:${esc(pri)};color:${inkOn(pri)}">${i + 1}</i>${esc(w)}</span>`).join("")}</div></div></div>
+        <div class="pv-steps">${["Badge", t.equipment, "Done"].map((w, i) => `<span><i style="background:${esc(pri)};color:${stLum(pri) > 0.4 ? "#121820" : "#fff"}">${i + 1}</i>${esc(w)}</span>`).join("")}</div></div></div>
     <div class="pv-foot"><span><b>Equipment Room 01</b> · Terminal 3</span><span class="pv-net">Online</span></div></div>`;
 }
 
@@ -1551,14 +1561,14 @@ function vCustomer() {
           <div class="full">${stationPreview(c, c.terms)}</div>
           <label class="full">Company name<input class="field" name="name" required maxlength="80" value="${esc(c.name)}"></label>
           <label>Main color<span class="colorrow"><input type="color" data-pair="primary" value="${esc(c.primary)}" aria-label="Pick main color"><input class="field" name="primary" value="${esc(c.primary)}" maxlength="7"></span></label>
-          <label>Accent color<span class="colorrow"><input type="color" data-pair="accent" value="${esc(c.accent)}" aria-label="Pick accent color"><input class="field" name="accent" value="${esc(c.accent)}" maxlength="7"></span></label>
-          <div class="full"><b style="font-size:13.5px">Logo</b><small style="display:block;color:var(--muted);font-size:12.5px;margin:2px 0 8px">Shows large at the top of their stations, over their main color, so a white version reads best on a dark color. With none, stations show their name.</small>
-            <span class="logo-row"><span class="logo-prev" style="background:${esc(hex(c.primary) ? c.primary : "#1F4E79")}">${c.logo_url ? `<img src="${esc(c.logo_url)}" alt="Their logo">` : `<b class="nm" style="color:${inkOn(c.primary)}">${esc(c.name)}</b><small>No logo yet: stations show their name</small>`}</span>
+          <p class="muted" style="margin:0;font-size:12.5px;align-self:end">Main color: the rings, badge icon, step numbers and buttons (made darker on the station if it's too light to see). The top bar is white with their logo, or their main color once they add a light logo.</p><input type="hidden" name="accent" value="${esc(c.accent)}">
+          <div class="full"><b style="font-size:13.5px">Logo</b><small style="display:block;color:var(--muted);font-size:12.5px;margin:2px 0 8px">Their normal logo, on a white bar at the top of their stations and their dashboard menu. With none, stations show their name.</small>
+            <span class="logo-row"><span class="logo-prev" style="background:${c.logo_url ? "#fff" : esc(hex(c.primary) ? c.primary : "#1F4E79")}">${c.logo_url ? `<img src="${esc(c.logo_url)}" alt="Their logo">` : `<b class="nm" style="color:${inkOn(c.primary)}">${esc(c.name)}</b><small>No logo yet: stations show their name</small>`}</span>
               <span class="actions"><label class="btn sm ${S.logoBusy ? "disabled" : ""}">${S.logoBusy ? "Uploading…" : c.logo_url ? "Replace logo" : "Upload logo"}<input type="file" id="logoFile" accept="image/png,image/jpeg,image/svg+xml,image/webp" hidden ${S.logoBusy ? "disabled" : ""}></label>
               ${c.logo_url ? `<button type="button" class="btn sm danger" data-act="rmLogo">Remove</button>` : ""}</span></span>
             <input type="hidden" name="logo_url" value="${esc(c.logo_url || "")}"></div>
-          ${c.logo_dark_url === undefined ? "" : `<div class="full"><b style="font-size:13.5px">Light logo</b><small style="display:block;color:var(--muted);font-size:12.5px;margin:2px 0 8px">Optional white or light version. With one, their dashboard menu is dark blue with it on top; without one, the menu is white with their normal logo.</small>
-            <span class="logo-row"><span class="logo-prev" style="background:#0c2550">${c.logo_dark_url ? `<img src="${esc(c.logo_dark_url)}" alt="Their light logo">` : `<b class="nm" style="color:#fff">${esc(c.name)}</b><small>No light logo: their menu is white</small>`}</span>
+          ${c.logo_dark_url === undefined ? "" : `<div class="full"><b style="font-size:13.5px">Light logo</b><small style="display:block;color:var(--muted);font-size:12.5px;margin:2px 0 8px">Optional white or light version. With one, their dashboard menu turns dark blue and their stations' top bar turns their main color, with this logo on them.</small>
+            <span class="logo-row"><span class="logo-prev" style="background:${esc(hex(c.primary) ? c.primary : "#0c2550")}">${c.logo_dark_url ? `<img src="${esc(c.logo_dark_url)}" alt="Their light logo">` : `<b class="nm" style="color:#fff">${esc(c.name)}</b><small>No light logo: their menu is white</small>`}</span>
               <span class="actions"><label class="btn sm ${S.logoBusy ? "disabled" : ""}">${S.logoBusy ? "Uploading…" : c.logo_dark_url ? "Replace light logo" : "Upload light logo"}<input type="file" id="logoDarkFile" accept="image/png,image/jpeg,image/svg+xml,image/webp" hidden ${S.logoBusy ? "disabled" : ""}></label>
               ${c.logo_dark_url ? `<button type="button" class="btn sm danger" data-act="rmLogoDark">Remove</button>` : ""}</span></span></div>`}
           <details class="full"><summary style="cursor:pointer;font-weight:700;font-size:13.5px">Their words for things</summary>
@@ -1590,7 +1600,7 @@ function vNew() {
         <label>Short ID<small>Letters, numbers, dashes. Used in support and links.</small><input class="field mono" name="slug" maxlength="40" value="${esc(f.slug)}" data-new="slug" placeholder="desertground"></label>
         <label>Time zone<small>Shift times and due times use this</small><select class="field" name="timezone" data-new="timezone">${tzs.map((t) => `<option ${f.timezone === t ? "selected" : ""}>${t}</option>`).join("")}</select></label>`)}
       ${sec(2, "Look", `<label>Main color<span class="colorrow"><input type="color" data-pair="primary" value="${esc(hex(f.primary) ? f.primary : "#0B2350")}" aria-label="Pick main color"><input class="field" name="primary" value="${esc(f.primary)}" maxlength="7" data-new="primary"></span></label>
-        <label>Accent color<span class="colorrow"><input type="color" data-pair="accent" value="${esc(hex(f.accent) ? f.accent : "#F7931E")}" aria-label="Pick accent color"><input class="field" name="accent" value="${esc(f.accent)}" maxlength="7" data-new="accent"></span></label>
+        <input type="hidden" name="accent" value="${esc(f.accent)}">
         <p class="full muted" style="margin:0;font-size:13px">Add their logo from the customer page once they're set up. Until then their stations show Sonoran Point's.</p>
         <details class="full"><summary style="cursor:pointer;font-weight:700;font-size:13.5px">Their words for things (optional)</summary>
           <div class="fgrid" style="margin-top:10px">${TERMS.map(([k, l, ph]) => `<label>${l}<input class="field" name="t_${k}" maxlength="24" value="${esc(f.terms[k])}" placeholder="${ph}" data-new="t_${k}"></label>`).join("")}</div></details>`)}
@@ -1911,7 +1921,6 @@ document.addEventListener("input", (e) => {
     $("#newSum").innerHTML = `<dt>Company</dt><dd>${esc(nf.name || "—")}</dd><dt>Plan</dt><dd>${esc(planName(nf.plan))} · ${nf.status === "trial" ? `${esc(nf.trial_days)}-day trial` : "Active"}</dd>
       <dt>Owner</dt><dd>${esc(nf.owner_email || "—")}</dd><dt>Stations</dt><dd>${nf.stations.filter((x) => x.trim()).length}</dd>`;
     if (t.dataset.new === "primary" && hex(t.value)) t.form.querySelector('[data-pair="primary"]').value = t.value;
-    if (t.dataset.new === "accent" && hex(t.value)) t.form.querySelector('[data-pair="accent"]').value = t.value;
     return;
   }
   if (S.route === "customer" && t.form?.dataset.form === "brand" && (["name", "primary", "accent", "logo_url"].includes(t.name) || t.name?.startsWith("t_"))) {
@@ -1919,7 +1928,7 @@ document.addEventListener("input", (e) => {
     const tmp = { name: fd.get("name"), primary: fd.get("primary"), accent: fd.get("accent"), logo_url: fd.get("logo_url") };
     const terms = Object.fromEntries(TERMS.map(([k]) => [k, fd.get("t_" + k) || DEFAULT_TERMS[k]]));
     t.form.querySelector(".pv").outerHTML = stationPreview({ ...c, ...tmp }, terms);
-    if (hex(tmp.primary)) t.form.querySelector('[data-pair="primary"]').value = tmp.primary; if (hex(tmp.accent)) t.form.querySelector('[data-pair="accent"]').value = tmp.accent;
+    if (hex(tmp.primary)) t.form.querySelector('[data-pair="primary"]').value = tmp.primary;
   }
 });
 document.addEventListener("change", async (e) => {

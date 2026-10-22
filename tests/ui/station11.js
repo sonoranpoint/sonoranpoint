@@ -85,6 +85,15 @@ const ALEX = "04BA00000001", JORDAN = "04BA00000002", SAM = "04BA00000003", DANA
   await tap("04DE000102", 600);
   check(/Checked out Vacuum 02/.test(text()), "and the next tap checks it out as normal");
   E("endSession(); endSummary()");
+  // Colors: the top bar follows the logos, and the main color always shows on the screen
+  const css = (k) => doc.documentElement.style.getPropertyValue(k).trim().toLowerCase();
+  E("Object.assign(S.saved.config.organization, { primary_color: '#FFFFFF', logo_url: 'data:image/png;base64,AAA', logo_dark_url: null }); applyBrand(); renderTop()");
+  check(css("--bar") === "#ffffff" && doc.querySelector("#logo img")?.getAttribute("src") === "data:image/png;base64,AAA", "normal logo only: white top bar with it");
+  check(E(`contrast("${css("--brand")}", "#f7f8fa")`) >= 3, "a white main color is darkened so the rings and icon still show (" + css("--brand") + ")");
+  E("Object.assign(S.saved.config.organization, { primary_color: '#000000', logo_dark_url: 'data:image/png;base64,BBB' }); applyBrand(); renderTop()");
+  check(css("--bar") === "#000000" && doc.querySelector("#logo img")?.getAttribute("src") === "data:image/png;base64,BBB" && css("--bar-ink") === "#ffffff", "with a light logo: main color top bar with the light logo");
+  E("Object.assign(S.saved.config.organization, { primary_color: '#1F4E79', logo_url: null, logo_dark_url: null }); applyBrand(); renderTop()");
+  check(css("--bar") === "#1f4e79" && css("--brand") === "#1f4e79" && /Demo Air Services/.test(doc.querySelector("#logo").textContent), "no logo: main color bar with their name; a dark main color is used as is");
   check(errors.length === 0, "no script errors " + errors.join(";"));
   process.exit();
 })();
