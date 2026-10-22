@@ -275,6 +275,7 @@ body { background: var(--bg); color: var(--ink); }
 }
 
 tr.grp td { background: var(--surface-2); font-weight: 700; font-size: 13px; padding: 8px 14px; }
+tr.gone td { opacity: .55; }
 tr.grp .glink { color: var(--ink); font-family: var(--head); font-size: 14.5px; text-decoration: none; } tr.grp .glink:hover { color: var(--brand-text); text-decoration: underline; }
 /* ---- Page type ---- */
 .head h1 { font-family: var(--display); font-weight: 600; font-size: 36px; letter-spacing: -.01em; line-height: 1.05; color: var(--ink); }
@@ -726,8 +727,8 @@ const api = {
   /* rpc platform_customer(org) */
   customer(id) { return custOf(id); },
   /* rpc platform_fleet() */
-  fleet() {
-    return DB.customers.flatMap((c) => c.stations.filter((s) => !s.revoked).map((s) => ({ ...s, customer: c.name, org: c.id, customer_status: c.status, state: stationState(s, c) })));
+  fleet(withDisconnected) {
+    return DB.customers.flatMap((c) => c.stations.filter((s) => withDisconnected || !s.revoked).map((s) => ({ ...s, customer: c.name, org: c.id, customer_status: c.status, state: stationState(s, c) })));
   },
   /* rpc platform_log() */
   log() { return DB.log; },
@@ -1540,19 +1541,19 @@ function byCustomer(rows) {
 }
 const contractNameOf = (s) => (custOf(s.org)?.contracts || []).find((k) => k.id === s.contract_id)?.name || "";
 function vFleet() {
-  const all = api.fleet(); const now = Date.now();
+  const all = api.fleet(); const now = Date.now(); const everything = api.fleet(true);
   const problem = (s) => ["offline", "expired"].includes(s.state.key) || (s.state.key === "waiting" && now - s.created > 3 * DAY);
-  const rows = all.filter((s) => S.f.fleet === "all" || (S.f.fleet === "problems" ? problem(s) : S.f.fleet === "waiting" ? ["waiting", "expired"].includes(s.state.key) : s.state.key === "online"))
+  const rows = (S.f.fleet === "all" ? everything : all).filter((s) => S.f.fleet === "all" || (S.f.fleet === "problems" ? problem(s) : S.f.fleet === "waiting" ? ["waiting", "expired"].includes(s.state.key) : s.state.key === "online"))
     .sort((a, b) => ({ bad: 0, warn: 1, info: 2, quiet: 3, ok: 4 }[a.state.tone] - { bad: 0, warn: 1, info: 2, quiet: 3, ok: 4 }[b.state.tone]) || a.customer.localeCompare(b.customer));
   const versions = {}; all.filter((s) => s.version).forEach((s) => { versions[s.version] = (versions[s.version] || 0) + 1; });
-  const counts = { problems: all.filter(problem).length, online: all.filter((s) => s.state.key === "online").length, waiting: all.filter((s) => ["waiting", "expired"].includes(s.state.key)).length, all: all.length };
-  return `<div class="head"><div><h1>Stations</h1><p>Every station at every customer.</p></div></div>
+  const counts = { problems: all.filter(problem).length, online: all.filter((s) => s.state.key === "online").length, waiting: all.filter((s) => ["waiting", "expired"].includes(s.state.key)).length, all: everything.length };
+  return `<div class="head"><div><h1>Stations</h1><p>Every station at every customer. Disconnected ones are under All.</p></div></div>
     <section class="panel"><div class="panel-h"><div class="seg" role="group" aria-label="Show">${[["problems", "Needs a look"], ["online", "Online"], ["waiting", "Waiting for setup"], ["all", "All"]].map(([k, l]) => `<button data-seg="fleet:${k}" class="${S.f.fleet === k ? "on" : ""}" aria-pressed="${S.f.fleet === k}">${l} (${counts[k]})</button>`).join("")}</div>
       <span class="muted" style="font-size:13px">Software: ${Object.entries(versions).map(([v, n]) => `<span class="mono">${esc(v)}</span> × ${n}`).join(", ")}</span></div>
       <div class="tablewrap"><table><thead><tr><th>Station</th><th>Status</th><th>Last seen</th><th>Software</th><th>Unit</th><th>Admin tag</th></tr></thead><tbody>
       ${byCustomer(rows).map(([org, list]) => `<tr class="grp"><td colspan="6"><a class="glink" href="#customer/${org}">${esc(list[0].customer)}</a>
-          <span class="muted" style="font-weight:400"> · ${list.length} station${list.length === 1 ? "" : "s"}${list[0].customer_status === "paused" ? ", account paused" : list.some((x) => x.state.tone === "bad" || x.state.tone === "warn") ? "" : ", all fine"}</span></td></tr>`
-        + list.map((s) => `<tr class="click" data-preview="${s.org}" tabindex="0"><td><b>${esc(s.name)}</b><span class="sub">${esc([s.location, contractNameOf(s)].filter(Boolean).join(" · "))}</span></td>
+          <span class="muted" style="font-weight:400"> · ${list.length} station${list.length === 1 ? "" : "s"}${list.some((x) => x.revoked) ? `, ${list.filter((x) => x.revoked).length} disconnected` : ""}${list[0].customer_status === "paused" ? ", account paused" : list.some((x) => x.state.tone === "bad" || x.state.tone === "warn") ? "" : list.every((x) => x.revoked) ? "" : ", all fine"}</span></td></tr>`
+        + list.map((s) => `<tr class="click ${s.revoked ? "gone" : ""}" data-preview="${s.org}" tabindex="0"><td><b>${esc(s.name)}</b><span class="sub">${esc([s.location, contractNameOf(s)].filter(Boolean).join(" · "))}</span></td>
         <td><span class="chip ${s.state.tone}">${esc(s.state.label)}</span>${["waiting", "expired"].includes(s.state.key) ? `<span class="sub">Shipped ${esc(ago(s.created))}</span>` : ""}</td>
         <td>${s.last_seen ? esc(fmtWhen(s.last_seen)) : "—"}</td><td class="mono">${esc(s.version || "—")}</td><td>${hwForStation(s.id) ? `<a class="mono" href="#unit/${hwForStation(s.id).id}" style="color:var(--brand-text)">${esc(hwForStation(s.id).serial)}</a>` : `<span class="muted">—</span>`}</td><td>${s.admin_claimed_at ? "Registered" : s.activated_at ? `<span class="muted">Skipped</span>` : "—"}</td></tr>`).join("")).join("")
         || `<tr><td colspan="6" class="empty">${S.f.fleet === "problems" ? "Nothing needs a look. Every station is online or on its way." : "None."}</td></tr>`}

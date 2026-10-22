@@ -219,6 +219,9 @@ button.row:hover { background: var(--surface-2); }
 .mini-switch { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); font-weight: 400; }
 .mini-switch .switch { transform: scale(.85); }
 @media (max-width: 900px) { .crow { grid-template-columns: minmax(0, 1fr); } .cact { justify-content: flex-start; } }
+/* Disconnected stations */
+.card.gone { opacity: .6; }
+details.gone-st { margin-top: 18px; } details.gone-st summary { cursor: pointer; font-weight: 700; color: var(--muted); padding: 6px 0; }
 /* Small polish */
 .iconbtn.xclose { width: 38px; height: 38px; box-shadow: none; } .iconbtn.xclose svg { width: 18px; height: 18px; }
 .minis { display: flex; gap: 18px; } .minis span { display: flex; flex-direction: column; font-size: 12.5px; color: var(--muted); }
@@ -1567,7 +1570,12 @@ function vStations() {
          <div class="actions"><button class="btn" data-act="copyCode">Copy code</button><button class="btn" data-act="doneStation">Done</button></div>`
       : `<form class="inline-form" data-form="station"><input class="field" name="name" aria-label="Station name" placeholder="Station name, like Equipment Room 02" required maxlength="60">
          <input class="field" name="location" aria-label="Location" placeholder="Location (optional)" maxlength="60"><button class="btn primary">Create code</button><button class="btn" type="button" data-act="cancelStation">Cancel</button></form>`}</div></section>` : "") +
-    `<div class="cards">${api.stations().map((s) => `<div class="card">
+    stationCards(api.stations().filter((s) => !s.revoked), stat) + (api.stations().some((s) => s.revoked) ? `<details class="gone-st"><summary>Disconnected (${api.stations().filter((s) => s.revoked).length})</summary>
+      <p class="muted" style="margin:6px 0 12px;font-size:13.5px">These no longer work. To use one again, open it and make a new activation code.</p>${stationCards(api.stations().filter((s) => s.revoked), stat)}</details>` : "");
+}
+function stationCards(list, stat) {
+  if (!list.length) return `<div class="empty">No stations yet.${can("admin") ? " Add one to get an activation code." : ""}</div>`;
+  return `<div class="cards">${list.map((s) => `<div class="card ${s.revoked ? "gone" : ""}">
       <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start"><h3>${esc(s.name)}</h3>
         ${s.revoked ? `<span class="chip quiet">Disconnected</span>` : s.pending ? `<span class="chip info">Waiting for setup</span>` : s.online ? `<span class="chip ok">Online</span>` : `<span class="chip warn">Offline</span>`}</div>
       ${s.pending || s.revoked ? "" : (() => { const k = stat(s.id); return `<div class="minis"><span><b>${k.taps}</b>Taps today</span><span><b>${k.out}</b>Items out</span></div>`; })()}

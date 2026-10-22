@@ -105,6 +105,10 @@ const change = async (el, v) => { if (typeof v === "boolean") el.checked = v; el
   check(/Another station already has that name/.test(drawer()), "two stations can't share a name");
   await submit('[data-form="stationEdit:st2"]', { name: "Bag Room West", location: "Terminal 4" });
   check(E("DB.stations.find(s => s.id === 'st2').name") === "Bag Room West" && /Station saved/.test(doc.body.textContent), "rename a station from its panel");
+  // Disconnected stations go in their own group
+  E("api.revokeStation('st2')"); await go("overview"); await go("stations");
+  check(doc.querySelector("details.gone-st") && /Disconnected \(1\)/.test(doc.querySelector("details.gone-st summary").textContent)
+        && doc.querySelectorAll(".main > .wrap > .cards .card, .wrap > .cards .card").length >= 1, "disconnected stations are grouped at the bottom");
   check(errors.length === 0, "no script errors " + errors.join(";"));
   process.exit();
 })();

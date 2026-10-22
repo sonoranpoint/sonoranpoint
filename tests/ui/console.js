@@ -101,8 +101,8 @@ const submit = async (sel) => { doc.querySelector(sel).dispatchEvent(new dom.win
   await go("fleet");
   check(/Needs a look/.test(page()) && /Bag Room/.test(page()) && /Commissary/.test(page()), "fleet: problems first");
   await click('[data-seg="fleet:all"]');
-  check(doc.querySelectorAll("tbody tr:not(.grp)").length === E("api.fleet().length"), "fleet: all stations");
-  check(doc.querySelectorAll("tbody tr.grp").length === new Set(E("api.fleet().map(s => s.org)")).size, "stations are grouped under each customer");
+  check(doc.querySelectorAll("tbody tr:not(.grp)").length === E("api.fleet(true).length"), "fleet: All lists every station, disconnected ones too");
+  check(doc.querySelectorAll("tbody tr.grp").length === new Set(E("api.fleet(true).map(s => s.org)")).size, "stations are grouped under each customer");
   doc.querySelector("tbody tr:not(.grp)").click(); await sleep(30);
   check(E("!!S.preview"), "clicking a station opens its customer's quick view");
   E("S.preview = null; renderLayer()");
@@ -169,6 +169,12 @@ const submit = async (sel) => { doc.querySelector(sel).dispatchEvent(new dom.win
   const sq2 = doc.querySelector('[data-f="q"]'); sq2.value = serial; sq2.dispatchEvent(new dom.window.Event("input", { bubbles: true })); await sleep(20);
   check(doc.querySelector(".ctable").textContent.includes(owner), "...or by a hardware serial (" + serial + ")");
   const sq3 = doc.querySelector('[data-f="q"]'); sq3.value = ""; sq3.dispatchEvent(new dom.window.Event("input", { bubbles: true })); await sleep(20);
+  // Disconnected stations show under All, greyed out
+  E("const c0 = DB.customers.find(c => c.name === 'Copper State Cargo'); api.revokeStation(c0.id, c0.stations[0].id)");
+  await go("fleet"); await click('[data-seg="fleet:all"]');
+  check(doc.querySelectorAll("tbody tr.gone").length === E("api.fleet(true).filter(s => s.revoked).length") && /Copper State Cargo · 3 stations, 1 disconnected/.test(page()), "disconnected stations are listed under All, greyed out");
+  await click('[data-seg="fleet:online"]');
+  check(doc.querySelectorAll("tbody tr.gone").length === 0, "...but not under Online");
   check(errors.length === 0, "no script errors " + errors.join(";"));
   process.exit();
 })();
