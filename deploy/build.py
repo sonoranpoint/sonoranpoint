@@ -5,6 +5,8 @@
 
   dist/app/       -> Cloudflare Pages project "sonoranpoint-app",     domain app.sonoranpoint.com
   dist/console/   -> Cloudflare Pages project "sonoranpoint-console", domain console.sonoranpoint.com
+  dist/site/      -> Cloudflare Pages project "sonoranpoint-site",    domain sonoranpoint.com
+                     (site/ pages + "Try it" copies of the station, dashboard and console on demo data)
   dist/station/   -> the station app, for setting up a Pi by hand (served at http://localhost/)
   dist/app/station-release/latest.json + station-<hash>.zip
                   -> what stations update themselves to (station/pi/station_updater.py checks it)
@@ -80,7 +82,42 @@ def build():
     (rel_dir / "latest.json").write_text(manifest)
     (DIST / "console" / "station-release").mkdir(); (DIST / "console" / "station-release" / "latest.json").write_text(manifest)
     print("station", version)
+    build_site()
     print("built", ", ".join(str(p.relative_to(ROOT)) for p in sorted(DIST.iterdir())))
+
+SITE_HEADERS = """/*
+  X-Frame-Options: SAMEORIGIN
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self'; frame-ancestors 'self'; base-uri 'none'; form-action 'self'
+  Cache-Control: no-cache
+/try/app/*
+  X-Robots-Tag: noindex
+/try/console/*
+  X-Robots-Tag: noindex
+/try/station/*
+  X-Robots-Tag: noindex
+"""
+
+def build_site():
+    """sonoranpoint.com: the site's own pages, plus the station, dashboard and console running on made-up demo data."""
+    out = DIST / "site"
+    shutil.copytree(ROOT / "site", out, ignore=shutil.ignore_patterns("*.md"))
+    (out / "_headers").write_text(SITE_HEADERS)
+    (out / "robots.txt").write_text("User-agent: *\nDisallow: /try/app/\nDisallow: /try/console/\nDisallow: /try/station/\nSitemap: https://sonoranpoint.com/sitemap.xml\n")
+    brand = ["logo.png", "logo@2x.png", "logo-light.png", "logo-light@2x.png", "mark-64.png", "mark-180.png", "mark-512.png", "favicon.ico", "apple-touch-icon.png", "app-icon-512.png"]
+    (out / "brand").mkdir(exist_ok=True)
+    for f in brand: shutil.copy(ROOT / "brand" / f, out / "brand" / f)
+    # Demo copies: forced onto demo data, starting fresh on each visit.
+    demo = '<script>window.SP_DEMO = true;</script>\n'
+    for name, src, extra in [("app", ROOT / "dashboard" / "dashboard.html", ""), ("console", ROOT / "platform" / "console.html", ""),
+                             ("station", ROOT / "station" / "station.html", '<script>window.SP_TRY = true; try { localStorage.removeItem("station.v2"); } catch {}</script>\n')]:
+        d = out / "try" / name; d.mkdir(parents=True)
+        (d / "index.html").write_text(HEAD + demo + extra + (src).read_text() + "\n</html>\n")
+        (d / "brand").mkdir()
+        for f in brand: shutil.copy(ROOT / "brand" / f, d / "brand" / f)
 
 if __name__ == "__main__":
     build()

@@ -531,7 +531,7 @@ a.stat:hover { border-color: color-mix(in srgb, var(--t-blue) 40%, var(--line));
    stay the same.
    ===================================================================== */
 const VENDOR = { name: "Sonoran Point", short: "SP", appUrl: "https://app.sonoranpoint.com" };   // product name and domain
-const OPERATOR = { name: "Dez", role: "owner", email: "g.ryan@sonoranpoint.com" };   // replaced by whoever signs in on the live site
+const OPERATOR = window.SP_DEMO ? { name: "Riley", role: "owner", email: "riley@sonoranpoint.example" } : { name: "Dez", role: "owner", email: "dez@sonoranpoint.example" };   // replaced by whoever signs in on the live site
 const ROLES = { owner: ["Owner", "Everything, plus adding and removing people on this team."], operator: ["Operator", "Customers, stations and codes. Can't change this team."] };
 const HW_KIND = { station: "Station kit", reader: "NFC reader", display: "Screen", spare: "Spare part", other: "Other" };
 const HW_STATUS = { building: ["Building", "quiet"], ready: ["In stock", "ok"], shipped: ["Shipped", "info"], installed: ["Installed", "ok"],
@@ -647,8 +647,8 @@ function buildDemo() {
   log.sort((a, b) => b.at - a.at);
   const team = { operators: [
       { user_id: "op-me", name: OPERATOR.name, email: OPERATOR.email, role: "owner", since: now - 40 * DAY, last_sign_in: now - 2 * MIN, me: true },
-      { user_id: "op-2", name: "Jordan Ellis", email: "jordan@sonoranpoint.com", role: "operator", since: now - 8 * DAY, last_sign_in: now - 5 * HOUR, me: false }],
-    invites: [{ id: "opi-1", email: "support@sonoranpoint.com", name: "Support desk", role: "operator", expires: now + 11 * DAY }] };
+      { user_id: "op-2", name: "Jordan Ellis", email: "jordan@sonoranpoint.example", role: "operator", since: now - 8 * DAY, last_sign_in: now - 5 * HOUR, me: false }],
+    invites: [{ id: "opi-1", email: "support@sonoranpoint.example", name: "Support desk", role: "operator", expires: now + 11 * DAY }] };
   // Hardware: dates are YYYY-MM-DD, same as the database.
   const dayStr = (ago) => new Date(now - ago * DAY).toISOString().slice(0, 10);
   let n = 0;
@@ -956,7 +956,8 @@ const inStock = (u, c) => u.kind === "station" && ["ready", "returned"].includes
    ===================================================================== */
 const SP = Object.assign({ url: "https://qzzukfjefqwifnqzxhhu.supabase.co", key: "sb_publishable_4mIH45QwuL5gTupgIX-2oQ_0sFp8y92",
   appUrl: "https://app.sonoranpoint.com" }, window.SP_CONFIG || {});
-const LIVE = !!window.SP_CONFIG || /(^|\.)sonoranpoint\.com$/.test(location.hostname) || /[?&]live(\b|=)/.test(location.search);
+// window.SP_DEMO (the public "Try it" copies on sonoranpoint.com) always runs on the built-in demo data.
+const LIVE = !window.SP_DEMO && (!!window.SP_CONFIG || /(^|\.)sonoranpoint\.com$/.test(location.hostname) || /[?&]live(\b|=)/.test(location.search));
 VENDOR.appUrl = SP.appUrl;
 let sb = null;
 const ms = (t) => (t ? Date.parse(t) : null);

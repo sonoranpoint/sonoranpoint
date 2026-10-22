@@ -1,4 +1,4 @@
-# Every push to main: run the tests, then publish app.sonoranpoint.com and console.sonoranpoint.com.
+# Every push to main: run the tests, then publish app.sonoranpoint.com, console.sonoranpoint.com and sonoranpoint.com.
 # Needs two repository secrets (Settings → Secrets and variables → Actions):
 #   CLOUDFLARE_API_TOKEN   a Cloudflare API token with "Account · Cloudflare Pages · Edit"
 #   CLOUDFLARE_ACCOUNT_ID  your Cloudflare account ID
@@ -65,3 +65,16 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: pages deploy deploy/dist/console --project-name=sonoranpoint-console --branch=main --commit-dirty=true
+      - name: Create the sonoranpoint.com project (first run only)
+        uses: cloudflare/wrangler-action@v3
+        continue-on-error: true
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages project create sonoranpoint-site --production-branch=main
+      - name: Publish sonoranpoint.com
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy deploy/dist/site --project-name=sonoranpoint-site --branch=main --commit-dirty=true

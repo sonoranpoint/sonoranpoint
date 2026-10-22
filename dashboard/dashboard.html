@@ -2253,7 +2253,8 @@ document.addEventListener("submit", async (e) => {
    ===================================================================== */
 const SP = Object.assign({ url: "https://qzzukfjefqwifnqzxhhu.supabase.co", key: "sb_publishable_4mIH45QwuL5gTupgIX-2oQ_0sFp8y92",
   product: "Sonoran Point", support: "support@sonoranpoint.com" }, window.SP_CONFIG || {});
-const LIVE = !!window.SP_CONFIG || /(^|\.)sonoranpoint\.com$/.test(location.hostname) || /[?&]live(\b|=)/.test(location.search);
+// window.SP_DEMO (the public "Try it" copies on sonoranpoint.com) always runs on the built-in demo data.
+const LIVE = !window.SP_DEMO && (!!window.SP_CONFIG || /(^|\.)sonoranpoint\.com$/.test(location.hostname) || /[?&]live(\b|=)/.test(location.search));
 let sb = null;
 const ms = (t) => (t ? Date.parse(t) : null);
 const hhmm = (t) => (t || "").slice(0, 5);

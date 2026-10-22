@@ -1086,7 +1086,7 @@ const piDevice = {
   async status() { const r = await fetch(this.base + "/wifi/status"); return r.json(); },
   skip() {}, reset() {},
 };
-const device = ["127.0.0.1", "localhost"].includes(location.hostname) ? piDevice : demoDevice;
+const device = !window.SP_TRY && ["127.0.0.1", "localhost"].includes(location.hostname) ? piDevice : demoDevice;
 
 /* The reader built into the case (PN532) is read by pi/nfc_reader.py, which sends each tap here.
    A USB reader that types the ID still works too (see the keydown handler). */
@@ -2752,6 +2752,15 @@ if (S.saved.deviceKey && S.saved.setupStep && !S.saved.setupDone) wizResume();  
 else if (S.saved.deviceKey) S.screen = "idle"; else wizStart();
 render(); renderBench();
 if (S.saved.deviceKey) refreshData(true);
+
+/* The public "Try it" copy on sonoranpoint.com (window.SP_TRY): starts already set up, with a plainer side panel. */
+if (window.SP_TRY) {
+  document.title = "Try the station · Sonoran Point";
+  $(".bench-head h1").textContent = "Try the station";
+  $(".bench-head p").innerHTML = "This is the screen by the equipment room door. Tap a badge in the panel, then tap equipment to check it out. Tap it again to bring it back. Everything is made-up demo data and starts fresh when you reload.";
+  $("#boxSetup").style.display = "none";
+  if (!S.saved.deviceKey) (async () => { demoDevice.skip(); wizStart(); S.wiz.code = "DEMO0001"; await activate(); await new Promise((r) => setTimeout(r, 250)); finishSetup(); })().catch(() => {});
+}
 
 setInterval(() => {               // clock + sign-out timer
   renderTop();

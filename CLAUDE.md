@@ -9,15 +9,17 @@ See README.md for the full product description.
 - `station/station.html` — the kiosk screen on each Pi; `station/pi/` — PN532 reader service, Wi-Fi helper
 - `supabase/migrations/` — database, applied in filename order; `supabase/tests/smoke_test.sql` — DB tests
 - `brand/` — logos (`source-logo.png` is the official logo; `logo.png`/`logo@2x.png` are made from it; `logo-light*.png` are the same with the navy SONORAN/TECHNOLOGIES lettering made white, for dark backgrounds — no SVG), icons, `sp-theme.css` (injected between `SP-THEME:start/end` in dashboard + console)
-- `deploy/build.py` — builds `deploy/dist/{app,console,station}`; `deploy/email-templates/` — Supabase auth emails
+- `site/` — sonoranpoint.com (home, help, try); the build adds demo copies of the station/dashboard/console under `try/`
+  (`window.SP_DEMO` forces demo data; `window.SP_TRY` starts the station set up). Never use real customer names or emails there.
+- `deploy/build.py` — builds `deploy/dist/{app,console,station,site}`; `deploy/email-templates/` — Supabase auth emails
 - `tests/run.sh` — runs everything; `tests/ui/` — jsdom screen tests
 
 ## How changes ship
 - Push to `main` → GitHub Actions runs `tests/run.sh db` + `ui`, then deploys app + console to Cloudflare Pages
-  (projects `sonoranpoint-app`, `sonoranpoint-console`).
+  (projects `sonoranpoint-app`, `sonoranpoint-console`, `sonoranpoint-site`).
 - Database changes are NOT automatic. Add a new migration file (never edit one already run on the live
-  project), then tell Dez to run it in the Supabase SQL editor. Migrations 1–25 have been run (checked 2026-10-22); 26 handed over
-  (ask if unsure). Alert emails are live (Resend key in Vault, first send
+  project), then tell Dez to run it in the Supabase SQL editor. Migrations 1–26 have been run (checked 2026-10-22;
+  ask if unsure). Alert emails are live (Resend key in Vault, first send
   confirmed 2026-10-20).
 - Station changes reach the Pis by themselves: every deploy publishes `app.sonoranpoint.com/station-release/latest.json` + a zip
   (version = `VERSION` in station.html + a content hash, so only station changes count). `station/pi/station_updater.py` on each
