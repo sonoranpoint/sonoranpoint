@@ -334,11 +334,9 @@ a.kpi:hover { border-color: var(--brand); transform: translateY(-1px); }
 .app { grid-template-columns: 252px minmax(0, 1fr); }
 .side { position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; gap: 20px; padding: 22px 14px 16px; color: #dfe8f7; z-index: 30;
   background: radial-gradient(120% 50% at 0% 0%, rgba(47, 155, 255, .10), transparent 60%), linear-gradient(180deg, #0c2550 0%, #081c3c 55%, #061630 100%); }
-.brandmark { display: flex; align-items: center; gap: 11px; padding: 2px 8px 0; color: #fff; text-decoration: none; }
-.brandmark img { width: 42px; height: 42px; flex: none; }
-.brandmark span { font-family: var(--display); font-weight: 600; font-size: 19px; line-height: .95; letter-spacing: .09em; text-transform: uppercase; }
-.brandmark span i { font-style: normal; color: #4fb3ff; display: block; }
-.brandsub { padding: 0 10px; margin-top: -10px; font-size: 13.5px; color: rgba(223, 232, 247, .78); font-weight: 700; }
+.brandmark { display: flex; justify-content: center; padding: 0 6px; text-decoration: none; }
+.brandmark img { display: block; width: 100%; max-width: 200px; height: auto; }
+.brandsub { text-align: center; padding: 0 10px; margin-top: -12px; font-size: 13.5px; color: rgba(223, 232, 247, .78); font-weight: 700; }
 .snav { display: flex; flex-direction: column; gap: 4px; overflow-y: auto; }
 .snav a { display: flex; align-items: center; gap: 13px; padding: 11px 14px; border-radius: 11px; color: rgba(223, 232, 247, .86); text-decoration: none; font-weight: 700; font-size: 15px; }
 .snav a svg { width: 20px; height: 20px; flex: none; }
@@ -1843,7 +1841,7 @@ function render() {
   const role = ROLES[OPERATOR.role]?.[0] || "Operator";
   $("#app").className = "app" + (S.navOpen ? " navopen" : "");
   $("#app").innerHTML = `<aside class="side" aria-label="Main menu">
-      <a class="brandmark" href="#customers" aria-label="${esc(VENDOR.name)} operator console"><img src="brand/mark-180.png" alt=""><span>Sonoran<i>Point</i></span></a>
+      <a class="brandmark" href="#customers" aria-label="${esc(VENDOR.name)} operator console"><img src="brand/logo-light.png" srcset="brand/logo-light.png 1x, brand/logo-light@2x.png 2x" alt=""></a>
       <div class="brandsub">Operator console</div>
       <nav class="snav" aria-label="Sections">${nav.map(([r, l, i, n]) => `<a href="#${r}" class="${cur === r ? "on" : ""}" ${cur === r ? 'aria-current="page"' : ""}>${ic(i)}${l}${n ? `<span class="n" aria-label="${n} need attention">${n}</span>` : ""}</a>`).join("")}</nav>
       ${LIVE ? "" : `<span class="pill">Demo data</span>`}
