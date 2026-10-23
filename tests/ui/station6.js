@@ -43,13 +43,13 @@ function boot(storage) {
   await click2('[data-w="qsEmp"]', 700);
   check(E("S.screen") === "staff" && /First name/.test(text()) && /Back to setup/.test(text()), "Add your employees -> opens the add-employee form directly (no PIN again)");
   for (const c of "TAYLOR") await click2(`[data-k="${c}"]`, 5);
-  await click2('[data-act="primary"]', 60); E("handleTag('04BA0000C7C7')"); await sleep(700);
+  await click2('[data-act="primary"]', 60); E("handleTag('04BA0000C7C7')"); await sleep(100); await click2('[data-act="saveCapture"]', 700);
   check(/Added Taylor/.test(text()), "employee added from setup");
   await click2('[data-act="exit"]', 100);
   check(/1 added/.test(text()) && doc.querySelector("#screen .qs-row.did"), "Back to setup -> checklist shows 1 employee added, ticked");
 
   await click2('[data-w="qsEq"]', 700); await click2('[data-pick^="cat:c1"]', 60); await click2('[data-act="primary"]', 60);
-  E("handleTag('04DE0000C8C8')"); await sleep(700); await click2('[data-act="exit"]', 100);
+  E("handleTag('04DE0000C8C8')"); await sleep(100); await click2('[data-act="saveCapture"]', 700); await click2('[data-act="exit"]', 100);
   check(/Add your equipment/.test(text()) && (text().match(/1 added/g) || []).length === 2, "equipment added from setup, ticked");
 
   await click2('[data-w="qsTour"]');
