@@ -301,6 +301,12 @@ label.btn { cursor: pointer; } label.btn.disabled { opacity: .55; cursor: defaul
 .acct-note { border-radius: 10px; padding: 11px 14px; margin-bottom: 18px; font-size: 14px; line-height: 1.45; }
 .acct-note.bad { background: var(--bad-bg); color: var(--bad); } .acct-note.warn { background: var(--warn-bg); color: var(--warn); }
 .acct-note a { color: inherit; font-weight: 700; }
+.imp-start { display: grid; gap: 12px; } .imp-start label b { display: block; } .imp-start label small { color: var(--muted); }
+.imp-start textarea { min-height: 180px; font-size: 13px; white-space: pre; }
+.imp-table th select.field { min-width: 130px; font-weight: 600; } .imp-table th .sub { display: block; margin-top: 4px; font-weight: 400; text-transform: none; letter-spacing: 0; } .imp-table td.res { min-width: 200px; }
+.imp-table td.skip { color: var(--muted); opacity: .55; } .imp-table tr.bad td { background: color-mix(in srgb, var(--bad) 6%, transparent); }
+.imp-table td .sub { display: block; color: var(--bad); font-size: 12.5px; margin-top: 2px; max-width: 320px; white-space: normal; }
+.imp-sum { display: grid; gap: 12px; } .imp-sum label { display: grid; gap: 6px; max-width: 320px; font-weight: 600; }
 .readonly-note { background: var(--surface-2); border: 1px dashed var(--line); border-radius: 10px; padding: 9px 12px; color: var(--muted); font-size: 13.5px; }
 .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(22px + env(safe-area-inset-bottom, 0px)); background: var(--ink); color: var(--bg);
          padding: 10px 18px; border-radius: 10px; font-weight: 700; z-index: 40; box-shadow: var(--shadow); max-width: calc(100% - 32px); }
@@ -1038,6 +1044,26 @@ const api = {
     DB.audit.push({ at: Date.now(), actor: DB.me.name, text: `added employee ${patch.name}` });
     return { ok: true, id: nid };
   },
+  /* equipment_categories + equipment insert, many at once (rows already checked by impCheck) */
+  importEquipment(items, newCats) {
+    if (!can("admin")) return { ok: false, error: "Ask a manager or admin to import equipment." };
+    for (const name of newCats || []) if (!DB.categories.some((c) => c.name.toLowerCase() === name.toLowerCase())) DB.categories.push({ id: "c" + Date.now() + Math.random().toString(36).slice(2, 6), name, rule: "none", hours: null, extended: null, sort: DB.categories.length + 1 });
+    const t = Date.now();
+    items.forEach((x, i) => { const cat = x.cat || DB.categories.find((c) => c.name.toLowerCase() === x.catName.toLowerCase()).id;
+      DB.equipment.push({ id: `q${t}_${i}`, cat, name: x.name, tag: x.tag || (x.barcode ? barcodeUid(x.barcode) : null), barcode: x.barcode, asset: x.asset, notes: x.notes, contract: x.contract,
+        status: "available", mode: "category", hours: null, extended: null, holder: null, out_at: null, due_at: null }); });
+    DB.audit.push({ at: Date.now(), actor: DB.me.name, text: `imported ${items.length} item${items.length === 1 ? "" : "s"}` });
+    return { ok: true, count: items.length };
+  },
+  /* employees insert + shift_assignments, many at once */
+  importEmployees(items) {
+    if (!can("supervisor")) return { ok: false, error: "Ask a supervisor to import employees." };
+    const t = Date.now();
+    items.forEach((x, i) => DB.employees.push({ id: `e${t}_${i}`, active: true, role: "employee", first: x.first, last: x.last, name: x.name, number: x.number,
+      badge: x.badge || (x.barcode ? barcodeUid(x.barcode) : null), barcode: x.barcode, shifts: x.shifts, contract: x.contract }));
+    DB.audit.push({ at: Date.now(), actor: DB.me.name, text: `imported ${items.length} employee${items.length === 1 ? "" : "s"}` });
+    return { ok: true, count: items.length };
+  },
   /* list_members / invite_member / set_member_role / remove_member / cancel_invite rpcs */
   members() { return { members: [...DB.members].sort((a, b) => RANK[b.role] - RANK[a.role] || a.name.localeCompare(b.name)), invites: DB.invites }; },
   invite(email, role) {
@@ -1194,7 +1220,7 @@ const OUTCOME = { not_returned: ["bad", "Still out"], returned_late: ["warn", "R
 /* =====================================================================
    App state + routing
    ===================================================================== */
-const ROUTES = ["overview", "equipment", "employees", "activity", "alerts", "shifts", "stations", "settings", "team"];
+const ROUTES = ["overview", "equipment", "employees", "activity", "alerts", "shifts", "stations", "settings", "team", "import-equipment", "import-employees"];
 /* Links from alert emails open one thing: #equipment?open=equipment:<id>&org=<company>, #shifts?open=report:<id>, #alerts?org=…
    Kept for an hour so it still works after signing in (a sign-in link can open in a new tab). */
 function parseHash(h = location.hash) { const [r, qs = ""] = h.slice(1).split("?"); const p = new URLSearchParams(qs);
@@ -1254,7 +1280,7 @@ const ICON = {
   help: '<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01"/>',
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>',
   moon: '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>', monitor: '<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>', check: '<path d="M20 6 9 17l-5-5"/>', x: '<path d="M18 6 6 18M6 6l12 12"/>', wrench: '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>', mail: '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/>', download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>',
-  user: '<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>', logout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>',
+  user: '<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>', upload: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5M12 3v12"/>', logout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>',
 };
 const ic = (k, cls = "") => `<svg ${cls ? `class="${cls}" ` : ""}viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[k]}</svg>`;
 const initialsOf = (n) => String(n || "?").replace(/@.*/, "").split(/[\s._-]+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join("") || "?";
@@ -1275,7 +1301,7 @@ function render() {
       <div class="company">${many ? `<button type="button" data-act="orgMenu" aria-haspopup="true" aria-expanded="${S.pop === "org"}" aria-label="${esc(DB.org.name)}: switch company">${companyMark()}${ic("chevUpDown", "chev")}</button>
           <div class="pop" role="menu" ${S.pop === "org" ? "" : "hidden"}><label>Company<select id="switchOrg" aria-label="Switch company">${L.companies.map((c) => `<option value="${c.org_id}" ${c.org_id === L.org ? "selected" : ""}>${esc(c.name)}</option>`).join("")}</select></label></div>`
           : `<a class="cbox" href="#overview" aria-label="${esc(DB.org.name)}, dashboard home">${companyMark()}</a>`}${LIVE ? "" : `<span class="demo-pill">Demo data</span>`}</div>
-      <nav class="snav" aria-label="Sections">${nav.map((n) => n === "-" ? "<hr>" : `<a href="#${n[0]}" class="${S.route === n[0] ? "on" : ""}" ${S.route === n[0] ? 'aria-current="page"' : ""}>${ic(n[2])}${n[1]}${n[3] ? `<span class="n" aria-label="${n[3]} need attention">${n[3]}</span>` : ""}</a>`).join("")}</nav>
+      <nav class="snav" aria-label="Sections">${nav.map((n) => n === "-" ? "<hr>" : `<a href="#${n[0]}" class="${S.route.replace("import-", "") === n[0] ? "on" : ""}" ${S.route.replace("import-", "") === n[0] ? 'aria-current="page"' : ""}>${ic(n[2])}${n[1]}${n[3] ? `<span class="n" aria-label="${n[3]} need attention">${n[3]}</span>` : ""}</a>`).join("")}</nav>
       <div class="sp-foot"><img class="on-dark" src="brand/logo-light.png" srcset="brand/logo-light.png 1x, brand/logo-light@2x.png 2x" alt="Sonoran Point Technologies"><img class="on-light" src="brand/logo.png" srcset="brand/logo.png 1x, brand/logo@2x.png 2x" alt="Sonoran Point Technologies"></div>
     </aside>
     ${S.navOpen ? `<div class="navscrim" data-act="navClose"></div>` : ""}
@@ -1432,8 +1458,8 @@ function gettingStarted() {
   const st = api.stations(), team = api.members();
   const steps = [
     ["station", "Connect your station", "Type its activation code on the station's setup screen.", st.some((s) => !s.pending && !s.revoked), "#stations", "Stations"],
-    ["equipment", "Add your equipment", "Here, or at the station with a manager or admin fob: tap a tag, give it a name.", DB.equipment.length > 0, "#equipment", "Equipment"],
-    ["people", "Add your employees", "Give each person a badge so the station knows who's checking out.", DB.employees.some((e) => e.role === "employee"), "#employees", "Employees"],
+    ["equipment", "Add your equipment", "Import your list from a spreadsheet, add items one by one, or add them at the station with a manager or admin fob.", DB.equipment.length > 0, "#equipment", "Equipment"],
+    ["people", "Add your employees", "Import your crew from a spreadsheet or add them one by one. Each person needs a badge so the station knows who's checking out.", DB.employees.some((e) => e.role === "employee"), "#employees", "Employees"],
     ["team", "Invite your supervisors", "They get their own sign-in to this dashboard.", team.members.length + team.invites.length > 1, "#team", "Team access"],
   ];
   const done = steps.filter((x) => x[3]).length;
@@ -1460,7 +1486,7 @@ function vEquipment() {
     .sort((a, b) => (b.is_overdue - a.is_overdue) || (b.is_extended - a.is_extended) || a.name.localeCompare(b.name, undefined, { numeric: true }));
   const seg = [["all", "All"], ["out", "Out"], ["overdue", "Overdue"], ["extended", "Out too long"], ["available", "Available"], ["lost", "Lost"], ["maintenance", "Maintenance"], ["problem", "Problems"], ...((DB.loans || []).some((l) => !l.ended_at) ? [["loan", "On loan"]] : [])];
   S.eqRows = rows;
-  return head("Equipment", `${all.length} items · also addable at a station with a manager or admin fob`, `<span class="actions"><button class="btn" data-act="csvEquipment">${ic("download")}Download CSV</button>${can("admin") ? `<button class="btn primary" data-act="newEq">Add equipment</button>` : ""}</span>`) + `
+  return head("Equipment", `${all.length} items · also addable at a station with a manager or admin fob`, `<span class="actions"><button class="btn" data-act="csvEquipment">${ic("download")}Download CSV</button>${can("admin") ? `<a class="btn" href="#import-equipment">${ic("upload")}Import</a><button class="btn primary" data-act="newEq">Add equipment</button>` : ""}</span>`) + `
     <div class="filters">
       <input class="field" id="eqSearch" type="search" aria-label="Search equipment" placeholder="Search name, asset tag, barcode or person" value="${esc(f.eqSearch)}" data-f="eqSearch">
       <select class="field" id="eqCat" aria-label="Category" data-f="eqCat"><option value="">All categories</option>${DB.categories.map((c) => `<option value="${c.id}" ${f.eqCat === c.id ? "selected" : ""}>${esc(c.name)}</option>`).join("")}</select>
@@ -1483,7 +1509,7 @@ function vEmployees() {
   const q = S.f.empSearch.trim().toLowerCase();
   const rows = api.employees().filter((e) => (!q || `${e.name} ${e.number} ${e.barcode || ""}`.toLowerCase().includes(q)) && (!S.f.empContract || inBranch(e.contract, S.f.empContract)))
     .sort((a, b) => (b.active - a.active) || (b.out - a.out) || a.name.localeCompare(b.name));
-  return head("Employees", `${rows.filter((e) => e.active).length} active · also addable at a station with a manager or admin fob`, can("supervisor") ? `<button class="btn primary" data-act="newEmp">Add employee</button>` : "") + `
+  return head("Employees", `${rows.filter((e) => e.active).length} active · also addable at a station with a manager or admin fob`, can("supervisor") ? `<span class="actions"><a class="btn" href="#import-employees">${ic("upload")}Import</a><button class="btn primary" data-act="newEmp">Add employee</button></span>` : "") + `
     <div class="filters"><input class="field" type="search" id="empSearch" aria-label="Search employees" placeholder="Search name or employee #" value="${esc(S.f.empSearch)}" data-f="empSearch">${DB.contracts?.length ? `<select class="field" id="empContract" aria-label="${esc(CTERM().one)}" data-f="empContract">${contractOptions(S.f.empContract || "", `All ${CTERM().many.toLowerCase()}`)}</select>` : ""}</div>
     <section class="panel"><div class="tablewrap"><table class="cardify">
       <thead><tr><th>Name</th><th>Role</th><th>Shift</th><th>Badge</th><th>Has out</th><th>Last tap</th></tr></thead>
@@ -1492,6 +1518,167 @@ function vEmployees() {
         <td class="pin">${e.role === "employee" ? `<span class="muted">Employee</span>` : `<span class="chip brand">${ROLE[e.role]} fob</span>`}</td>
         <td data-label="Shift">${esc(e.shiftNames.join(", ") || "—")}</td><td data-label="Badge">${realTag(e.badge) ? `On file <span class="muted mono" title="${esc(fmtUid(e.badge))}">${esc(shortUid(e.badge))}</span>` : e.barcode ? `Barcode <span class="muted mono">${esc(e.barcode)}</span>` : `<span class="muted">No badge</span>`}</td>
         <td class="num" data-label="Has out">${e.out ? `<b>${e.out}</b>` : `<span class="muted">0</span>`}</td><td class="num ${e.last ? "" : "empty-sm"}" data-label="Last tap">${e.last ? esc(fmtWhen(e.last)) : ""}</td></tr>`).join("")}</tbody></table></div></section>`;
+}
+
+/* ---------------- Import from a spreadsheet (equipment or employees) ----------------
+   Paste rows from Excel or Google Sheets, or pick a .csv or .xlsx file. Columns are matched by their headings
+   (and can be changed), every row is checked the same way the Add forms check one, and the good ones are added
+   in one go. Rows with problems are left out and listed, so the file can be fixed and imported again. */
+const IMP_FIELDS = {
+  equipment: () => [["name", "Name", ["name", "item", "item name", "equipment", "equipment name", "tool", "asset name"]],
+    ["category", "Category", ["category", "type", "kind", "group", "item type"]],
+    ["asset", "Asset tag", ["asset", "asset tag", "asset #", "asset no", "asset number", "asset id", "serial", "serial number", "serial #", "sn", "id"]],
+    ["barcode", "Barcode", ["barcode", "bar code", "upc", "sku"]],
+    ["tag", "NFC tag ID", ["nfc", "nfc tag", "nfc id", "nfc uid", "tag", "tag id", "uid", "rfid"]],
+    ...(DB.contracts?.length ? [["contract", CTERM().one, ["department", "dept", "contract", "site", "team", "division", CTERM().one.toLowerCase()]]] : []),
+    ["notes", "Notes", ["notes", "note", "comments", "comment", "description"]]],
+  employees: () => [["name", "Full name", ["name", "full name", "employee", "employee name"]],
+    ["first", "First name", ["first", "first name", "firstname", "given name"]], ["last", "Last name", ["last", "last name", "lastname", "surname", "family name"]],
+    ["number", "Employee #", ["employee #", "employee number", "employee no", "employee id", "emp #", "emp id", "badge #", "badge number", "number", "id"]],
+    ["badge", "Badge NFC ID", ["badge", "badge id", "badge uid", "nfc", "nfc id", "nfc uid", "uid", "card", "card id"]],
+    ["barcode", "Badge barcode", ["barcode", "bar code", "badge barcode"]],
+    ...(DB.contracts?.length ? [["contract", CTERM().one, ["department", "dept", "contract", "site", "team", "division", CTERM().one.toLowerCase()]]] : []),
+    ...((DB.org.modules || []).includes("shifts") ? [["shift", "Shift", ["shift", "shifts", "crew"]]] : [])],
+};
+const impKey = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9#]+/g, " ").trim();
+// CSV or tab-separated text (what Excel and Google Sheets put on the clipboard) -> rows of cells.
+function parseTable(text) {
+  text = String(text || "").replace(/^﻿/, "").replace(/\r\n?/g, "\n");
+  const first = text.split("\n")[0] || "", sep = first.includes("\t") ? "\t" : first.split(";").length > first.split(",").length ? ";" : ",";
+  const rows = []; let row = [], cell = "", q = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (q) { if (ch === '"') { if (text[i + 1] === '"') { cell += '"'; i++; } else q = false; } else cell += ch; continue; }
+    if (ch === '"' && cell === "") q = true;
+    else if (ch === sep) { row.push(cell); cell = ""; }
+    else if (ch === "\n") { row.push(cell); rows.push(row); row = []; cell = ""; }
+    else cell += ch;
+  }
+  if (cell !== "" || row.length) { row.push(cell); rows.push(row); }
+  return rows.map((r) => r.map((c) => c.trim())).filter((r) => r.some((c) => c !== ""));
+}
+// Which field each column is, from its heading. Columns nobody recognises are skipped until picked by hand.
+function impGuess(kind, rows) {
+  const F = IMP_FIELDS[kind](), head = rows[0] || [];
+  const byHead = head.map((h) => { const k = impKey(h); return F.find(([, , al]) => al.includes(k))?.[0] || ""; });
+  return { map: byHead.map((f, i) => (byHead.indexOf(f) === i ? f : "")), hasHead: true };
+}
+function impTemplate(kind) {
+  const F = IMP_FIELDS[kind]().filter(([k]) => kind === "employees" ? k !== "name" : true);
+  const ex = kind === "equipment"
+    ? { name: "Radio 01", category: DB.categories[0]?.name || "Radios", asset: "RAD-001", barcode: "", tag: "", contract: (DB.contracts || [])[0]?.name || "", notes: "" }
+    : { first: "Alex", last: "Rivera", number: "1001", badge: "", barcode: "", contract: (DB.contracts || [])[0]?.name || "", shift: DB.shifts?.[0]?.name || "" };
+  downloadCsv(`${kind}-import-template`, F.map(([, l]) => l), [F.map(([k]) => ex[k] ?? "")]);
+}
+// Checks every row. Returns { items, bad, newCats } where items are ready to add.
+function impCheck(kind) {
+  const I = S.imp, rows = I.hasHead ? I.rows.slice(1) : I.rows, items = [], bad = [], newCats = new Map();
+  const col = (r, f) => { const i = I.map.indexOf(f); return i < 0 ? "" : (r[i] || "").trim(); };
+  const lc = (s) => s.toLowerCase();
+  const contractBy = (name) => (DB.contracts || []).find((c) => lc(c.name) === lc(name));
+  const usedTags = new Map(), usedAsset = new Map(), usedCode = new Map(), usedNum = new Map();
+  for (const q of DB.equipment) { if (q.tag) usedTags.set(q.tag, q.name); if (q.asset) usedAsset.set(lc(q.asset), q.name); if (q.barcode) usedCode.set(q.barcode, q.name); }
+  for (const e of DB.employees) { if (e.badge) usedTags.set(e.badge, e.name); if (e.number) usedNum.set(lc(e.number), e.name); }
+  const empCodes = new Map(DB.employees.filter((e) => e.barcode).map((e) => [e.barcode, e.name]));
+  rows.forEach((r, n) => {
+    const line = n + (I.hasHead ? 2 : 1), why = [];
+    if (kind === "equipment") {
+      const name = col(r, "name"), catName = col(r, "category") || (I.defCat ? catOf(I.defCat)?.name : ""), asset = col(r, "asset"),
+        code = normCode(col(r, "barcode")) || null, rawTag = col(r, "tag"), tag = normUid(rawTag), cName = col(r, "contract"), notes = col(r, "notes");
+      if (!name) why.push("no name");
+      let cat = catName ? DB.categories.find((c) => lc(c.name) === lc(catName)) : null;
+      if (!catName) why.push("no category");
+      else if (!cat) { if (can("admin")) newCats.set(lc(catName), catName); else why.push(`no category called “${catName}”`); }
+      if (asset && usedAsset.has(lc(asset))) why.push(`asset tag ${asset} is already on ${usedAsset.get(lc(asset))}`);
+      if (code && code.length > 40) why.push("barcode is over 40 characters");
+      else if (code && usedCode.has(code)) why.push(`barcode ${code} is already on ${usedCode.get(code)}`);
+      if (rawTag && (tag.length < 8 || tag.length > 20 || /[g-z]/i.test(rawTag.replace(/[\s:-]/g, "")))) why.push(`NFC tag ID “${rawTag}” doesn't look right`);
+      else if (tag && usedTags.has(tag)) why.push(`NFC tag is already on ${usedTags.get(tag)}`);
+      const contract = cName ? contractBy(cName) : null; if (cName && !contract) why.push(`no ${CTERM().one.toLowerCase()} called “${cName}”`);
+      if (why.length) return bad.push({ line, label: name || r.join(" ").slice(0, 40), why });
+      if (asset) usedAsset.set(lc(asset), name); if (code) usedCode.set(code, name); if (tag) usedTags.set(tag, name);
+      items.push({ line, name: name.slice(0, 80), catName: cat?.name || catName, cat: cat?.id || null, asset: asset || null, barcode: code, tag: tag || null, contract: contract?.id || null, notes: notes || null });
+    } else {
+      let first = col(r, "first"), last = col(r, "last"); const full = col(r, "name");
+      if (!first && full) { if (full.includes(",")) { [last, first] = full.split(",").map((s) => s.trim()); } else { const w = full.split(/\s+/); first = w[0]; last = w.slice(1).join(" "); } }
+      const number = col(r, "number"), rawBadge = col(r, "badge"), badge = normUid(rawBadge), code = normCode(col(r, "barcode")) || null, cName = col(r, "contract"), shiftTxt = col(r, "shift");
+      if (!first) why.push("no name");
+      if (number && usedNum.has(lc(number))) why.push(`employee # ${number} is already ${usedNum.get(lc(number))}`);
+      if (rawBadge && (badge.length < 8 || badge.length > 20 || /[g-z]/i.test(rawBadge.replace(/[\s:-]/g, "")))) why.push(`badge ID “${rawBadge}” doesn't look right`);
+      else if (badge && usedTags.has(badge)) why.push(`badge ID is already used by ${usedTags.get(badge)}`);
+      if (code && code.length > 40) why.push("barcode is over 40 characters");
+      else if (code && empCodes.has(code)) why.push(`barcode ${code} is already on ${empCodes.get(code)}'s badge`);
+      const contract = cName ? contractBy(cName) : null; if (cName && !contract) why.push(`no ${CTERM().one.toLowerCase()} called “${cName}”`);
+      const shifts = shiftTxt ? shiftTxt.split(/[,;/]+/).map((s) => s.trim()).filter(Boolean).map((s) => DB.shifts.find((x) => lc(x.name) === lc(s)) || s) : [];
+      shifts.filter((s) => typeof s === "string").forEach((s) => why.push(`no shift called “${s}”`));
+      const name = [first, last].filter(Boolean).join(" ");
+      if (why.length) return bad.push({ line, label: name || r.join(" ").slice(0, 40), why });
+      if (number) usedNum.set(lc(number), name); if (badge) usedTags.set(badge, name); if (code) empCodes.set(code, name);
+      items.push({ line, first: first.slice(0, 60), last: (last || "").slice(0, 60), name, number: number || null, badge: badge || null, barcode: code, contract: contract?.id || null, shifts: shifts.map((s) => s.id) });
+    }
+  });
+  return { items, bad, newCats: [...newCats.values()] };
+}
+function vImport(kind) {
+  const isEq = kind === "equipment", T = isEq ? "equipment" : "employees", back = `#${kind}`;
+  if (isEq ? !can("admin") : !can("supervisor")) return head(`Import ${T}`, "") + `<div class="readonly-note">You have ${esc(ROLE_NAME[DB.me.role])} access. Ask a manager or admin to import ${T}.</div>`;
+  const I = S.imp?.kind === kind ? S.imp : (S.imp = { kind, rows: null, map: [], hasHead: true, defCat: "", done: null, text: "" });
+  const F = IMP_FIELDS[kind]();
+  const intro = `<div><a class="back" href="${back}">‹ ${isEq ? "Equipment" : "Employees"}</a></div>` + head(`Import ${T}`, isEq
+    ? "Add a whole list at once from Excel, Google Sheets or a CSV file. Tags and barcodes are optional: items can get their NFC tag at a station later."
+    : "Add your whole crew at once from Excel, Google Sheets or a CSV file. Badge IDs are optional: people can get their badge at a station later.");
+  if (I.done) return intro + `<section class="panel"><div class="panel-b" style="display:grid;gap:10px">
+      <h2 style="margin:0">${I.done.count} ${I.done.count === 1 ? (isEq ? "item" : "person") : T === "equipment" ? "items" : "people"} added</h2>
+      <p style="margin:0">${I.done.left ? `${I.done.left} row${I.done.left === 1 ? " was" : "s were"} left out. Fix ${I.done.left === 1 ? "it" : "them"} in your file and import again: rows already added are skipped.` : "Everything in the file was added."}${I.done.cats ? ` New categories: ${esc(I.done.cats)}. Set their time limits under Settings.` : ""}</p>
+      <div class="actions"><a class="btn primary" href="${back}">See ${isEq ? "equipment" : "employees"}</a><button class="btn" data-act="impAgain">Import more</button></div></div></section>`;
+  if (!I.rows) return intro + `<section class="panel"><form class="panel-b imp-start" data-form="impPaste">
+      <label for="impText"><b>Paste from your spreadsheet</b><small>Select the rows in Excel or Google Sheets, headings included, copy, and paste here.</small></label>
+      <textarea class="field mono" id="impText" name="text" rows="9" placeholder="${esc(F.filter(([k]) => !isEq ? k !== "name" : true).slice(0, 4).map(([, l]) => l).join("\t"))}">${esc(I.text || "")}</textarea>
+      <div class="actions"><button class="btn primary">Check the rows</button>
+        <label class="btn">${ic("upload")}Choose a file<input type="file" id="impFile" accept=".csv,.tsv,.txt,.xlsx,.xls" hidden></label>
+        <button type="button" class="btn" data-act="impTemplate" data-kind="${kind}">${ic("download")}Download a template</button></div>
+      <p class="muted" style="margin:0;font-size:13.5px">Columns it understands: ${F.map(([, l]) => esc(l)).join(", ")}. The headings don't have to match exactly, and other columns are ignored.</p>
+      <div class="err" role="alert">${esc(I.err || "")}</div></form></section>`;
+  const res = impCheck(kind); I.res = res;
+  const hasCat = I.map.includes("category"), shown = I.hasHead ? I.rows.slice(1) : I.rows;
+  const optionsFor = (cur) => `<option value="">Skip this column</option>` + F.map(([k, l]) => `<option value="${k}" ${cur === k ? "selected" : ""}>${esc(l)}</option>`).join("");
+  const badLines = new Map(res.bad.map((b) => [b.line, b]));
+  const need = isEq ? (!I.map.includes("name") ? "Pick which column is the name." : null)
+    : (!I.map.includes("name") && !I.map.includes("first") ? "Pick which column is the name (or first name)." : null);
+  return intro + `<section class="panel"><div class="panel-h"><h2>Check the columns</h2><label style="font-size:14px;display:flex;gap:8px;align-items:center"><input type="checkbox" data-act-change="impHead" ${I.hasHead ? "checked" : ""}> First row is headings</label></div>
+      <div class="tablewrap"><table class="imp-table"><thead><tr><th class="num">Row</th><th>Result</th>${I.map.map((f, i) => `<th><select class="field" data-impcol="${i}" aria-label="Column ${i + 1}">${optionsFor(f)}</select>${I.hasHead ? `<span class="sub">${esc(I.rows[0][i] || "")}</span>` : ""}</th>`).join("")}</tr></thead>
+        <tbody>${shown.slice(0, 200).map((r, n) => { const line = n + (I.hasHead ? 2 : 1), b = badLines.get(line);
+          return `<tr class="${b ? "bad" : ""}"><td class="num muted">${line}</td><td class="res">${b ? `<span class="chip bad">Left out</span><span class="sub">${esc(b.why.join("; "))}</span>` : `<span class="chip ok">Ready</span>`}</td>${I.map.map((f, i) => `<td class="${f ? "" : "skip"}">${esc(r[i] || "")}</td>`).join("")}</tr>`; }).join("")}</tbody></table></div>
+      ${shown.length > 200 ? `<div class="panel-b muted" style="font-size:13.5px">Showing the first 200 of ${shown.length} rows. All of them are checked.</div>` : ""}</section>
+    <section class="panel"><div class="panel-b imp-sum">
+      ${isEq && !hasCat ? `<label>Category for every item<select class="field" data-act-change="impCat"><option value="">Pick one</option>${DB.categories.map((c) => `<option value="${c.id}" ${I.defCat === c.id ? "selected" : ""}>${esc(c.name)}</option>`).join("")}</select></label>` : ""}
+      <p style="margin:0"><b>${res.items.length} ready</b>${res.bad.length ? ` · <span style="color:var(--bad)">${res.bad.length} left out</span> (the reason is on each row)` : ""}${res.newCats.length ? `<br><span class="muted">New categories will be added with no time limit: ${esc(res.newCats.join(", "))}. You can set limits under Settings.</span>` : ""}</p>
+      ${need ? `<div class="err" role="alert">${esc(need)}</div>` : ""}
+      <div class="actions"><button class="btn primary" data-act="impGo" ${res.items.length && !need ? "" : "disabled"}>Add ${res.items.length} ${isEq ? (res.items.length === 1 ? "item" : "items") : res.items.length === 1 ? "person" : "people"}</button><button class="btn" data-act="impAgain">Start over</button></div></div></section>`;
+}
+function impLoad(rows) {
+  const I = S.imp; I.err = "";
+  if (!rows.length) { I.err = "Nothing to import there. Copy the rows from your spreadsheet, headings included."; return render(); }
+  if (rows.length > 2001) { I.err = "That's more than 2,000 rows. Split it into smaller files."; return render(); }
+  const g = impGuess(I.kind, rows), width = Math.max(...rows.map((r) => r.length));
+  I.rows = rows.map((r) => [...r, ...Array(width - r.length).fill("")]); I.hasHead = g.hasHead; I.map = [...g.map, ...Array(width - g.map.length).fill("")];
+  // A full name column plus first/last: use first/last.
+  if (I.map.includes("first") && I.map.includes("name")) I.map[I.map.indexOf("name")] = "";
+  render();
+}
+// Excel files are read with SheetJS, loaded only when someone picks one.
+function loadXlsx() {
+  if (window.XLSX) return Promise.resolve(window.XLSX);
+  return new Promise((ok, no) => { const s = document.createElement("script"); s.src = "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js";
+    s.onload = () => ok(window.XLSX); s.onerror = () => no(new Error("Couldn't open Excel files just now. Save it as CSV and pick that.")); document.head.appendChild(s); });
+}
+async function impFile(file) {
+  try {
+    if (file.size > 5 * 1024 * 1024) throw new Error("That file is over 5 MB. Split it, or save just the list as CSV.");
+    if (/\.xlsx?$/i.test(file.name)) { const X = await loadXlsx(); const wb = X.read(await file.arrayBuffer(), { type: "array" });
+      const ws = wb.Sheets[wb.SheetNames[0]]; return impLoad(X.utils.sheet_to_json(ws, { header: 1, raw: false, defval: "" }).map((r) => r.map((c) => String(c).trim())).filter((r) => r.some(Boolean))); }
+    impLoad(parseTable(await file.text()));
+  } catch (err) { S.imp.err = err.message; render(); }
 }
 
 /* ---------------- Activity ---------------- */
@@ -1804,7 +1991,7 @@ function vTeam() {
         ["Add and edit equipment and categories, time limits", 2], ["Stations, company settings, checkout rules", 2], ["Station fob roles and PINs", 2], ["Invite and manage the team (except admins)", 2], ["Manage admins", 3]]
         .map(([t, n]) => `<tr><td>${t}</td>${[0, 1, 2, 3].map((i) => `<td aria-label="${i >= n ? "Yes" : "No"}">${i >= n ? "✓" : "<span class='muted'>–</span>"}</td>`).join("")}</tr>`).join("")}</tbody></table></div></section>`;
 }
-const VIEWS = { overview: vOverview, equipment: vEquipment, employees: vEmployees, activity: vActivity, alerts: vAlerts, shifts: vShifts, stations: vStations, settings: vSettings, team: vTeam };
+const VIEWS = { overview: vOverview, equipment: vEquipment, employees: vEmployees, activity: vActivity, alerts: vAlerts, shifts: vShifts, stations: vStations, settings: vSettings, team: vTeam, "import-equipment": () => vImport("equipment"), "import-employees": () => vImport("employees") };
 
 /* =====================================================================
    Detail panels
@@ -2065,6 +2252,12 @@ document.addEventListener("click", async (e) => {
   if (a === "hideSetup") { try { localStorage.setItem("sp.setupHidden." + (DB.org.id || "demo"), "1"); } catch {} toast("Hidden. Everything is still under the menu on the left."); return render(); }
   if (a === "csvActivity") return csvActivity();
   if (a === "csvEquipment") return csvEquipment();
+  if (a === "impTemplate") return impTemplate(t.dataset.kind);
+  if (a === "impAgain") { S.imp = null; return render(); }
+  if (a === "impGo") { const I = S.imp, res = impCheck(I.kind); if (!res.items.length) return;
+    const r = I.kind === "equipment" ? api.importEquipment(res.items, res.newCats) : api.importEmployees(res.items);
+    if (!r.ok) { toast(r.error); return render(); }
+    I.done = { count: r.count, left: res.bad.length, cats: res.newCats.join(", ") }; toast(`${r.count} added`); render(); window.scrollTo(0, 0); return; }
   if (a === "csvReports") return csvReports();
   if (a === "repOlder") { S.f.repDays = (S.f.repDays || 7) + 7; return render(); }
   if (a === "actMore") { S.f.actShow = (S.f.actShow || 150) + 150; return render(); }
@@ -2114,6 +2307,7 @@ document.addEventListener("keydown", (e) => {
 document.addEventListener("input", (e) => {
   if (e.target.type === "color" && e.target.closest(".colorpick")) { e.target.nextElementSibling.textContent = e.target.value.toUpperCase(); return; }
   if (e.target.id === "gsearch") { S.gq = e.target.value; const r = $("#gsResults"); r.innerHTML = searchResults(S.gq); r.hidden = !S.gq.trim(); return; }
+  if (e.target.id === "impText") { S.imp.text = e.target.value; return; }
   const k = e.target.dataset.f; if (!k) return;
   S.f[k] = e.target.value; const pos = e.target.selectionStart; render();
   const el = $(`[data-f="${k}"]`); if (el) { el.focus(); try { el.setSelectionRange(pos, pos); } catch {} }
@@ -2136,6 +2330,10 @@ document.addEventListener("change", (e) => {
   if (t.dataset.actChange === "formRole") { const form = t.form; const keep = Object.fromEntries(new FormData(form)); S.formRole = t.value; renderLayer();
     const f2 = $(".drawer form"); for (const [k, v] of Object.entries(keep)) if (f2.elements[k] && k !== "shifts" && k !== "role") f2.elements[k].value = v; return; }
   if (t.dataset.f === "eqCat") { S.f.eqCat = t.value; return render(); }
+  if (t.id === "impFile" && t.files?.[0]) return impFile(t.files[0]);
+  if (t.dataset.impcol != null) { const i = +t.dataset.impcol; if (t.value) S.imp.map = S.imp.map.map((f) => (f === t.value ? "" : f)); S.imp.map[i] = t.value; return render(); }
+  if (t.dataset.actChange === "impHead") { S.imp.hasHead = t.checked; return render(); }
+  if (t.dataset.actChange === "impCat") { S.imp.defCat = t.value; return render(); }
   if (t.dataset.email) {
     const uid = t.dataset.email; const kinds = [...document.querySelectorAll(`input[data-email="${cssq(uid)}"]:checked`)].map((x) => x.value);
     const r = api.setEmailPrefs(uid, kinds); toast(r.ok ? "Email alerts saved" : r.error); return render();
@@ -2166,6 +2364,7 @@ document.addEventListener("submit", async (e) => {
   e.preventDefault();
   const f = e.target, kind = f.dataset.form || "", data = Object.fromEntries(new FormData(f));
   if (kind === "signin" || kind === "newpass" || kind === "profile") return authAction(kind, f);
+  if (kind === "impPaste") { S.imp.text = data.text || ""; return impLoad(parseTable(S.imp.text)); }
   if (kind.startsWith("memberScope:")) {
     const ids = new FormData(f).getAll("c"); const r = api.setMemberContracts(kind.slice(12), ids);
     if (!r.ok) { S.formErr = r.error; renderLayer(); return; }
@@ -2468,6 +2667,25 @@ const REMOTE = {
     if (id) await upd("employees", id, row); else { eid = (await q(sb.from("employees").insert({ org_id: ORG(), ...row }).select("id").single())).id; L.idMap[r.id] = eid; e.id = eid; if (S.drawer?.id === r.id) S.drawer.id = eid; }
     await syncAssignments("employee_id", eid, e.shifts || [], "shift_id");
     if (can("admin")) await okRpc("set_employee_station_role", { p_employee: eid, p_role: e.role || "employee", p_pin: d.pin || null });
+  },
+  importEquipment: async ([items, newCats]) => {
+    const have = await q(sb.from("equipment_categories").select("id, name").eq("org_id", ORG()));
+    const byName = new Map(have.map((c) => [c.name.toLowerCase(), c.id]));
+    const add = (newCats || []).filter((n) => !byName.has(n.toLowerCase()));
+    if (add.length) (await q(sb.from("equipment_categories").insert(add.map((name, i) => ({ org_id: ORG(), name, time_limit_type: "none", sort_order: have.length + i + 1 }))).select("id, name")))
+      .forEach((c) => byName.set(c.name.toLowerCase(), c.id));
+    const rows = items.map((x) => ({ org_id: ORG(), category_id: byName.get(x.catName.toLowerCase()), name: x.name, nfc_uid: x.tag || (x.barcode && DB.hasBarcode ? barcodeUid(x.barcode) : null),
+      asset_tag: x.asset, notes: x.notes, ...(DB.hasBarcode ? { barcode: x.barcode } : {}), ...(DB.contracts?.length ? { contract_id: x.contract } : {}) }));
+    for (let i = 0; i < rows.length; i += 200) await q(sb.from("equipment").insert(rows.slice(i, i + 200)));
+  },
+  importEmployees: async ([items]) => {
+    for (let i = 0; i < items.length; i += 200) {
+      const part = items.slice(i, i + 200);
+      const made = await q(sb.from("employees").insert(part.map((x) => ({ org_id: ORG(), first_name: x.first, last_name: x.last || "", employee_number: x.number,
+        badge_uid: x.badge || (x.barcode && DB.hasBarcode ? barcodeUid(x.barcode) : null), ...(DB.hasBarcode ? { barcode: x.barcode } : {}), ...(DB.contracts?.length ? { contract_id: x.contract } : {}) }))).select("id"));
+      const links = made.flatMap((m, j) => (part[j].shifts || []).map((sid) => ({ org_id: ORG(), employee_id: m.id, shift_id: sid })));
+      if (links.length) await q(sb.from("shift_assignments").insert(links));
+    }
   },
   invite: async ([email, role, name]) => {
     const r = await okRpc("invite_member", { p_org: ORG(), p_email: email.trim().toLowerCase(), p_role: role });

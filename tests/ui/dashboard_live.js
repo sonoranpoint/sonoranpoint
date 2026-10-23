@@ -263,6 +263,21 @@ const ORG = "00000000-0000-0000-0000-00000000d3e0";
     P.doc.querySelector(`.drawer input[name=c][value="${dbw}"]`).checked = true; P.submit(`[data-form="memberScope:${kelly}"]`);
     check(await P.until(() => one(`select string_agg(contract_id::text, ',') from member_contracts where user_id='${kelly}'`) === dbw), "an admin limits Kelly to Delta BW"); }
   await P.settled();
+  // Import from a spreadsheet (live): a new category, a department, barcodes; employees with a shift
+  P.go("import-equipment"); await P.until(() => P.doc.getElementById("impText"));
+  P.doc.getElementById("impText").value = "Name\tCategory\tAsset tag\tBarcode\tContract\nLadder 01\tLadders\tLAD-001\tLAD001\tDelta BW\nRadio 31\tRadio\tRAD-031\t\t";
+  P.submit('[data-form="impPaste"]'); await P.until(() => /2 ready/.test(P.text()));
+  P.click('[data-act="impGo"]'); await P.settled();
+  check(await P.until(() => one(`select count(*) from equipment where org_id='${ORG}' and name in ('Ladder 01','Radio 31')`) === "2"
+    && one(`select c.time_limit_type || '|' || e.barcode || '|' || k.name from equipment e join equipment_categories c on c.id = e.category_id join contracts k on k.id = e.contract_id where e.name = 'Ladder 01'`) === "none|LAD001|Delta BW"),
+    "import equipment saves to the database, with its new category, barcode and department");
+  P.go("import-employees"); await P.until(() => P.doc.getElementById("impText"));
+  P.doc.getElementById("impText").value = "First name,Last name,Employee #,Shift\nLinh,Nguyen,3001,AM\nSam,Okoro,3002,";
+  P.submit('[data-form="impPaste"]'); await P.until(() => /2 ready/.test(P.text()));
+  P.click('[data-act="impGo"]'); await P.settled();
+  check(await P.until(() => one(`select count(*) from employees where org_id='${ORG}' and employee_number in ('3001','3002')`) === "2"
+    && one(`select s.name from shift_assignments a join shifts s on s.id = a.shift_id join employees e on e.id = a.employee_id where e.employee_number = '3001'`) === "AM"),
+    "import employees saves to the database, with their shift");
   const K = open(); await K.signIn("kelly@demoair.example");
   check(await K.until(() => /Recent activity/.test(K.text())), "second user signs in");
   check(await K.until(() => K.E("DB.equipment.length") > 0) && !K.E("DB.equipment.some(q => q.name === 'Radio 02')") && K.E("DB.me.contracts.length") === 1,

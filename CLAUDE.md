@@ -54,6 +54,12 @@ See README.md for the full product description.
   Console edits go through `platform_update_station`. Taps store `station_contract_id` at insert, so moving a station
   doesn't move its past taps (RLS: `private.can_see_tap`). `station_overview` must be recreated when `stations` gets columns.
 
+## Import (no migration)
+- Dashboard `#import-equipment` (managers+) / `#import-employees` (supervisors+): paste rows or pick .csv/.xlsx (SheetJS loaded from
+  jsdelivr only when an Excel file is picked). `parseTable` -> `impGuess` (columns by heading aliases in `IMP_FIELDS`) -> `impCheck`
+  (same checks as the Add forms plus duplicates within the file; bad rows left out with the reason) -> `api.importEquipment/importEmployees`
+  (REMOTE: bulk inserts in chunks of 200; unknown categories are created with no time limit; employees' shifts via shift_assignments).
+
 ## Requests (migration 28)
 - Console "Requests" (`vRequests`/`vRequest`): every contact form message (`private.contact_requests`) plus ones added by hand
   (`platform_add_request`, email optional). kind lead/support ("Help with my account" = support; sender matched to a customer -> `org_id`).
