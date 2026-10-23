@@ -405,6 +405,11 @@ html.kiosk .screen { border-radius: 0; }
 .capture h3 { margin: 0 0 1cqw; font-family: var(--display); font-weight: 700; font-size: 4.6cqw; line-height: 1; }
 .capture p { margin: 0 0 .6cqw; font-size: 2cqw; color: var(--screen-muted); }
 .capture .row { margin-top: 1.4cqw; }
+.cap-slots { display: grid; gap: .8cqw; margin-top: 1.2cqw; }
+.cap-slot { display: flex; gap: 1.2cqw; align-items: center; border: 2px dashed var(--screen-line, #d0d7e2); border-radius: 1.2cqw; padding: .9cqw 1.2cqw; }
+.cap-slot .ck { width: 3.2cqw; height: 3.2cqw; border-radius: 50%; border: 2px solid currentColor; display: grid; place-items: center; font-weight: 700; color: var(--screen-muted); flex: none; }
+.cap-slot b { display: block; font-size: 2cqw; } .cap-slot small { font-size: 1.6cqw; color: var(--screen-muted); }
+.cap-slot.got { border-style: solid; border-color: var(--ok, #16a34a); } .cap-slot.got .ck { background: var(--ok, #16a34a); border-color: var(--ok, #16a34a); color: #fff; }
 .detail { flex: 1; display: grid; grid-template-columns: 1.1fr 1fr; gap: 2.4cqw; align-items: start; min-height: 0; }
 .detail h3 { margin: 0 0 .8cqw; font-family: var(--display); font-weight: 700; font-size: 4.4cqw; line-height: 1; }
 .detail p { margin: .6cqw 0 0; font-size: 2cqw; }
@@ -598,6 +603,11 @@ function scanToUid(raw) {
   return barcodeUid(code);
 }
 const normCode = (c) => String(c || "").replace(/[^0-9a-z]/gi, "").toUpperCase();
+// The barcode a made-up tag ID stands for (null for a real NFC tag ID).
+function uidToCode(uid) {
+  if (!/^B0C0DE([0-9A-F]{2})+$/.test(uid || "")) return null;
+  try { return decodeURIComponent(escape(uid.slice(6).match(/../g).map((h) => String.fromCharCode(parseInt(h, 16))).join(""))); } catch { return null; }
+}
 const fmtUid = (u) => ((u || "").match(/.{1,2}/g) || []).join(":");
 const uuid = () => (crypto.randomUUID ? crypto.randomUUID() :
   "10000000-1000-4000-8000-100000000000".replace(/[018]/g, (c) => (c ^ (crypto.getRandomValues(new Uint8Array(1))[0] & (15 >> (c / 4)))).toString(16)));
@@ -839,26 +849,31 @@ const demo = {
     },
     station_add_employee(a) {
       const ss = demo.staffSession(a, "manager"); if (!ss.ok) return ss;
-      const role = a.p_role || "employee"; const num = (a.p_employee_number || "").trim() || null; const uid = normUid(a.p_new_badge_uid);
+      const role = a.p_role || "employee"; const num = (a.p_employee_number || "").trim() || null; const code = (a.p_new_barcode || "").trim().toUpperCase() || null;
+      const uid = normUid(a.p_new_badge_uid) || (code ? barcodeUid(code) : "");
       if (!(a.p_first_name || "").trim()) return { ok: false, error: "name_required" };
       if (role !== "employee" && ss.e.role !== "admin") return { ok: false, error: "admin_only" };
       if (role !== "employee" && !validPin(a.p_new_pin)) return { ok: false, error: "pin_needed" };
       if (!uid) return { ok: false, error: "no_badge" };
       const own = demo.uidOwner(uid); if (own) return { ok: false, error: own.kind === "badge" ? "badge_in_use" : "tag_is_equipment", used_by: own.name };
+      if (code) { const o2 = demo.db.employees.find((e) => e.barcode === code) ? { kind: "badge", name: demo.db.employees.find((e) => e.barcode === code).name } : demo.uidOwner(barcodeUid(code));
+        if (o2) return { ok: false, error: o2.kind === "badge" ? "barcode_in_use" : "barcode_is_equipment", used_by: o2.name }; }
       const dup = num && demo.db.employees.find((e) => e.employee_number === num); if (dup) return { ok: false, error: "number_in_use", used_by: dup.name };
       const name = [a.p_first_name.trim(), (a.p_last_name || "").trim()].filter(Boolean).join(" ");
-      const e = { id: "e" + randHex(4), employee_number: num, name, badge_uid: uid, active: true, role, pin: role !== "employee" ? a.p_new_pin : null, contract_id: ss.st.contract_id || null };
+      const e = { id: "e" + randHex(4), employee_number: num, name, badge_uid: uid, barcode: code || uidToCode(uid), active: true, role, pin: role !== "employee" ? a.p_new_pin : null, contract_id: ss.st.contract_id || null };
       demo.db.employees.push(e); demo.log(ss.e, `added employee ${name}${role !== "employee" ? " (" + role + ")" : ""}`);
       return { ok: true, employee: { id: e.id, name, role } };
     },
     station_add_equipment(a) {
       const ss = demo.staffSession(a, "manager"); if (!ss.ok) return ss;
-      const name = (a.p_name || "").trim(); const uid = normUid(a.p_tag_uid);
+      const name = (a.p_name || "").trim(); const code = (a.p_barcode || "").trim().toUpperCase() || null; const uid = normUid(a.p_tag_uid) || (code ? barcodeUid(code) : "");
       if (!name) return { ok: false, error: "name_required" };
       if (!demo.cat(a.p_category_id)) return { ok: false, error: "unknown_category" };
       if (!uid) return { ok: false, error: "no_tag" };
       const own = demo.uidOwner(uid); if (own) return { ok: false, error: own.kind === "tag" ? "tag_in_use" : "tag_is_badge", used_by: own.name };
-      const q = { id: "q" + randHex(4), category_id: a.p_category_id, name, nfc_uid: uid, asset_tag: (a.p_asset_tag || "").trim() || null, status: "available",
+      if (code) { const hit = demo.db.equipment.find((x) => x.barcode === code); const o2 = hit ? { kind: "tag", name: hit.name } : demo.uidOwner(barcodeUid(code));
+        if (o2) return { ok: false, error: o2.kind === "tag" ? "barcode_in_use" : "barcode_is_badge", used_by: o2.name }; }
+      const q = { id: "q" + randHex(4), category_id: a.p_category_id, name, nfc_uid: uid, barcode: code || uidToCode(uid), asset_tag: (a.p_asset_tag || "").trim() || null, status: "available",
         mode: "category", hours: null, extended: null, current_employee_id: null, checked_out_at: null, due_at: null, last_event_at: null, contract_id: ss.st.contract_id || null };
       demo.db.equipment.push(q); demo.log(ss.e, `added equipment ${name}`);
       return { ok: true, equipment: { id: q.id, name } };
@@ -2221,6 +2236,10 @@ function staffError(r) {
     tag_is_equipment: `That's the tag on ${r.used_by}. Tap a blank badge.`,
     tag_in_use: `That tag is already on ${r.used_by}. Tap a different one.`,
     tag_is_badge: `That's ${r.used_by}'s badge. Tap an equipment tag.`,
+    barcode_in_use: `That barcode is already on ${r.used_by}. Scan a different one.`,
+    barcode_is_equipment: `That barcode belongs to ${r.used_by}. Scan the badge's barcode.`,
+    barcode_is_badge: `That barcode is ${r.used_by}'s badge. Scan the item's barcode.`,
+    barcode_too_long: "That barcode is too long (40 characters at most).",
     number_in_use: `Employee # is already used by ${r.used_by}.`,
     admin_only: "Only an admin fob can do that.",
     pin_needed: "Enter a PIN of 4 to 8 digits.",
@@ -2305,8 +2324,8 @@ function renderStaff(el) {
   let body = "";
   if (T.capture) body = captureHtml();
   else if (T.view === "menu") body = `<div class="tiles">
-      <button class="tile" data-act="addEmp"><b>Add employee</b><span>Name, then tap their new badge</span></button>
-      <button class="tile" data-act="addEq"><b>Add ${esc(term().equipment.toLowerCase())}</b><span>Name, then tap its new tag</span></button>
+      <button class="tile" data-act="addEmp"><b>Add employee</b><span>Name, then their badge or its barcode</span></button>
+      <button class="tile" data-act="addEq"><b>Add ${esc(term().equipment.toLowerCase())}</b><span>Name, then its tag or barcode</span></button>
       <button class="tile" data-act="item"><b>${esc(term().equipment)} status</b><span>Lost, maintenance, new tag</span></button>
       <button class="tile" data-act="people"><b>Employees</b><span>${admin ? "Roles, PINs, badges, deactivate" : "Replace a lost badge"}</span></button>
       <button class="tile" data-act="station"><b>Station</b><span>${admin ? "Wi-Fi, server, sync, unpair" : "Sync and connection"}</span></button>
@@ -2339,7 +2358,7 @@ function formHtml() {
     return `<button class="fld ${x.k === T.field ? "on" : ""} ${x.type === "role" || x.type === "category" ? "choice" : ""}" data-field="${x.k}"><small>${esc(x.label)}</small>
       <span class="v">${v ? esc(v) : x.optional ? "<i>Optional</i>" : ""}</span></button>`;
   }).join("");
-  const action = T.view === "addEmp" ? "Next: tap their badge" : T.view === "addEq" ? "Next: tap its tag" : "Save PIN";
+  const action = T.view === "addEmp" ? "Next: badge or barcode" : T.view === "addEq" ? "Next: tag or barcode" : "Save PIN";
   let right;
   if (fd.type === "role") right = `<div class="picks" style="grid-template-columns:1fr">${["employee", "manager", "admin"].map((r) =>
       `<button class="pickb ${(T.form.role || "employee") === r ? "on" : ""}" data-pick="role:${r}">${ROLE[r]}<small>${
@@ -2362,6 +2381,17 @@ function captureHtml() {
     replaceBadge: ["Tap the replacement badge", `For ${T.person?.name}. Their old badge stops working.`, ""],
     replaceTag: ["Tap the replacement tag", `For ${T.item?.equipment.name}. The old tag stops working.`, ""],
   }[c.kind];
+  if (c.kind === "newBadge" || c.kind === "newTag") {
+    const emp = c.kind === "newBadge", who = emp ? [f.first, f.last].filter(Boolean).join(" ") : f.name, any = c.uid || c.code;
+    const slot = (label, v, hint) => `<div class="cap-slot ${v ? "got" : ""}"><span class="ck" aria-hidden="true">${v ? "✓" : ""}</span><span><b>${label}</b><small>${v ? esc(v) : hint}</small></span></div>`;
+    return `<div class="capture"><div class="rings" aria-hidden="true"><span></span><span></span><span></span>${BADGE_SVG}</div>
+      <div><h3>${emp ? "Tap their badge or scan its barcode" : "Tap its tag or scan its barcode"}</h3>
+        <p>Registering ${esc(who)}${emp && f.role && f.role !== "employee" ? " as " + esc(ROLE[f.role].toLowerCase()) : ""}. ${any ? "Add the other one too if it has both, or save." : `One is enough. If ${emp ? "the badge" : "it"} has both, add both.`}</p>
+        <div class="cap-slots">${slot(emp ? "NFC badge" : "NFC tag", c.uid ? fmtUid(c.uid) : "", emp ? "Tap it on the reader" : "Stick it on, then tap it")}${slot("Barcode", c.code || "", "Scan it with the handheld scanner")}</div>
+        ${T.busy ? `<p><b>Saving…</b></p>` : ""}<div class="row" style="display:flex;gap:1cqw;flex-wrap:wrap">
+          ${any ? `<button class="sbtn primary" data-act="saveCapture" ${T.busy ? "disabled" : ""}>Save ${emp ? "employee" : esc(term().equipment.toLowerCase())}</button>` : ""}
+          ${any ? `<button class="sbtn" data-act="clearCapture">Start over</button>` : ""}<button class="sbtn" data-act="cancelCapture">Cancel</button></div></div></div>`;
+  }
   return `<div class="capture"><div class="rings" aria-hidden="true"><span></span><span></span><span></span>${BADGE_SVG}</div>
     <div><h3>${esc(cfg[0])}</h3><p>${esc(cfg[1])}</p>${cfg[2] ? `<p>${esc(cfg[2])}</p>` : ""}
       ${T.busy ? `<p><b>Saving…</b></p>` : ""}<div class="row" style="display:flex;gap:1cqw;flex-wrap:wrap"><button class="sbtn" data-act="cancelCapture">Cancel</button>
@@ -2372,15 +2402,16 @@ async function handleCapture(uid) {
   if (T.busy) return;
   if (uid === T.emp.badge_uid) { setMsg("bad", "That's your own fob. Tap the other one."); return renderMain(); }
   let r;
-  if (c.kind === "newBadge") {
-    r = await staffCall("station_add_employee", { p_first_name: f.first, p_last_name: f.last || "", p_employee_number: f.number || null,
-          p_new_badge_uid: uid, p_role: f.role || "employee", p_new_pin: f.role && f.role !== "employee" ? f.pin : null });
-    if (!S.staff) return;
-    if (r.ok) return staffDone(`Added ${r.employee.name}`, `Badge ${fmtUid(uid)} is registered${f.role && f.role !== "employee" ? ` as a ${f.role} fob` : ""}. They can use it right away.`, "addEmp", "Add another employee");
-  } else if (c.kind === "newTag") {
-    r = await staffCall("station_add_equipment", { p_name: f.name, p_category_id: f.category, p_tag_uid: uid, p_asset_tag: f.asset || null });
-    if (!S.staff) return;
-    if (r.ok) return staffDone(`Added ${r.equipment.name}`, `Tag ${fmtUid(uid)} is registered. It can be checked out right away.`, "addEqAgain", "Add another");
+  if (c.kind === "newBadge" || c.kind === "newTag") {
+    // A scan comes in as a tag ID made from the barcode; a tap is a real NFC tag ID. Collect either or both, then save.
+    const code = uidToCode(uid), cache = S.saved.cache || { employees: [], equipment: [] };
+    const taken = code ? cache.employees.find((x) => x.barcode === code) || cache.equipment.find((x) => x.barcode === code)
+      : cache.employees.find((x) => x.badge_uid === uid) || cache.equipment.find((x) => x.nfc_uid === uid);
+    if (taken) { beep("bad"); setMsg("bad", `That ${code ? "barcode" : c.kind === "newBadge" ? "badge" : "tag"} already belongs to ${taken.name}. Use a different one.`); return renderMain(); }
+    if (code) c.code = code; else c.uid = uid;
+    beep("ok"); setMsg();
+    if (c.uid && c.code) return saveCapture();
+    return renderMain();
   } else if (c.kind === "item") {
     T.busy = true; renderMain();
     try { r = await call("station_item_status", { p_device_key: S.saved.deviceKey, p_equipment_uid: uid }); } catch { r = { ok: false, error: "offline" }; }
@@ -2396,6 +2427,27 @@ async function handleCapture(uid) {
         `${emp ? "Badge" : "Tag"} ${fmtUid(uid)} is registered. The old one no longer works.`, null, null);
     }
   }
+  beep("bad"); setMsg("bad", staffError(r)); renderMain();
+}
+// Saves a new employee or item with what was captured: an NFC tag, a barcode, or both.
+async function saveCapture() {
+  const T = S.staff, c = T.capture, f = T.form; if (!c || T.busy || !(c.uid || c.code)) return;
+  // Barcode only: send it as the tag ID made from it (works on every server version; the server stores the barcode).
+  const uid = c.uid || barcodeUid(c.code), both = !!(c.uid && c.code);
+  const what = [c.uid && `${c.kind === "newBadge" ? "Badge" : "Tag"} ${fmtUid(c.uid)}`, c.code && `barcode ${c.code}`].filter(Boolean).join(" and ");
+  let r;
+  if (c.kind === "newBadge") {
+    r = await staffCall("station_add_employee", { p_first_name: f.first, p_last_name: f.last || "", p_employee_number: f.number || null,
+          p_new_badge_uid: uid, ...(both ? { p_new_barcode: c.code } : {}), p_role: f.role || "employee", p_new_pin: f.role && f.role !== "employee" ? f.pin : null });
+    if (!S.staff) return;
+    if (r.ok) return staffDone(`Added ${r.employee.name}`, `${what[0].toUpperCase() + what.slice(1)} ${both ? "are" : "is"} registered${f.role && f.role !== "employee" ? ` as a ${f.role} fob` : ""}. They can use it right away.`, "addEmp", "Add another employee");
+  } else {
+    r = await staffCall("station_add_equipment", { p_name: f.name, p_category_id: f.category, p_tag_uid: uid, ...(both ? { p_barcode: c.code } : {}), p_asset_tag: f.asset || null });
+    if (!S.staff) return;
+    if (r.ok) return staffDone(`Added ${r.equipment.name}`, `${what[0].toUpperCase() + what.slice(1)} ${both ? "are" : "is"} registered. It can be checked out right away.`, "addEqAgain", "Add another");
+  }
+  // Whichever one clashed is dropped, so the other can still be used.
+  if (/^barcode/.test(r.error || "")) c.code = null; else if (/badge|tag/.test(r.error || "")) c.uid = null;
   beep("bad"); setMsg("bad", staffError(r)); renderMain();
 }
 function staffDone(title, text, again, againLabel) {
@@ -2580,6 +2632,8 @@ document.addEventListener("click", async (e) => {
   if (a === "unpairNo") { T.confirmUnpair = false; return renderMain(); }
   if (a === "checkout") { const emp = T.emp; S.staff = null; return startSession({ id: emp.id, name: emp.name, badge_uid: emp.badge_uid, role: emp.role }); }
   if (a === "primary") return staffPrimary();
+  if (a === "saveCapture") return saveCapture();
+  if (a === "clearCapture") { T.capture.uid = null; T.capture.code = null; setMsg(); return renderMain(); }
   if (a === "cancelCapture") {
     const back = T.capture.kind === "item" || T.capture.kind === "newBadge" || T.capture.kind === "newTag" ? null : T.view;
     if (T.capture.kind === "newBadge") { T.view = "addEmp"; T.field = "first"; }

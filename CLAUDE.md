@@ -23,7 +23,7 @@ See README.md for the full product description.
 - Push to `main` → GitHub Actions runs `tests/run.sh db` + `ui`, then deploys app + console to Cloudflare Pages
   (projects `sonoranpoint-app`, `sonoranpoint-console`, `sonoranpoint-site`).
 - Database changes are NOT automatic. Add a new migration file (never edit one already run on the live
-  project), then tell Dez to run it in the Supabase SQL editor. Migrations 1–28 have been run (checked 2026-10-22;
+  project), then tell Dez to run it in the Supabase SQL editor. Migrations 1–28 have been run, 29 (station barcodes) not yet (checked 2026-10-22;
   ask if unsure). Alert emails are live (Resend key in Vault, first send
   confirmed 2026-10-20).
 - Station changes reach the Pis by themselves: every deploy publishes `app.sonoranpoint.com/station-release/latest.json` + a zip
@@ -83,6 +83,9 @@ See README.md for the full product description.
   made from it (`private.barcode_uid`: "B0C0DE" + hex of the code), so station functions take scans unchanged. Station: a
   scanner types like a keyboard; `scanToUid` maps the code to the record's NFC uid via the cache (offline too), else
   `barcodeUid`. Dashboard hides made-up IDs (`realTag`) and shows the barcode; `DB.hasBarcode` hides the fields before 24 runs.
+- Adding at the station (migration 29): the capture screen takes an NFC tap, a barcode scan, or both (`saveCapture`; saves on its own once
+  it has both, else the Save button). Barcode only is sent as the made-up tag ID (works on any server version); both sends
+  `p_new_barcode` / `p_barcode` to `station_add_employee` / `station_add_equipment` (`private.barcode_owner` checks clashes).
 
 ## Dashboard roles
 - Stored as viewer/supervisor/admin/owner (`org_members.role`, RLS, functions) but shown as View Only / Supervisor / Manager / Admin

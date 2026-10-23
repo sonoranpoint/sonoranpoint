@@ -474,6 +474,20 @@ select pg_temp.ok(station_add_equipment(:'key', '04BA0000000A', '2468', 'Radio 1
                   'tag already on another item -> says which');
 select pg_temp.ok(station_add_equipment(:'key', '04BA0000000A', '2468', 'Radio 11', :'radio_cat', '04BA00000001')->>'error' = 'tag_is_badge',
                   'can''t use someone''s badge as an equipment tag');
+-- Barcodes at the station (migration 29): a tag, a barcode, or both
+select station_add_equipment(:'key', '04BA0000000A', '2468', 'Radio 12', :'radio_cat', '04DE000512', null, 'rad-012')->>'ok' as a1 \gset
+select station_add_equipment(:'key', '04BA0000000A', '2468', 'Radio 13', :'radio_cat', null, null, 'RAD-013')->>'ok' as a2 \gset
+select pg_temp.ok(station_add_equipment(:'key', '04BA0000000A', '2468', 'Radio 14', :'radio_cat', '04DE000514', null, 'RAD-012')->>'error' = 'barcode_in_use', 'a barcode already on an item is refused');
+select pg_temp.ok(station_add_equipment(:'key', '04BA0000000A', '2468', 'Radio 14', :'radio_cat', null, null, null)->>'error' = 'no_tag', 'neither a tag nor a barcode: refused');
+select station_add_employee(:'key', '04BA0000000A', '2468', 'Bo', 'Lane', null, '04BA000000E1', 'employee', null, 'emp-551')->>'ok' as a3 \gset
+select pg_temp.ok(station_add_employee(:'key', '04BA0000000A', '2468', 'Cy', 'Lane', null, null, 'employee', null, 'EMP-551')->>'error' = 'barcode_in_use', 'a badge barcode already in use is refused');
+select station_add_employee(:'key', '04BA0000000A', '2468', 'Cy', 'Lane', null, 'B0C0DE454D502D353532')->>'ok' as a4 \gset
+reset role;
+select pg_temp.ok(:'a1' = 'true' and (select nfc_uid || '|' || barcode from equipment where name = 'Radio 12') = '04DE000512|RAD-012', 'add an item with its NFC tag and its barcode');
+select pg_temp.ok(:'a2' = 'true' and (select barcode = 'RAD-013' and nfc_uid = private.barcode_uid('RAD-013') from equipment where name = 'Radio 13'), 'barcode only: the tag ID is made from it');
+select pg_temp.ok(:'a3' = 'true' and (select badge_uid || '|' || barcode from employees where first_name = 'Bo') = '04BA000000E1|EMP-551', 'add someone with an NFC badge and a badge barcode');
+select pg_temp.ok(:'a4' = 'true' and (select barcode from employees where first_name = 'Cy') = 'EMP-552', 'older stations: a scan sent as the tag ID still stores the barcode');
+set role anon;
 
 select pg_temp.ok(station_set_item_status(:'key', '04BA0000000A', '2468', '04DE000510', 'lost')->'equipment'->>'status' = 'lost',
                   'manager marks Radio 10 lost from the station');

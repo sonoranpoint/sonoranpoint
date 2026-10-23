@@ -50,6 +50,19 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   E("endSummary()"); await sleep(100); E(`handleTag('${jordan}')`); await sleep(400); E(`handleTag('${tag}')`);
   check(await until(() => /Checked out/.test(text()) && /Look it over before you use it/.test(text())), "a damaged item can still be checked out, with a heads-up", text());
   check(await until(() => psql(`select count(*) from transactions t join equipment q on q.id = t.equipment_id where q.nfc_uid='${tag}' and 'reported_problem' = any(t.flags)`) === "1"), "and the checkout is flagged in the database");
+  // Add an item at the station with its NFC tag and its barcode (live)
+  E("endSummary && endSummary(); S.session && endSession()"); await sleep(200);
+  E("handleTag('04BA0000000A')"); await sleep(500);
+  E("$('#staffBtn').click()"); await sleep(150);
+  for (const d of "2468") { E(`$('#screen [data-pin="${d}"]').click()`); await sleep(10); }
+  E(`$('#screen [data-pin="OK"]').click()`);
+  check(await until(() => E("S.screen") === "staff" && /Add employee/.test(text())), "manager fob + PIN opens the admin menu (live)", text());
+  E(`$('#screen [data-act="addEq"]').click()`); await sleep(100);
+  E(`$('#screen [data-pick^="cat:"]').click()`); await sleep(100); E(`$('#screen [data-act="primary"]').click()`); await sleep(100);
+  const nm = E("S.staff.form.name");
+  E("handleTag(scanToUid('LIVE-BC-1'))"); await sleep(150); E("handleTag('04DE0000BC01')");
+  check(await until(() => psql(`select nfc_uid || '|' || barcode from equipment where name = '${nm}'`) === "04DE0000BC01|LIVE-BC-1" && /Added/.test(text())),
+        "tag + barcode: saved with both on the server (live)", text());
   check(errors.length === 0, "no script errors " + errors.join(";"));
   b.pg.kill(); b.server.close(); process.exit();
 })().catch((e) => { console.log("CRASH", e.stack); process.exit(1); });
