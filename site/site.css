@@ -104,6 +104,16 @@ footer.foot .wrap { display: flex; gap: 20px 32px; flex-wrap: wrap; align-items:
 footer.foot nav { display: flex; gap: 20px; flex-wrap: wrap; margin-left: auto; }
 footer.foot a { color: var(--muted); }
 
+/* Tap it or scan it */
+.ways { list-style: none; padding: 0; margin: 40px 0 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 32px; }
+.ways li { display: grid; align-content: start; gap: 8px; }
+.ways svg { width: 44px; height: 44px; fill: none; stroke: var(--link); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; margin-bottom: 6px; }
+.ways b { font-family: var(--display); font-size: 21px; font-weight: 600; line-height: 1.2; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.ways span { color: var(--muted); }
+.soon { font: 700 12.5px/1 var(--body); font-style: normal; color: #2a1300; background: var(--sun); border-radius: 99px; padding: 5px 10px; }
+@media (max-width: 900px) { .ways { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .ways { grid-template-columns: 1fr; gap: 24px; } }
+
 /* Example company tree */
 .orgtree { margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 22px 26px; font-size: 16px; }
 .orgtree figcaption { color: var(--muted); font-size: 14px; margin-bottom: 10px; }
