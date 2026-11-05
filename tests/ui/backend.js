@@ -33,15 +33,27 @@ function resetDb() {
 }
 
 const outbox = [];   // emails "sent" by the mock auth (magic links, resets)
+// Two-step sign-in (authenticator app): factors per user, real TOTP codes (RFC 6238, 30 s, 6 digits).
+const factors = {};   // user id -> [{ id, secret, status, friendly_name }]
+const B32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+const b32decode = (s) => { let bits = ""; for (const ch of s.replace(/=+$/, "")) bits += B32.indexOf(ch).toString(2).padStart(5, "0");
+  return Buffer.from(bits.match(/.{8}/g).map((b) => parseInt(b, 2))); };
+function totp(secret, step = Math.floor(Date.now() / 30000)) {
+  const msg = Buffer.alloc(8); msg.writeBigUInt64BE(BigInt(step));
+  const h = crypto.createHmac("sha1", b32decode(secret)).update(msg).digest(), o = h[h.length - 1] & 15;
+  return String(((h.readUInt32BE(o) & 0x7fffffff) % 1e6)).padStart(6, "0");
+}
+const userFactors = (id) => (factors[id] || []).map((f) => ({ id: f.id, factor_type: "totp", status: f.status, friendly_name: f.friendly_name, created_at: f.created_at, updated_at: f.created_at }));
 function userBy(field, v) {
   const row = psql(`select json_build_object('id', id, 'email', email, 'user_metadata', coalesce(raw_user_meta_data, '{}'::jsonb)) from auth.users where ${field} = '${String(v).replace(/'/g, "''")}'`);
   return row ? JSON.parse(row) : null;
 }
-function session(u) {
-  const exp = Math.floor(Date.now() / 1000) + 3600;
-  const user = { id: u.id, aud: "authenticated", role: "authenticated", email: u.email, user_metadata: u.user_metadata, app_metadata: {} };
-  return { access_token: sign({ sub: u.id, role: "authenticated", aud: "authenticated", email: u.email, exp }), token_type: "bearer",
-           expires_in: 3600, expires_at: exp, refresh_token: "r-" + u.id, user };
+function session(u, aal = "aal1") {
+  const exp = Math.floor(Date.now() / 1000) + 3600, now = Math.floor(Date.now() / 1000);
+  const user = { id: u.id, aud: "authenticated", role: "authenticated", email: u.email, user_metadata: u.user_metadata, app_metadata: {}, factors: userFactors(u.id) };
+  const amr = [{ method: "password", timestamp: now }, ...(aal === "aal2" ? [{ method: "totp", timestamp: now }] : [])];
+  return { access_token: sign({ sub: u.id, role: "authenticated", aud: "authenticated", email: u.email, exp, aal, amr, session_id: "s-" + u.id }), token_type: "bearer",
+           expires_in: 3600, expires_at: exp, refresh_token: "r-" + u.id + "|" + aal, user };
 }
 const send = (res, code, body) => { res.writeHead(code, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "*", "Access-Control-Allow-Methods": "*" }); res.end(body === undefined ? "" : JSON.stringify(body)); };
@@ -53,7 +65,7 @@ function auth(req, res, body, url) {
     if (!u || body.password !== "pass1234") return send(res, 400, { error: "invalid_grant", error_description: "Invalid login credentials", code: "invalid_credentials", msg: "Invalid login credentials" });
     return send(res, 200, session(u));
   }
-  if (p === "/token" && q.get("grant_type") === "refresh_token") { const u = userBy("id", (body.refresh_token || "").slice(2)); return u ? send(res, 200, session(u)) : send(res, 400, { error: "invalid_grant" }); }
+  if (p === "/token" && q.get("grant_type") === "refresh_token") { const [id, aal] = (body.refresh_token || "").slice(2).split("|"); const u = userBy("id", id); return u ? send(res, 200, session(u, aal || "aal1")) : send(res, 400, { error: "invalid_grant" }); }
   if (p === "/otp") {
     let u = userBy("email", (body.email || "").toLowerCase());
     if (!u && body.create_user === false) return send(res, 422, { code: "otp_disabled", msg: "Signups not allowed for otp" });
@@ -70,6 +82,24 @@ function auth(req, res, body, url) {
     return send(res, 200, session(userBy("id", claims.sub)).user);
   }
   if (p === "/logout") return send(res, 204);
+  // Two-step sign-in: enroll, challenge, verify, unenroll (what supabase-js calls for mfa.*)
+  const fm = p.match(/^\/factors(?:\/([^/]+))?(?:\/(challenge|verify))?$/);
+  if (fm && claims?.sub) {
+    const list = (factors[claims.sub] ||= []), f = fm[1] ? list.find((x) => x.id === fm[1]) : null;
+    if (!fm[1] && req.method === "POST") {
+      const secret = Array.from(crypto.randomBytes(20), (b) => B32[b % 32]).join(""), id = crypto.randomUUID();
+      list.push({ id, secret, status: "unverified", friendly_name: body.friendly_name || "", created_at: new Date().toISOString() });
+      return send(res, 200, { id, type: "totp", friendly_name: body.friendly_name, totp: { qr_code: "<svg xmlns='http://www.w3.org/2000/svg'/>", secret, uri: `otpauth://totp/x?secret=${secret}` } });
+    }
+    if (!f) return send(res, 404, { code: "mfa_factor_not_found", msg: "Factor not found" });
+    if (fm[2] === "challenge") return send(res, 200, { id: crypto.randomUUID(), type: "totp", expires_at: Math.floor(Date.now() / 1000) + 300 });
+    if (fm[2] === "verify") {
+      const step = Math.floor(Date.now() / 30000);
+      if (![step - 1, step, step + 1].some((s) => totp(f.secret, s) === String(body.code))) return send(res, 422, { code: "mfa_verification_failed", msg: "Invalid TOTP code entered" });
+      f.status = "verified"; return send(res, 200, session(userBy("id", claims.sub), "aal2"));
+    }
+    if (req.method === "DELETE") { factors[claims.sub] = list.filter((x) => x !== f); return send(res, 200, { id: f.id }); }
+  }
   if (p === "/verify") { const u = userBy("id", JSON.parse(Buffer.from((q.get("token") || "..").split(".")[1], "base64url")).sub); return send(res, 200, session(u)); }
   send(res, 404, { msg: "not mocked: " + p });
 }
@@ -94,7 +124,7 @@ function start(port = 54321) {
       send(res, 404, {});
     });
   });
-  return new Promise((ok) => server.listen(port, "127.0.0.1", () => setTimeout(() => ok({ server, pg, url: `http://127.0.0.1:${port}`, key: ANON, outbox, psql, sign }), 1200)));
+  return new Promise((ok) => server.listen(port, "127.0.0.1", () => setTimeout(() => ok({ server, pg, url: `http://127.0.0.1:${port}`, key: ANON, outbox, psql, sign, factors, totp }), 1200)));
 }
-module.exports = { start, resetDb, outbox, psql, ANON };
+module.exports = { start, resetDb, outbox, psql, ANON, factors, totp };
 if (require.main === module) start().then((b) => console.log("backend up", b.url));

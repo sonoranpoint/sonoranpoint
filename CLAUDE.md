@@ -23,7 +23,7 @@ See README.md for the full product description.
 - Push to `main` → GitHub Actions runs `tests/run.sh db` + `ui`, then deploys app + console to Cloudflare Pages
   (projects `sonoranpoint-app`, `sonoranpoint-console`, `sonoranpoint-site`).
 - Database changes are NOT automatic. Add a new migration file (never edit one already run on the live
-  project), then tell Dez to run it in the Supabase SQL editor. Migrations 1–28 have been run, 29 (station barcodes) not yet (checked 2026-10-22;
+  project), then tell Dez to run it in the Supabase SQL editor. Migrations 1–28 have been run; 29 (station barcodes) and 30 (console two-step) not confirmed (checked 2026-11-04;
   ask if unsure). Alert emails are live (Resend key in Vault, first send
   confirmed 2026-10-20).
 - Station changes reach the Pis by themselves: every deploy publishes `app.sonoranpoint.com/station-release/latest.json` + a zip
@@ -68,6 +68,13 @@ See README.md for the full product description.
   operator. "Make them a customer" prefills New customer (`S.fromRequest`); creating it marks the lead won and links it.
 - Console live loads use `loadSeq`/`detailSeq` so an older refresh finishing late can't put old data back.
 - Live tests: `tests/ui/backend.js` kills any leftover PostgREST first (a stale one on port 54322 serves an old schema and makes tests flaky).
+
+## Two-step sign-in for the console (migration 30)
+- Console: after password sign-in, `mfaGate()` uses Supabase Auth MFA (TOTP): no verified factor -> `mfa-setup` (QR + key), else `mfa-code`;
+  `mfaVerify` -> `challengeAndVerify` -> `finishSignIn()`. Server: `private.mfa_ok()` (JWT `aal` = aal2, or no JWT at all = SQL editor/tests);
+  `is_platform_operator()` and `require_platform_owner()` need it; `am_platform_operator()` uses `is_platform_member()` so the console
+  can ask for the code. Lost phone: remove the person's MFA factor in the Supabase dashboard (Authentication -> Users).
+- Test auth mock (`tests/ui/backend.js`) does /factors enroll/challenge/verify/unenroll with real TOTP (`b.totp(secret)`).
 
 ## Closing out a customer (migration 25)
 - `platform_close_customer(org)`: status cancelled, stations revoked (not removed), invites deleted, units ready/shipped/installed ->

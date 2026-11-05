@@ -1277,6 +1277,22 @@ function renderAuth() {
       <label>New password<input class="field" type="password" name="password" autocomplete="new-password" minlength="8" required></label>
       <div class="err" role="alert">${esc(A.err)}</div><div class="actions"><button class="btn primary" ${A.busy ? "disabled" : ""}>Save password</button>${S.operator ? `<button type="button" class="btn" data-act="backIn">Cancel</button>` : ""}</div></form>`;
   else if (A.view === "loading") inner = `<p class="muted" style="margin:0">Loading…</p>`;
+  else if (A.view === "mfa-setup") inner = `<form data-form="mfa" class="fgrid" style="grid-template-columns:1fr">
+      <h2 style="margin:0;font-size:20px">Set up two-step sign-in</h2>
+      <p style="margin:0;font-size:14px">The console needs a code from an authenticator app each time you sign in. Use Google Authenticator, Microsoft Authenticator, Authy or your password manager.</p>
+      <ol style="margin:0;padding-left:20px;font-size:14px;display:grid;gap:4px"><li>In the app, add an account and scan this code.</li><li>Type the 6-digit code it shows.</li></ol>
+      <div style="display:grid;place-items:center;background:#fff;border:1px solid #e3e8ef;border-radius:12px;padding:12px"><img src="${esc(A.qr || "")}" alt="QR code for your authenticator app" width="180" height="180" style="width:180px;height:180px"></div>
+      <details style="font-size:13.5px"><summary>Can't scan it?</summary><p style="margin:8px 0 0">Type this key into the app instead:</p><p class="mono" style="margin:4px 0 0;word-break:break-all;user-select:all">${esc(A.secret || "")}</p></details>
+      <label>6-digit code<input class="field mono" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9 ]*" maxlength="7" required style="font-size:20px;letter-spacing:.2em"></label>
+      <div class="err" role="alert">${esc(A.err)}</div>
+      <div class="actions"><button class="btn primary" ${A.busy ? "disabled" : ""}>Turn it on</button><button type="button" class="btn" data-act="signOut">Sign out</button></div></form>`;
+  else if (A.view === "mfa-code") inner = `<form data-form="mfa" class="fgrid" style="grid-template-columns:1fr">
+      <h2 style="margin:0;font-size:20px">Enter your code</h2>
+      <p style="margin:0;font-size:14px">Open your authenticator app and type the 6-digit code for Sonoran Point.</p>
+      <label>6-digit code<input class="field mono" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9 ]*" maxlength="7" required autofocus style="font-size:20px;letter-spacing:.2em"></label>
+      <div class="err" role="alert">${esc(A.err)}</div>
+      <div class="actions"><button class="btn primary" ${A.busy ? "disabled" : ""}>Continue</button><button type="button" class="btn" data-act="signOut">Sign out</button></div>
+      <p class="muted" style="margin:0;font-size:13px">Lost your phone? Ask an owner to reset your two-step sign-in.</p></form>`;
   else inner = `<form data-form="signin" class="fgrid" style="grid-template-columns:1fr">
       <label>Email<input class="field" type="email" name="email" autocomplete="username" required value="${esc(A.email || "")}"></label>
       <label>Password<input class="field" type="password" name="password" autocomplete="current-password"></label>
@@ -1301,9 +1317,41 @@ async function afterSignIn() {
   if (OPINVITE.token) await acceptOpInvite();
   try { S.operator = await rpc("am_platform_operator"); } catch (e) { AUTH.view = "signin"; AUTH.err = nice(e); return renderAuth(); }
   if (!S.operator) { AUTH.view = "denied"; return renderAuth(); }
+  if (!(await mfaGate())) return;
+  return finishSignIn();
+}
+/* Two-step sign-in (authenticator app, Supabase Auth MFA). Required for the console: database update 30 refuses
+   every console function without it. Signed in with password only (aal1) -> enter a code, or set up an app first. */
+async function mfaGate() {
+  const A = AUTH; A.err = "";
+  try {
+    const { data: aal, error } = await sb.auth.mfa.getAuthenticatorAssuranceLevel(); if (error) throw error;
+    if (aal.currentLevel === "aal2") return true;
+    const { data: f, error: e2 } = await sb.auth.mfa.listFactors(); if (e2) throw e2;
+    const ready = (f.totp || []).filter((x) => x.status === "verified");
+    if (ready.length) { A.factor = ready[0].id; A.view = "mfa-code"; renderAuth(); $('[name="code"]')?.focus(); return false; }
+    for (const x of (f.all || []).filter((x) => x.status !== "verified")) await sb.auth.mfa.unenroll({ factorId: x.id }).catch(() => {});   // a setup someone started and didn't finish
+    const { data: en, error: e3 } = await sb.auth.mfa.enroll({ factorType: "totp", issuer: "Sonoran Point", friendlyName: "Authenticator " + new Date().toISOString().slice(0, 16) });
+    if (e3) throw e3;
+    Object.assign(A, { factor: en.id, qr: en.totp.qr_code, secret: en.totp.secret, view: "mfa-setup" }); renderAuth(); $('[name="code"]')?.focus(); return false;
+  } catch (e) { A.view = "signin"; A.err = "Two-step sign-in isn't available right now: " + (e.message || e); renderAuth(); return false; }
+}
+async function mfaVerify(code) {
+  const A = AUTH; code = String(code || "").replace(/\D/g, "");
+  if (code.length !== 6) { A.err = "Enter the 6 digits from your authenticator app."; return renderAuth(); }
+  A.busy = true; A.err = ""; renderAuth();
+  const { error } = await sb.auth.mfa.challengeAndVerify({ factorId: A.factor, code }); A.busy = false;
+  if (error) { A.err = "That code didn't work. Codes change every 30 seconds: try the newest one, and check your phone's clock is set automatically."; renderAuth(); $('[name="code"]')?.focus(); return; }
+  const setup = A.view === "mfa-setup"; Object.assign(A, { qr: null, secret: null, view: "loading" }); renderAuth();
+  const { data } = await sb.auth.getSession(); S.session = data.session;
+  A.justSetUp = setup; await finishSignIn();
+}
+async function finishSignIn() {
+  AUTH.view = "loading"; renderAuth();
   OPERATOR.name = S.session.user.user_metadata?.full_name || S.session.user.email.split("@")[0]; OPERATOR.role = "owner"; OPERATOR.email = S.session.user.email;
   try { const me = await rpc("platform_me"); if (me?.operator) Object.assign(OPERATOR, { name: me.name, role: me.role, email: me.email }); } catch {}   // before the team migration: everyone is an owner
-  if (OPINVITE.joined) { OPINVITE.joined = false; toast(`Welcome, ${OPERATOR.name}`); }
+  const hello = [OPINVITE.joined && `Welcome, ${OPERATOR.name}.`, AUTH.justSetUp && "Two-step sign-in is on."].filter(Boolean).join(" ");
+  OPINVITE.joined = false; AUTH.justSetUp = false; if (hello) toast(hello);
   try { await live.load(); } catch (e) { AUTH.view = "signin"; AUTH.err = nice(e); return renderAuth(); }
   S.ready = true; readHash(); if (S.route === "customer") await live.detail(S.id).catch(() => {}); if (S.route === "unit" && S.id !== "new") await live.hwDetail(S.id).catch(() => {});
   if (S.route === "request" && S.id !== "new") await live.reqDetail(S.id).catch(() => {}); render();
@@ -2345,6 +2393,7 @@ document.addEventListener("submit", async (e) => {
   e.preventDefault();
   const f = e.target, kind = f.dataset.form, fd = new FormData(f), d = Object.fromEntries(fd);
   if (kind === "signin" || kind === "newpass") return authAction(kind, f);
+  if (kind === "mfa") return mfaVerify(d.code);
   if (S.busy) return; S.busy = true; f.querySelectorAll("button").forEach((b) => (b.disabled = true));
   try { await onSubmit(f, kind, fd, d); } finally { S.busy = false; f.querySelectorAll("button").forEach((b) => (b.disabled = false)); }
 });

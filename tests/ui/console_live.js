@@ -41,6 +41,12 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   P = open();
   await P.until(() => P.doc.querySelector('[data-form="signin"]'));
   P.type('[name=email]', "g.ryan@sonoranpoint.com"); P.type('[name=password]', "pass1234"); await P.submit('[data-form="signin"]');
+  // Two-step sign-in: the first time, set up an authenticator app
+  check(await P.until(() => /Set up two-step sign-in/.test(P.text()) && P.E("AUTH.secret")), "first sign-in: asks to set up an authenticator app", P.text());
+  check(P.E("S.ready") !== true && P.doc.querySelector('.panel img[alt^="QR code"]'), "nothing loads until it's set up; shows a QR code to scan");
+  P.type('[name=code]', "000000"); await P.submit('[data-form="mfa"]');
+  check(await P.until(() => /That code didn't work/.test(P.text())), "a wrong code is refused");
+  P.type('[name=code]', b.totp(P.E("AUTH.secret"))); await P.submit('[data-form="mfa"]');
   check(await P.until(() => /Demo Air Services/.test(P.text()) && /Customers/.test(P.text())), "operator signs in and sees real customers", P.text());
   check(/Dez/.test(P.text()) && /Sign out/.test(P.text()) && !/Demo data/.test(P.text()), "shows who's signed in, no demo label", P.E("JSON.stringify({ready: S.ready, view: AUTH.view, route: S.route})") + " || " + P.doc.querySelector("#app").textContent.slice(0, 300));
   // create a customer
@@ -112,6 +118,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const Q = open(omail.redirect_to);
   await Q.until(() => Q.doc.querySelector('[data-form="signin"]'));
   Q.type('[name=email]', "casey@sonoranpoint.example"); Q.type('[name=password]', "pass1234"); await Q.submit('[data-form="signin"]');
+  check(await Q.until(() => /Set up two-step sign-in/.test(Q.text()) && Q.E("AUTH.secret")), "a new team member sets up their authenticator too", Q.text());
+  Q.type('[name=code]', b.totp(Q.E("AUTH.secret"))); await Q.submit('[data-form="mfa"]');
   check(await Q.until(() => /Demo Air Services/.test(Q.text()) && /Welcome, Casey/.test(Q.text())), "invited person signs in and is in", Q.text());
   check(/Casey/.test(Q.doc.querySelector(".me").textContent) && /Operator/.test(Q.doc.querySelector(".me").textContent) && !/opinvite/.test(Q.dom.window.location.href), "rail shows their name and role; link cleaned up");
   Q.dom.window.location.hash = "team";
@@ -176,6 +184,13 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   // sign out
   await P.click('[data-act="signOut"]');
   check(await P.until(() => P.doc.querySelector('[data-form="signin"]')), "sign out");
+  // Next sign-in: just the code
+  P.type('[name=email]', "g.ryan@sonoranpoint.com"); P.type('[name=password]', "pass1234"); await P.submit('[data-form="signin"]');
+  check(await P.until(() => /Enter your code/.test(P.text())), "next sign-in asks for the code from the app", P.text());
+  const dez = b.psql("select id from auth.users where email = 'g.ryan@sonoranpoint.com'");
+  P.type('[name=code]', b.totp(b.factors[dez][0].secret)); await P.submit('[data-form="mfa"]');
+  check(await P.until(() => /Demo Air Services/.test(P.text()) && P.E("S.ready") === true), "right code: back in", P.text());
+  await P.click('[data-act="signOut"]'); await P.until(() => P.doc.querySelector('[data-form="signin"]'));
   check(P.errors.length === 0, "no script errors " + P.errors.join(";"));
   b.pg.kill(); b.server.close(); process.exit();
 })();

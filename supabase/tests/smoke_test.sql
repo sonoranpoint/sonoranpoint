@@ -1331,6 +1331,21 @@ select set_config('request.jwt.claim.sub', '99999999-0000-0000-0000-000000000009
 select pg_temp.ok((platform_request(:sreq))->'request'->>'assigned_name' = 'Dez' and jsonb_array_length((platform_request(:sreq))->'events') = 5, 'the console reads one request and its history');
 reset role;
 
+\echo '--- Two-step sign-in for the console (migration 30)'
+set role authenticated;
+select set_config('request.jwt.claim.sub', '99999999-0000-0000-0000-000000000009', false) \g /dev/null
+select set_config('request.jwt.claims', '{"sub":"99999999-0000-0000-0000-000000000009","aal":"aal1"}', false) \g /dev/null
+select pg_temp.ok(am_platform_operator(), 'password only: the console still knows you''re on the team (so it can ask for the code)');
+select pg_temp.ok(pg_temp.raises($$select platform_customers()$$), 'password only: console functions refuse');
+select pg_temp.ok(pg_temp.raises($$select platform_team()$$), 'password only: owner-only functions refuse');
+select set_config('request.jwt.claims', '{"sub":"99999999-0000-0000-0000-000000000009","aal":"aal2"}', false) \g /dev/null
+select pg_temp.ok(jsonb_array_length(platform_customers()) > 0, 'with the authenticator code: the console works');
+select set_config('request.jwt.claims', '{"sub":"aaaaaaaa-0000-0000-0000-000000000001","aal":"aal1"}', false) \g /dev/null
+select set_config('request.jwt.claim.sub', 'aaaaaaaa-0000-0000-0000-000000000001', false) \g /dev/null
+select pg_temp.ok(not am_platform_operator() and list_members('00000000-0000-0000-0000-00000000d3e0') ? 'members', 'customers don''t need it for the dashboard');
+select set_config('request.jwt.claims', '', false) \g /dev/null
+reset role;
+
 \echo '--- Deleting a company removes all its data'
 delete from organizations where slug = 'demo';
 select pg_temp.ok((select count(*) from equipment) = 0 and (select count(*) from transactions) = 0, 'company delete cascades cleanly');
