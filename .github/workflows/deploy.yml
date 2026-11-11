@@ -2,6 +2,7 @@
 # Needs two repository secrets (Settings → Secrets and variables → Actions):
 #   CLOUDFLARE_API_TOKEN   a Cloudflare API token with "Account · Cloudflare Pages · Edit"
 #   CLOUDFLARE_ACCOUNT_ID  your Cloudflare account ID
+#   STATION_SIGNING_KEY    the private key that signs station updates (stations only install signed ones)
 # Database changes (supabase/migrations) are NOT applied here: run new ones in the Supabase SQL editor.
 name: Test and deploy
 
@@ -53,6 +54,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build
         run: python3 deploy/build.py
+        env:
+          STATION_SIGNING_KEY: ${{ secrets.STATION_SIGNING_KEY }}   # signs the station release (see deploy/build.py)
       - name: Publish app.sonoranpoint.com
         uses: cloudflare/wrangler-action@v3
         with:

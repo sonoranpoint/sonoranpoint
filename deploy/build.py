@@ -12,7 +12,7 @@
                   -> what stations update themselves to (station/pi/station_updater.py checks it)
                      (latest.json is copied to the console too, so it can show the newest version)
 """
-import hashlib, io, json, pathlib, re, shutil, zipfile
+import base64, hashlib, io, json, os, pathlib, re, shutil, subprocess, tempfile, zipfile
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 DIST = ROOT / "deploy" / "dist"
@@ -68,6 +68,7 @@ def build():
     for f in brand:
         shutil.copy(ROOT / "brand" / f, st / "brand" / f)
     shutil.copy(ROOT / "station" / "pi" / "station_updater.py", st / "station_updater.py")
+    if PUBLIC_KEY.exists(): shutil.copy(PUBLIC_KEY, st / "release_key.pub")
     # The release stations download: just the app (index.html + brand/), zipped with fixed dates.
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
@@ -78,12 +79,40 @@ def build():
     rel_dir = DIST / "app" / "station-release"; rel_dir.mkdir()
     name = f"station-{h.hexdigest()[:8]}.zip"
     (rel_dir / name).write_bytes(data)
-    manifest = json.dumps({"version": version, "file": name, "sha256": hashlib.sha256(data).hexdigest(), "size": len(data)}, indent=2)
+    rel = {"version": version, "file": name, "sha256": hashlib.sha256(data).hexdigest(), "size": len(data)}
+    sig = sign_release(rel)
+    if sig: rel["sig"] = sig
+    manifest = json.dumps(rel, indent=2)
     (rel_dir / "latest.json").write_text(manifest)
     (DIST / "console" / "station-release").mkdir(); (DIST / "console" / "station-release" / "latest.json").write_text(manifest)
     print("station", version)
     build_site()
     print("built", ", ".join(str(p.relative_to(ROOT)) for p in sorted(DIST.iterdir())))
+
+# Station releases are signed (Ed25519) so a station only installs what we published. The private key is the
+# STATION_SIGNING_KEY secret in GitHub (PEM); the public key is station/pi/release_key.pub, installed on each Pi.
+PUBLIC_KEY = ROOT / "station" / "pi" / "release_key.pub"
+
+def release_message(rel):
+    return f"sonoranpoint-station-release\n{rel['version']}\n{rel['file']}\n{rel['sha256']}\n{rel['size']}\n".encode()
+
+def sign_release(rel):
+    key = os.environ.get("STATION_SIGNING_KEY", "").strip()
+    if not key:
+        if PUBLIC_KEY.exists() and os.environ.get("CI"):
+            raise SystemExit("STATION_SIGNING_KEY is missing: stations would refuse this release. Add it under GitHub Settings -> Secrets.")
+        print("station release NOT signed (no STATION_SIGNING_KEY)")
+        return None
+    with tempfile.TemporaryDirectory() as d:
+        kf, mf, sf = pathlib.Path(d, "k.pem"), pathlib.Path(d, "m"), pathlib.Path(d, "s")
+        kf.write_text(key + "\n"); os.chmod(kf, 0o600); mf.write_bytes(release_message(rel))
+        subprocess.run(["openssl", "pkeyutl", "-sign", "-inkey", str(kf), "-rawin", "-in", str(mf), "-out", str(sf)], check=True, capture_output=True)
+        sig = sf.read_bytes()
+        if PUBLIC_KEY.exists():   # the secret must match the key the stations have
+            r = subprocess.run(["openssl", "pkeyutl", "-verify", "-pubin", "-inkey", str(PUBLIC_KEY), "-rawin", "-in", str(mf), "-sigfile", str(sf)], capture_output=True)
+            if r.returncode != 0:
+                raise SystemExit("STATION_SIGNING_KEY doesn't match station/pi/release_key.pub")
+    return base64.b64encode(sig).decode()
 
 SITE_HEADERS = """/*
   X-Frame-Options: SAMEORIGIN

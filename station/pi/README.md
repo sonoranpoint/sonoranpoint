@@ -20,6 +20,8 @@ sudo cp -r index.html brand "/opt/sp-station/releases/$VER/"
 sudo ln -sfn "releases/$VER" /opt/sp-station/current
 sudo chown -R sp-station: /opt/sp-station
 sudo install -m 755 station_updater.py /usr/local/bin/station-updater
+# Only install updates signed by Sonoran Point (the key that checks the signature):
+[ -f release_key.pub ] && sudo install -m 644 release_key.pub /opt/sp-station/release_key.pub
 sudo tee /etc/systemd/system/station-updater.service >/dev/null <<'UNIT'
 [Unit]
 Description=Equipment station app server and updater
@@ -44,6 +46,10 @@ Then point the kiosk at it (for example in `~/.config/labwc/autostart` or your a
 ```bash
 chromium-browser --kiosk --noerrdialogs --disable-session-crashed-bubble --check-for-update-interval=31536000 http://localhost/
 ```
+
+**Signed updates.** Every release is signed with Sonoran Point's private key (the `STATION_SIGNING_KEY` secret in GitHub).
+With `/opt/sp-station/release_key.pub` installed, the updater refuses anything not signed with it, so even someone who
+got into the website hosting couldn't push their own code to stations.
 
 **How updates work.** Every 30 minutes the updater checks `https://app.sonoranpoint.com/station-release/latest.json`
 (published by every deploy). A new version downloads in the background, is checked against its SHA-256 and kept

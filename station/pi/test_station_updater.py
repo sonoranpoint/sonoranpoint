@@ -83,6 +83,38 @@ ok = json.loads(urllib.request.urlopen(urllib.request.Request(base + "/update/ok
 check(r["staged"] == "G" and r2["ok"] and ok["ok"] and u.load_state().get("waiting") is None and b'"G"' in get("/").read(), "check, apply and OK over HTTP")
 check(sorted(os.listdir(os.path.join(opt, "releases"))) == ["B", "G"], "old versions are cleaned up (keeps the one on screen and the one before)")
 
+# Signed releases: with our public key installed, only releases signed with the matching private key install.
+import subprocess
+keys = tempfile.mkdtemp()
+def keypair(name):
+    priv, pub = os.path.join(keys, name + ".pem"), os.path.join(keys, name + ".pub")
+    subprocess.run(["openssl", "genpkey", "-algorithm", "ed25519", "-out", priv], check=True, capture_output=True)
+    subprocess.run(["openssl", "pkey", "-in", priv, "-pubout", "-out", pub], check=True, capture_output=True)
+    return priv, pub
+ours, ours_pub = keypair("ours"); theirs, _ = keypair("theirs")
+bspec = importlib.util.spec_from_file_location("build", os.path.join(HERE, "..", "..", "deploy", "build.py")); build = importlib.util.module_from_spec(bspec); bspec.loader.exec_module(build)
+def signed(version, key):
+    release(srv_dir, version)
+    m = json.load(open(os.path.join(srv_dir, "latest.json")))
+    os.environ["STATION_SIGNING_KEY"] = open(key).read()
+    build.PUBLIC_KEY = build.pathlib.Path(keys, "none.pub")   # no check against the repo's key here
+    m["sig"] = build.sign_release(m); del os.environ["STATION_SIGNING_KEY"]
+    json.dump(m, open(os.path.join(srv_dir, "latest.json"), "w")); return m
+u.KEY_FILE = ours_pub
+release(srv_dir, "H")
+check(u.check() is None and "isn't signed" in u.status()["error"] and not os.path.exists(os.path.join(opt, "releases", "H")), "with our key installed, an unsigned release is refused")
+signed("I", theirs)
+check(u.check() is None and "isn't signed" in u.status()["error"], "a release signed with some other key is refused")
+m = signed("J", ours); m["sha256"] = "0" * 64; json.dump(m, open(os.path.join(srv_dir, "latest.json"), "w"))
+check(u.check() is None and "isn't signed" in u.status()["error"], "changing anything in signed release info breaks the signature")
+signed("K", ours)
+check(u.check() == "K", "a release signed by the build with our key installs")
+import builtins
+real_import = builtins.__import__
+builtins.__import__ = lambda n, *a, **k: (_ for _ in ()).throw(ImportError()) if n.startswith("cryptography") else real_import(n, *a, **k)
+check(u.signed_by_us(m) is False and u.signed_by_us(json.load(open(os.path.join(srv_dir, "latest.json")))) is True, "without the cryptography library it checks with the openssl command")
+builtins.__import__ = real_import
+
 web.shutdown(); srv.shutdown()
 print("ALL PASSED" if not fails else f"{fails} FAILED")
 sys.exit(1 if fails else 0)

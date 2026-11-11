@@ -24,7 +24,7 @@ const open = (file, pre, url) => new JSDOM("<!doctype html><html><body>" + pre +
   check(Object.keys(kept).includes("demoServer.v2") && /Tap your badge/.test(st2.window.document.querySelector("#screen").textContent) && /Northwind/.test(st2.window.document.querySelector("#screen").textContent)
         && !/Not set up/.test(st2.window.document.querySelector("#screen").textContent), "coming back to the demo station: set up again, not stuck on \"Not set up yet\"");
   // Links between the site's pages and to its images all exist.
-  const site = path.join(ROOT, "site"); const pages = ["index.html", "help/index.html", "try/index.html", "contact/index.html"];
+  const site = path.join(ROOT, "site"); const pages = ["index.html", "help/index.html", "try/index.html", "contact/index.html", "security/index.html"];
   const missing = [];
   for (const p of pages) {
     const html = fs.readFileSync(path.join(site, p), "utf8");

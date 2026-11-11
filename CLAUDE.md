@@ -16,6 +16,7 @@ See README.md for the full product description.
   `sp.theme`, the dashboard's key; nothing saved = follow the device).
   Contact form: `site/contact/` posts to `public.submit_contact` (migration 27; anon, honeypot + hourly limits), saved in
   `private.contact_requests` and emailed to every operator with reply-to = sender. The try station clears its own storage on every visit.
+  `site/security/` explains how data is protected (keep it true when security changes); `/.well-known/security.txt` (expires 2027-11-11).
 - `deploy/build.py` — builds `deploy/dist/{app,console,station,site}`; `deploy/email-templates/` — Supabase auth emails
 - `tests/run.sh` — runs everything; `tests/ui/` — jsdom screen tests
 
@@ -31,6 +32,9 @@ See README.md for the full product description.
   Pi serves the app at http://localhost/, downloads/verifies/stages new versions, and the page switches when idle
   (`updater` in station.html; rollback if the page doesn't POST /update/ok within 5 min). Pis set up before the updater was
   installed still need the folder copied by hand once.
+- Signed releases: `deploy/build.py` signs latest.json (Ed25519 over `release_message`, field `sig`) with the `STATION_SIGNING_KEY`
+  GitHub secret (PEM, via openssl). The public half is `station/pi/release_key.pub` (installed on Pis at /opt/sp-station/release_key.pub);
+  with it present the updater refuses unsigned/badly signed releases, and CI fails if the secret is missing or doesn't match.
 - No physical station hardware yet (as of 2026-10-22): the Pi side (updater, NFC service, Wi-Fi helper) is tested only in simulation.
 
 ## Contracts

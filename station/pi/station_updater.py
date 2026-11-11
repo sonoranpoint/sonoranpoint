@@ -11,6 +11,8 @@ Serves the station app to the kiosk browser at http://localhost/ and keeps it up
     it ready ("staged"). Nothing changes on screen yet.
   * The station page asks GET /update/status every minute. When something is staged and nobody is
     using the station, it calls POST /update/apply and reloads: the new version is on screen.
+  * Releases are signed (Ed25519). With a public key installed (release_key.pub in STATION_DIR, or
+    STATION_RELEASE_KEY_FILE), a release without a valid Sonoran Point signature is never downloaded.
   * The new page calls POST /update/ok once it has started. If it doesn't within 5 minutes, the
     updater switches back to the version before and never tries that version again.
 
@@ -22,12 +24,14 @@ Files (STATION_DIR, default /opt/sp-station):
 Listens on 127.0.0.1 only (port 80 by default; STATION_PORT to change).
 Install: station/pi/README.md.  Tests: station/pi/test_station_updater.py.
 """
+import base64
 import hashlib
 import io
 import json
 import os
 import random
 import shutil
+import subprocess
 import tempfile
 import threading
 import time
@@ -43,6 +47,7 @@ CHECK_EVERY = int(os.environ.get("STATION_CHECK_EVERY", str(30 * 60)))   # secon
 FIRST_CHECK = int(os.environ.get("STATION_FIRST_CHECK", "60"))
 OK_WITHIN = int(os.environ.get("STATION_OK_WITHIN", str(5 * 60)))        # seconds for a new version to say it started
 MAX_SIZE = 50 * 1024 * 1024
+KEY_FILE = os.environ.get("STATION_RELEASE_KEY_FILE") or os.path.join(DIR, "release_key.pub")
 TYPES = {".html": "text/html; charset=utf-8", ".png": "image/png", ".ico": "image/x-icon", ".svg": "image/svg+xml",
          ".js": "text/javascript", ".css": "text/css", ".json": "application/json", ".woff2": "font/woff2"}
 
@@ -100,6 +105,43 @@ def fetch(url, limit):
     return data
 
 
+def release_message(m):
+    return f"sonoranpoint-station-release\n{m['version']}\n{m['file']}\n{m['sha256']}\n{m['size']}\n".encode()
+
+
+def signed_by_us(m):
+    """True when the release info carries a valid signature from our release key (or no key is installed yet)."""
+    try:
+        with open(KEY_FILE, "rb") as f:
+            pem = f.read()
+    except FileNotFoundError:
+        return True
+    try:
+        sig = base64.b64decode(m.get("sig") or "", validate=True)
+    except Exception:
+        return False
+    if len(sig) != 64:
+        return False
+    msg = release_message(m)
+    try:  # the cryptography library when it's there, else the openssl command (on every Raspberry Pi OS)
+        from cryptography.hazmat.primitives.serialization import load_pem_public_key
+        try:
+            load_pem_public_key(pem).verify(sig, msg)
+            return True
+        except Exception:
+            return False
+    except ImportError:
+        pass
+    with tempfile.TemporaryDirectory() as d:
+        mf, sf = os.path.join(d, "m"), os.path.join(d, "s")
+        with open(mf, "wb") as f:
+            f.write(msg)
+        with open(sf, "wb") as f:
+            f.write(sig)
+        r = subprocess.run(["openssl", "pkeyutl", "-verify", "-pubin", "-inkey", KEY_FILE, "-rawin", "-in", mf, "-sigfile", sf], capture_output=True)
+        return r.returncode == 0
+
+
 def check():
     """Downloads and stages the newest version if it's new to us. Returns the staged version or None."""
     try:
@@ -107,6 +149,8 @@ def check():
         version, name, sha, size = m["version"], m["file"], m["sha256"].lower(), int(m["size"])
         if not version or "/" in version or version.startswith(".") or "/" in name or size > MAX_SIZE:
             raise ValueError("bad release info")
+        if not signed_by_us(m):
+            raise ValueError("release isn't signed by Sonoran Point: not installing it")
         with lock:
             st = load_state()
             last.update(latest=version, error=None)
