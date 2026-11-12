@@ -910,9 +910,16 @@ function wrapViews() {
 }
 const loanOf = (eqId) => (DB.loans || []).find((l) => l.eq === eqId && !l.ended_at) || null;
 const inBranch = (id, top) => { let c = contractOf(id), n = 0; while (c && n++ < 50) { if (c.id === top) return true; c = contractOf(c.parent); } return false; };
-function contractOptions(sel, blank = "Whole company", skip) {
+// Where new things go unless you pick: the contract you're showing, else your own (the first you're given).
+function myDefaultContract() {
+  const sc = myScopeIds(), mine = (DB.me.contracts || []).filter((id) => contractOf(id));
+  if (S.view && contractOf(S.view) && (!sc || sc.includes(S.view))) return S.view;
+  return mine[0] || (sc ? sc.find((id) => contractOf(id)) || null : null);
+}
+// filter = a list filter ("All contracts" stays); otherwise a form field.
+function contractOptions(sel, blank = "Whole company", skip, filter) {
   // Someone limited to contracts can't put things outside them (the database refuses it), so no "whole company" for them.
-  return (myScopeIds() ? "" : `<option value="">${esc(blank)}</option>`) + contractTree().filter((c) => !skip || !inBranch(c.id, skip))
+  return (myScopeIds() && !filter ? "" : `<option value="">${esc(blank)}</option>`) + contractTree().filter((c) => !skip || !inBranch(c.id, skip))
     .map((c) => `<option value="${c.id}" ${sel === c.id ? "selected" : ""}>${"\u2003".repeat(c.depth)}${esc(c.name)}</option>`).join("");
 }
 const EMAIL_KINDS = [["problem", "Problem reported", "Someone reports damage or another problem with an item"], ["overdue", "Overdue", "An item isn't back by its due time"],
@@ -1580,7 +1587,7 @@ function vEquipment() {
     <div class="filters">
       <input class="field" id="eqSearch" type="search" aria-label="Search equipment" placeholder="Search name, asset tag, barcode or person" value="${esc(f.eqSearch)}" data-f="eqSearch">
       <select class="field" id="eqCat" aria-label="Category" data-f="eqCat"><option value="">All categories</option>${DB.categories.map((c) => `<option value="${c.id}" ${f.eqCat === c.id ? "selected" : ""}>${esc(c.name)}</option>`).join("")}</select>
-      ${DB.contracts?.length ? `<select class="field" id="eqContract" aria-label="${esc(CTERM().one)}" data-f="eqContract">${contractOptions(f.eqContract || "", `All ${CTERM().many.toLowerCase()}`)}</select>` : ""}
+      ${DB.contracts?.length ? `<select class="field" id="eqContract" aria-label="${esc(CTERM().one)}" data-f="eqContract">${contractOptions(f.eqContract || "", `All ${CTERM().many.toLowerCase()}`, null, true)}</select>` : ""}
       <div class="seg" role="group" aria-label="Status">${seg.map(([k, l]) => `<button class="${f.eqStatus === k ? "on" : ""}" data-seg="eqStatus:${k}">${l}</button>`).join("")}</div>
     </div>
     <section class="panel"><div class="tablewrap"><table class="cardify">
@@ -1626,7 +1633,7 @@ function vEmployees() {
   const rows = api.employees().filter((e) => (!q || `${e.name} ${e.number} ${e.barcode || ""}`.toLowerCase().includes(q)) && (!S.f.empContract || inBranch(e.contract, S.f.empContract)))
     .sort((a, b) => (b.active - a.active) || (b.out - a.out) || a.name.localeCompare(b.name));
   return head("Employees", `${rows.filter((e) => e.active).length} active · also addable at a station with a manager or admin fob`, can("supervisor") ? `<span class="actions"><button class="btn" data-act="labOpen" data-k="employees">${ic("tag")}Print labels</button><a class="btn" href="#import-employees">${ic("upload")}Import</a><button class="btn primary" data-act="newEmp">Add employee</button></span>` : "") + `
-    <div class="filters"><input class="field" type="search" id="empSearch" aria-label="Search employees" placeholder="Search name or employee #" value="${esc(S.f.empSearch)}" data-f="empSearch">${DB.contracts?.length ? `<select class="field" id="empContract" aria-label="${esc(CTERM().one)}" data-f="empContract">${contractOptions(S.f.empContract || "", `All ${CTERM().many.toLowerCase()}`)}</select>` : ""}</div>
+    <div class="filters"><input class="field" type="search" id="empSearch" aria-label="Search employees" placeholder="Search name or employee #" value="${esc(S.f.empSearch)}" data-f="empSearch">${DB.contracts?.length ? `<select class="field" id="empContract" aria-label="${esc(CTERM().one)}" data-f="empContract">${contractOptions(S.f.empContract || "", `All ${CTERM().many.toLowerCase()}`, null, true)}</select>` : ""}</div>
     <section class="panel"><div class="tablewrap"><table class="cardify">
       <thead><tr><th>Name</th><th>Role</th><th>Shift</th><th>Badge</th><th>Has out</th><th>Last tap</th></tr></thead>
       <tbody>${rows.map((e) => `<tr class="click" data-open="employee:${e.id}" tabindex="0" ${e.active ? "" : 'style="opacity:.55"'}>
@@ -2394,7 +2401,7 @@ function dEqForm(id) {
       ${DB.hasBarcode === false ? "" : `<label class="full">Barcode<small>The barcode on an asset tag or label it already has. Click here and scan it, or type it. Works instead of an NFC tag, or as well.</small>
         <input class="field mono" name="barcode" maxlength="40" value="${esc(x.barcode || "")}" placeholder="Scan or type" autocomplete="off"></label>`}
       ${DB.contracts?.length ? `<label class="full">${esc(CTERM().one)}<small>Who it belongs to. Stations from other ${esc(CTERM().many.toLowerCase())} won't check it out unless they share.</small>
-        <select class="field" name="contract">${contractOptions(x.contract ?? S.f.eqContract ?? "")}</select></label>` : ""}
+        <select class="field" name="contract">${contractOptions(id ? x.contract : S.f.eqContract || myDefaultContract() || "")}</select></label>` : ""}
       <label class="full">Notes<input class="field" name="notes" maxlength="200" value="${esc(x.notes || "")}" placeholder="Optional"></label>
       <div class="err full" role="alert">${esc(S.formErr || "")}</div>
       <div class="actions full"><button class="btn primary">${id ? "Save changes" : "Add equipment"}</button><button class="btn" type="button" data-act="${id ? "backEq" : "close"}">Cancel</button></div>
@@ -2411,7 +2418,7 @@ function dEmpForm(id) {
       <label>Badge ID<small>Leave blank to give them a badge at a station</small><input class="field mono" name="badge" maxlength="40" value="${esc(fmtUid(realTag(e.badge) || ""))}" placeholder="04:BA:00:00:00:21"></label>
       ${DB.hasBarcode === false ? "" : `<label>Badge barcode<small>On their current ID badge. Click here and scan it, or type it.</small><input class="field mono" name="barcode" maxlength="40" value="${esc(e.barcode || "")}" placeholder="Scan or type" autocomplete="off"></label>`}
       ${DB.contracts?.length ? `<label class="full">${esc(CTERM().one)}<small>Their badge works at this ${esc(CTERM().one.toLowerCase())}'s stations, and any it shares with.</small>
-        <select class="field" name="contract">${contractOptions(e.contract ?? S.f.empContract ?? "", "Whole company (works everywhere)")}</select></label>` : ""}
+        <select class="field" name="contract">${contractOptions(id ? e.contract : S.f.empContract || myDefaultContract() || "", "Whole company (works everywhere)")}</select></label>` : ""}
       <div class="full" style="display:flex;flex-direction:column;gap:5px"><b style="font-size:13.5px">Shifts</b>
         <div class="checks">${DB.shifts.filter((s) => s.active || e.shifts.includes(s.id)).map((s) => `<label><input type="checkbox" name="shifts" value="${s.id}" ${e.shifts.includes(s.id) ? "checked" : ""}> ${esc(s.name)} <span class="muted">${fmtClock(s.start)}–${fmtClock(s.end)}</span></label>`).join("")}</div></div>
       ${can("admin") ? `<label>Station fob<small>Managers and admins open the station's Admin menu</small>
@@ -2441,7 +2448,7 @@ function dShiftForm(id) {
     <form class="fgrid" data-form="shift:${id || ""}"><fieldset ${admin ? "" : "disabled"} class="full fgrid" style="border:0;padding:0;margin:0;min-width:0">
       <label class="full">Name<input class="field" name="name" required maxlength="40" value="${esc(x.name)}" placeholder="AM, PM, Overnight"></label>
       ${DB.contracts?.length ? `<label class="full">${esc(CTERM().one)}<small>Who works this shift. Its reports go to that ${esc(CTERM().one.toLowerCase())}'s supervisors.</small>
-        <select class="field" name="contract">${contractOptions(x.contract ?? S.view ?? "")}</select></label>` : ""}
+        <select class="field" name="contract">${contractOptions(id ? x.contract : myDefaultContract() || "")}</select></label>` : ""}
       <label>Starts<input class="field" type="time" name="start" required value="${x.start}"></label>
       <label>Ends<small>Earlier than the start = ends the next day</small><input class="field" type="time" name="end" required value="${x.end}"></label>
       <div class="full" style="display:flex;flex-direction:column;gap:5px"><b style="font-size:13.5px">Days</b>

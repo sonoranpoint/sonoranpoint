@@ -213,6 +213,12 @@ const change = async (el, v) => { if (typeof v === "boolean") el.checked = v; el
   doc.querySelector('.inv-scopes input[value="dbw"]').checked = true;
   await submit('[data-form="invite"]', { email: "admin2@demoair.example", role: "owner" });
   check(E("DB.invites[0].email") === "admin2@demoair.example" && E("DB.invites[0].contracts.join()") === "dbw", "she adds another Delta BW Admin");
+  E("DB.me.contracts = ['ubw', 'dbw']; DB.contracts.find(c => c.id === 'dbw').sort = -1; S.f.eqContract = ''; openDrawer('eqForm')"); await sleep(20);
+  check(doc.querySelector('.drawer select[name=contract]').value === "ubw", "adding equipment starts on her own contract");
+  E("S.drawer = null; S.view = 'dbw'; openDrawer('empForm')"); await sleep(20);
+  check(doc.querySelector('.drawer select[name=contract]').value === "dbw", "or the one she's showing");
+  E("S.drawer = null; S.view = null; DB.me.contracts = ['dbw']; render()"); await go("equipment");
+  check([...doc.querySelectorAll('#eqContract option')].some((o) => o.value === ""), "the equipment filter still has All contracts");
   E("S.drawer = null; DB.me.role = 'owner'; DB.me.contracts = []; render()"); await sleep(20);
   check(errors.length === 0, "no script errors " + errors.join(";"));
   process.exit();

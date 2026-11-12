@@ -1538,6 +1538,15 @@ update org_members set role = 'owner' where user_id = '51e77a00-0000-0000-0000-0
 select pg_temp.ok(not exists (select 1 from org_members where user_id = '51e77a00-0000-0000-0000-000000000052' and role = 'owner'), 'or change the members table directly');
 update organizations set name = 'Hacked' where id = '00000000-0000-0000-0000-00000000d3e0';
 select pg_temp.ok((select name from organizations where id = '00000000-0000-0000-0000-00000000d3e0') <> 'Hacked', 'company-wide settings stay with whole-company Admins');
+-- Things she adds without picking go into Delta BW (migration 38)
+select create_station('00000000-0000-0000-0000-00000000d3e0', 'Sierra Room') as sst \gset
+insert into equipment (org_id, category_id, name) select '00000000-0000-0000-0000-00000000d3e0', id, 'Sierra radio' from equipment_categories where org_id = '00000000-0000-0000-0000-00000000d3e0' limit 1;
+reset role;
+select pg_temp.ok((select contract_id from stations where id = (:'sst'::jsonb->>'station_id')::uuid) = :'dbw'::uuid
+                  and (select contract_id from equipment where name = 'Sierra radio') = :'dbw'::uuid, 'what a Delta BW Admin adds goes into Delta BW');
+delete from equipment where name = 'Sierra radio'; delete from private.station_keys where station_id = (:'sst'::jsonb->>'station_id')::uuid;
+delete from station_events where station_id = (:'sst'::jsonb->>'station_id')::uuid; delete from stations where id = (:'sst'::jsonb->>'station_id')::uuid;
+set role authenticated;
 -- Given Delta AW too, she runs both
 select set_config('request.jwt.claim.sub', '99999999-0000-0000-0000-000000000009', false) \g /dev/null
 select set_member_contracts('00000000-0000-0000-0000-00000000d3e0', '51e77a00-0000-0000-0000-000000000051', array[:'dbw'::uuid, :'ubw'::uuid]) \g /dev/null

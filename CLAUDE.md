@@ -24,7 +24,7 @@ See README.md for the full product description.
 - Push to `main` → GitHub Actions runs `tests/run.sh db` + `ui`, then deploys app + console to Cloudflare Pages
   (projects `sonoranpoint-app`, `sonoranpoint-console`, `sonoranpoint-site`).
 - Database changes are NOT automatic. Add a new migration file (never edit one already run on the live
-  project), then tell Dez to run it in the Supabase SQL editor. Migrations 1–31 have been run, 32–37 not yet (checked 2026-11-12;
+  project), then tell Dez to run it in the Supabase SQL editor. Migrations 1–31 have been run, 32–38 not yet (checked 2026-11-12;
   ask if unsure). Alert emails are live (Resend key in Vault, first send
   confirmed 2026-10-20).
 - Station changes reach the Pis by themselves: every deploy publishes `app.sonoranpoint.com/station-release/latest.json` + a zip
@@ -63,6 +63,9 @@ See README.md for the full product description.
   admin powers there, including other Admins in their branch; given several, all of them. An Admin with no contracts = whole company.
   Only a whole-company person or an operator can make a whole-company Admin (`contracts_problem`). Promoting keeps contracts.
   `members_write` RLS now needs a whole-company Admin. Dashboard `myScopeIds()` treats an Admin with contracts as limited.
+- Defaults for leads (migration 38): a trigger puts stations, equipment, employees and shifts that a contract-limited user adds
+  without a contract into their first contract. Dashboard forms start on `myDefaultContract()` (the Show switcher's contract, else
+  your own); `contractOptions(..., filter=true)` keeps "All" in list filters.
 - Visitors (migration 34): `public.visitor_passes` (functions only, no RLS policies) let someone into another contract's stations.
   Station: their badge is refused -> `S.visit` screen ("Manager: tap your fob") -> a manager from that station (+PIN) ->
   `station_visitor_pass` (until midnight, `private.end_of_today`); sync cache `visitors` {employee id: ends_at} so it works offline
