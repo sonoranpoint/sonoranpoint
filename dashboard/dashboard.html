@@ -877,7 +877,9 @@ const problemOf = (id) => (DB.problems || []).filter((p) => p.eq === id && !p.cl
 const CTERM = () => ({ one: DB.org.terminology?.contract || "Contract", many: DB.org.terminology?.contract_plural || (DB.org.terminology?.contract ? DB.org.terminology.contract + "s" : "Contracts") });
 const contractOf = (id) => (DB.contracts || []).find((c) => c.id === id);
 function contractTree() {   // depth-first, with depth for indenting
-  const out = []; const kids = (pid) => (DB.contracts || []).filter((c) => (c.parent || null) === pid).sort((a, b) => a.sort - b.sort || a.name.localeCompare(b.name));
+  // Someone limited to part of the tree only gets that part: what's above them isn't loaded, so their contracts are the roots.
+  const has = new Set((DB.contracts || []).map((c) => c.id)), top = (c) => (c.parent && has.has(c.parent) ? c.parent : null);
+  const out = []; const kids = (pid) => (DB.contracts || []).filter((c) => top(c) === pid).sort((a, b) => a.sort - b.sort || a.name.localeCompare(b.name));
   const walk = (pid, d) => { for (const c of kids(pid)) { out.push({ ...c, depth: d, hasKids: kids(c.id).length > 0 }); if (d < 20) walk(c.id, d + 1); } };
   walk(null, 0); return out;
 }

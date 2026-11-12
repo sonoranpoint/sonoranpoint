@@ -219,6 +219,11 @@ const change = async (el, v) => { if (typeof v === "boolean") el.checked = v; el
   check(doc.querySelector('.drawer select[name=contract]').value === "dbw", "or the one she's showing");
   E("S.drawer = null; S.view = null; DB.me.contracts = ['dbw']; render()"); await go("equipment");
   check([...doc.querySelectorAll('#eqContract option')].some((o) => o.value === ""), "the equipment filter still has All contracts");
+  // Live, someone limited to Delta BW only gets Delta BW (not BW above it): it's their top, and forms still offer it.
+  E("window.__allC = DB.contracts; DB.contracts = DB.contracts.filter(c => c.id === 'dbw'); S.f.eqContract = ''; openDrawer('eqForm')"); await sleep(20);
+  check([...doc.querySelectorAll('.drawer select[name=contract] option')].map((o) => o.value).join() === "dbw" && doc.querySelector('.drawer select[name=contract]').value === "dbw",
+        "a contract whose parent you can't see still shows (and is picked)");
+  E("S.drawer = null; DB.contracts = window.__allC; render()"); await sleep(20);
   E("S.drawer = null; DB.me.role = 'owner'; DB.me.contracts = []; render()"); await sleep(20);
   check(errors.length === 0, "no script errors " + errors.join(";"));
   process.exit();
