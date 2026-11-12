@@ -208,6 +208,11 @@ button.row:hover { background: var(--surface-2); }
 .scopes label { display: flex; align-items: center; gap: 10px; padding: 7px 0; font-weight: 700; border-bottom: 1px solid var(--line); }
 .scopes label:last-child { border-bottom: 0; }
 .inv-scopes { flex-basis: 100%; margin: 6px 0 0; }
+.vpform { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; align-items: end; }
+.vpform .full { grid-column: 1 / -1; } .vpform label { display: flex; flex-direction: column; gap: 5px; font-weight: 700; font-size: 13.5px; }
+.linkrow { cursor: pointer; } .linkrow:hover b { text-decoration: underline; }
+.pastpasses summary { padding: 10px 18px; cursor: pointer; font-size: 13.5px; }
+@media (max-width: 640px) { .vpform { grid-template-columns: 1fr; } }
 .inv-scopes legend { font-weight: 700; font-size: 13.5px; padding: 0 4px; }
 .inv-scopes .sub { font-size: 13px; padding-top: 6px; }
 @media (max-width: 640px) { .viewsw span { display: none; } .viewsw select { max-width: 104px; padding: 0 6px; } }
@@ -939,7 +944,7 @@ const api = {
   alerts() { return DB.alerts.map((a) => ({ ...a, equipment: eqOf(a.eq).name, employee: empOf(a.emp)?.name })).sort((a, b) => b.raised_at - a.raised_at); },
   /* employees + station roles */
   employees() {
-    return DB.employees.map((e) => ({ ...e, out: DB.equipment.filter((q) => q.holder === e.id && q.status !== "lost").length,
+    return DB.employees.filter((e) => !e.visitor).map((e) => ({ ...e, out: DB.equipment.filter((q) => q.holder === e.id && q.status !== "lost").length,
       shiftNames: e.shifts.map((s) => DB.shifts.find((x) => x.id === s).name),
       last: DB.txns.filter((t) => t.emp === e.id).reduce((m, t) => Math.max(m, t.at), 0) || null }));
   },
@@ -1123,6 +1128,25 @@ const api = {
     DB.invites.unshift({ id: "i" + Date.now(), email, role, contracts: role === "owner" ? [] : contracts, created: Date.now(), expires: Date.now() + 14 * 86400000 });
     return { ok: true };
   },
+  /* Visitor passes (migration 34): rpc list_visitor_passes / find_visitors / create_visitor_pass / end_visitor_pass */
+  passes() { return (DB.passes || []).slice().sort((a, b) => (!!a.ended - !!b.ended) || (b.ends - a.ends)); },
+  async findVisitors(text) {
+    text = (text || "").trim().toLowerCase(); if (text.length < 2) return [];
+    return DB.employees.filter((e) => e.active && ((e.number || "").toLowerCase() === text || (e.barcode || "").toLowerCase() === text || (text.length >= 3 && e.name.toLowerCase().includes(text))))
+      .slice(0, 8).map((e) => ({ id: e.id, name: e.name, number: e.number, contract_id: e.contract, contract: contractName(e.contract) || null }));
+  },
+  async addVisitorPass(emp, contract, ends, note) {
+    if (!can("supervisor")) return { ok: false, error: "Ask a supervisor or manager to add visitors." };
+    if (!contract) return { ok: false, error: `Pick the ${CTERM().one.toLowerCase()} they're visiting.` };
+    if (!ends || ends <= Date.now()) return { ok: false, error: "Pick a day that hasn't passed." };
+    if (ends > Date.now() + 31 * 86400000) return { ok: false, error: "Passes last a month at most." };
+    if (contractsShare(contract, emp.contract_id)) return { ok: false, error: `${emp.name} can already use those stations.` };
+    (DB.passes ||= []).forEach((p) => { if (p.employee_id === emp.id && p.contract_id === contract && !p.ended && p.ends > Date.now()) p.ended = Date.now(); });
+    DB.passes.push({ id: "vp" + Date.now(), employee_id: emp.id, name: emp.name, number: emp.number, home_contract_id: emp.contract_id, home_contract: emp.contract || contractName(emp.contract_id) || null,
+      contract_id: contract, contract: contractName(contract), starts: Date.now(), ends, ended: null, note: (note || "").trim() || null, by: DB.me.name, station: null, here: true });
+    return { ok: true };
+  },
+  async endVisitorPass(id) { const p = (DB.passes || []).find((x) => x.id === id); if (p) p.ended = Date.now(); return { ok: true }; },
   /* rpc request_contract_change: contracts are set up by Sonoran Point, so changes are asked for */
   requestContractChange(message) {
     message = (message || "").trim();
@@ -1571,6 +1595,32 @@ function vEquipment() {
 }
 
 /* ---------------- Employees ---------------- */
+// Visitors (migration 34): people from other contracts let into yours, and your people visiting elsewhere.
+function vVisitors() {
+  if (!DB.contracts?.length || !DB.passes || !can("supervisor")) return "";
+  const T = CTERM(), now = Date.now(), V = S.visitor || {};
+  const list = api.passes().filter((p) => !p.ended && p.ends > now), past = api.passes().filter((p) => p.ended || p.ends <= now).slice(0, 5);
+  const until = (p) => { const last = new Date(p.ends - 1), sameDay = last.toDateString() === new Date().toDateString();
+    return sameDay ? "until midnight tonight" : "through " + last.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }); };
+  const row = (p) => `<div class="row" style="grid-template-columns:minmax(0,1fr) auto"><span><b>${esc(p.name)}</b> <span class="muted">${esc(p.home_contract || "")}</span>
+      <span class="sub">${p.here ? `Visiting ${esc(p.contract)}` : `Visiting ${esc(p.contract)} (one of yours)`} · ${p.ended || p.ends <= now ? `ended ${esc(fmtWhen(p.ended || p.ends))}` : esc(until(p))}${p.by ? ` · let in by ${esc(p.by)}${p.station ? ` at ${esc(p.station)}` : ""}` : ""}${p.note ? ` · ${esc(p.note)}` : ""}</span></span>
+      ${!p.ended && p.ends > now ? `<button class="btn sm" data-act="endPass" data-id="${p.id}">End</button>` : "<span></span>"}</div>`;
+  const d0 = new Date(), today = `${d0.getFullYear()}-${String(d0.getMonth() + 1).padStart(2, "0")}-${String(d0.getDate()).padStart(2, "0")}`;
+  return `<section class="panel" id="visitors"><div class="panel-h"><h2>Visitors</h2><span class="muted" style="font-size:13px">People from other ${esc(T.many.toLowerCase())} using your stations</span></div>
+    <div class="list">${list.map(row).join("") || `<div class="empty" style="text-align:left">Nobody visiting right now. A manager at the station can also let someone in for the day: their badge is refused, then the manager taps their fob.</div>`}
+      ${past.length ? `<details class="pastpasses"><summary class="muted">Recent (${past.length})</summary>${past.map(row).join("")}</details>` : ""}</div>
+    ${V.pick ? `<form class="panel-b vpform" data-form="visitorPass" style="border-top:1px solid var(--line)">
+        <div class="full"><b>${esc(V.pick.name)}</b> <span class="muted">${esc([V.pick.number, V.pick.contract].filter(Boolean).join(" · "))}</span> <button class="btn sm" type="button" data-act="visitorBack">Pick someone else</button></div>
+        <label>Visiting<select class="field" name="contract">${contractTree().map((c) => `<option value="${c.id}">${"\u2003".repeat(c.depth)}${esc(c.name)}</option>`).join("")}</select></label>
+        <label>Last day<input class="field" type="date" name="until" value="${today}" min="${today}" required></label>
+        <label class="full">Note <span class="muted">optional</span><input class="field" name="note" maxlength="200" placeholder="Like: covering the holiday rush"></label>
+        <div class="full actions"><button class="btn primary">Let them in</button><span class="err" id="vpErr" role="alert"></span></div></form>`
+    : `<form class="panel-b inline-form" data-form="visitorFind" style="border-top:1px solid var(--line)">
+        <input class="field" name="q" aria-label="Name or employee #" placeholder="Visitor's name or employee #" value="${esc(V.q || "")}" style="max-width:300px">
+        <button class="btn">Find</button>${V.searched && !(V.results || []).length ? `<span class="muted">Nobody found.</span>` : ""}</form>
+      ${(V.results || []).length ? `<div class="list">${V.results.map((r, i) => `<button class="row linkrow" type="button" data-act="visitorPick" data-i="${i}" style="grid-template-columns:minmax(0,1fr) auto"><span><b>${esc(r.name)}</b><span class="sub">${esc([r.number, r.contract || "Whole company"].filter(Boolean).join(" · "))}</span></span><span class="muted">Pick</span></button>`).join("")}</div>` : ""}`}
+  </section>`;
+}
 function vEmployees() {
   const q = S.f.empSearch.trim().toLowerCase();
   const rows = api.employees().filter((e) => (!q || `${e.name} ${e.number} ${e.barcode || ""}`.toLowerCase().includes(q)) && (!S.f.empContract || inBranch(e.contract, S.f.empContract)))
@@ -1583,7 +1633,7 @@ function vEmployees() {
         <td class="lead"><b>${esc(e.name)}</b><span class="sub">${esc([e.number, contractName(e.contract)].filter(Boolean).join(" · "))}${e.active ? "" : " · Inactive"}</span></td>
         <td class="pin">${e.role === "employee" ? `<span class="muted">Employee</span>` : `<span class="chip brand">${ROLE[e.role]} fob</span>`}</td>
         <td data-label="Shift">${esc(e.shiftNames.join(", ") || "—")}</td><td data-label="Badge">${realTag(e.badge) ? `On file <span class="muted mono" title="${esc(fmtUid(e.badge))}">${esc(shortUid(e.badge))}</span>` : e.barcode ? `Barcode <span class="muted mono">${esc(e.barcode)}</span>` : `<span class="muted">No badge</span>`}</td>
-        <td class="num" data-label="Has out">${e.out ? `<b>${e.out}</b>` : `<span class="muted">0</span>`}</td><td class="num ${e.last ? "" : "empty-sm"}" data-label="Last tap">${e.last ? esc(fmtWhen(e.last)) : ""}</td></tr>`).join("")}</tbody></table></div></section>`;
+        <td class="num" data-label="Has out">${e.out ? `<b>${e.out}</b>` : `<span class="muted">0</span>`}</td><td class="num ${e.last ? "" : "empty-sm"}" data-label="Last tap">${e.last ? esc(fmtWhen(e.last)) : ""}</td></tr>`).join("")}</tbody></table></div></section>${vVisitors()}`;
 }
 
 /* ---------------- Import from a spreadsheet (equipment or employees) ----------------
@@ -1895,7 +1945,7 @@ function vActivity() {
     if (k !== lastDay) { lastDay = k; const n = rows.filter((x) => dayKey(localDay(x.at, tz())) === k).length;
       html += `<tr class="dayrow"><td colspan="5">${esc(k === today ? "Today" : fmtDay(d))}<span>${n} tap${n === 1 ? "" : "s"}</span></td></tr>`; }
     html += `<tr><td class="num" data-label="When">${esc(fmtTime(a.at))}</td><td class="lead"><button class="link" data-open="employee:${a.byId}">${esc(a.by)}</button></td>
-      <td class="pin">${a.action === "checkout" ? `<span class="chip info">Out</span>` : `<span class="chip ok">In</span>`} ${esc(a.description)}${a.flags.includes("returned_after_extended") ? ` <span class="chip warn">late</span>` : ""}${a.flags.includes("reported_problem") ? ` <span class="chip warn">had a reported problem</span>` : ""}${a.flags.includes("on_loan") ? ` <span class="chip info">on loan</span>` : ""}${a.flags.includes("returned_other_contract") ? ` <span class="chip quiet">returned at another ${esc(CTERM().one.toLowerCase())}</span>` : ""}</td>
+      <td class="pin">${a.action === "checkout" ? `<span class="chip info">Out</span>` : `<span class="chip ok">In</span>`} ${esc(a.description)}${a.flags.includes("returned_after_extended") ? ` <span class="chip warn">late</span>` : ""}${a.flags.includes("reported_problem") ? ` <span class="chip warn">had a reported problem</span>` : ""}${a.flags.includes("on_loan") ? ` <span class="chip info">on loan</span>` : ""}${a.flags.includes("visitor") ? ` <span class="chip info">visitor</span>` : ""}${a.flags.includes("returned_other_contract") ? ` <span class="chip quiet">returned at another ${esc(CTERM().one.toLowerCase())}</span>` : ""}</td>
       <td data-label="Item"><button class="link" data-open="equipment:${a.eq}">${esc(a.equipment)}</button></td><td class="muted" data-label="Where">${esc(a.place || "")}</td></tr>`;
   }
   return head("Activity", "Every tap, who made it, and for whom. History can't be edited or deleted.", `<button class="btn" data-act="csvActivity">${ic("download")}Download CSV</button>`) + `
@@ -2439,6 +2489,9 @@ document.addEventListener("click", async (e) => {
   if (a === "reportCancel") { S.f.reporting = null; S.formErr = null; return renderLayer(); }
   if (a === "clearStart") { S.f.clearing = t.dataset.id; render(); $(`[data-form="clear:${t.dataset.id}"] input`)?.focus(); return; }
   if (a === "clearCancel") { S.f.clearing = null; return render(); }
+  if (a === "visitorPick") { S.visitor = { ...S.visitor, pick: S.visitor.results[+t.dataset.i] }; return render(); }
+  if (a === "visitorBack") { S.visitor = { ...S.visitor, pick: null }; return render(); }
+  if (a === "endPass") { const r = await api.endVisitorPass(t.dataset.id); toast(r.ok ? "Pass ended" : r.error); return render(); }
   if (a === "ctMore") { S.ctSent = false; render(); $("#ctReq")?.focus(); return; }
   if (a === "addContract") { S.f.addContract = t.dataset.id; render(); $(`[data-form="newContract:${t.dataset.id}"] input`)?.focus(); return; }
   if (a === "cancelContract") { S.f.addContract = null; return render(); }
@@ -2576,6 +2629,14 @@ document.addEventListener("submit", async (e) => {
   const f = e.target, kind = f.dataset.form || "", data = Object.fromEntries(new FormData(f));
   if (kind === "signin" || kind === "newpass" || kind === "profile") return authAction(kind, f);
   if (kind === "impPaste") { S.imp.text = data.text || ""; return impLoad(parseTable(S.imp.text)); }
+  if (kind === "visitorFind") {
+    const results = await api.findVisitors(data.q); S.visitor = { q: data.q, results, searched: true }; return render();
+  }
+  if (kind === "visitorPass") {
+    const [y, m, d] = (data.until || "").split("-").map(Number); const ends = y ? new Date(y, m - 1, d + 1).getTime() : null;
+    const r = await api.addVisitorPass(S.visitor.pick, data.contract, ends, data.note); if (!r.ok) { $("#vpErr").textContent = r.error; return; }
+    toast(`${S.visitor.pick.name} can use your stations now`); S.visitor = null; return render();
+  }
   if (kind === "contractRequest") {
     const r = api.requestContractChange(data.message); if (!r.ok) { $("#ctReqErr").textContent = r.error; return; }
     S.ctSent = true; toast("Sent. We'll get back to you by email."); return render();
@@ -2677,6 +2738,8 @@ let sb = null;
 const ms = (t) => (t ? Date.parse(t) : null);
 const hhmm = (t) => (t || "").slice(0, 5);
 async function rpc(fn, args) { const { data, error } = await sb.rpc(fn, args || {}); if (error) throw Object.assign(new Error(error.message), { code: error.code }); return data; }
+const mapPass = (p) => ({ id: p.id, employee_id: p.employee_id, name: p.name, number: p.number, home_contract_id: p.home_contract_id, home_contract: p.home_contract,
+  contract_id: p.contract_id, contract: p.contract, starts: ms(p.starts_at), ends: ms(p.ends_at), ended: ms(p.ended_at), note: p.note, by: p.by, station: p.station, here: p.here });
 async function okRpc(fn, args) { const r = await rpc(fn, args); if (r && r.ok === false) throw new Error(r.error); return r; }
 async function q(promise) { const { data, error } = await promise; if (error) throw Object.assign(new Error(error.message), { code: error.code }); return data; }
 // Taps, with the station's contract at the time (database update 21; read without it before that's run).
@@ -2776,6 +2839,9 @@ const live = {
     // Barcodes need database update 24; until it's run the fields stay hidden.
     DB.hasBarcode = await q(sb.from("equipment").select("barcode").limit(1)).then(() => true).catch(() => false);
     DB.me.contracts = coversOf(L.user.id); DB.members.forEach((m) => { m.contracts = coversOf(m.id); });
+    // Visitors (migration 34): passes in and out of your contracts; a visitor's own record shows only for names in history.
+    DB.passes = await rpc("list_visitor_passes", { p_org: org }).then((r) => r.map(mapPass)).catch(() => null);
+    DB.employees.forEach((e) => { e.visitor = !!myScopeIds() && !contractOf(e.contract); });
     try { const v = localStorage.getItem("sp.view." + org); S.view = v && DB.contracts.some((c) => c.id === v) ? v : null; } catch {}
     const empName = (id) => { const e = DB.employees.find((x) => x.id === id); return e ? e.name : null; };
     DB.loans = loans.map((l) => ({ id: l.id, eq: l.equipment_id, from: l.from_contract_id, to: l.to_contract_id, at: ms(l.lent_at), notes: l.notes,
@@ -2938,6 +3004,19 @@ function goLive() {
       return r;
     };
   }
+  // Visitor passes: straight to the server, then reload the list.
+  const VP_ERR = { outside_scope: "That's outside what you look after.", already_allowed: "They can already use those stations.", too_long: "Passes last a month at most.",
+    bad_end: "Pick a day that hasn't passed.", unknown_contract: "Pick where they're visiting.", unknown_employee: "They're no longer active." };
+  const reloadPasses = async () => { DB.passes = await rpc("list_visitor_passes", { p_org: ORG() }).then((r) => r.map(mapPass)).catch(() => DB.passes); };
+  api.findVisitors = async (text) => (text || "").trim().length < 2 ? [] : rpc("find_visitors", { p_org: ORG(), p_query: text.trim() }).catch(() => []);
+  api.addVisitorPass = async (emp, contract, ends, note) => {
+    if (!contract) return { ok: false, error: `Pick the ${CTERM().one.toLowerCase()} they're visiting.` };
+    if (!ends || ends <= Date.now()) return { ok: false, error: "Pick a day that hasn't passed." };
+    try { const r = await rpc("create_visitor_pass", { p_org: ORG(), p_employee: emp.id, p_contract: contract, p_ends_at: new Date(ends).toISOString(), p_note: (note || "").trim() || null });
+      if (!r.ok) return { ok: false, error: VP_ERR[r.error] || r.error }; } catch (e) { return { ok: false, error: niceErr(e) }; }
+    await reloadPasses(); return { ok: true };
+  };
+  api.endVisitorPass = async (id) => { try { await rpc("end_visitor_pass", { p_pass: id }); } catch (e) { return { ok: false, error: niceErr(e) }; } await reloadPasses(); return { ok: true }; };
   // Need the server's answer before showing anything.
   api.createStation = async (name, location) => {
     let loc = null;

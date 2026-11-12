@@ -775,6 +775,8 @@ const demo = {
       return { ok: true, generated_at: new Date(clock.now()).toISOString(),
         contract_names: Object.fromEntries(demo.db.contracts.map((c) => [c.id, c.name])),
         reach: st.contract_id ? demo.db.contracts.filter((c) => demo.shares(st.contract_id, c.id)).map((c) => c.id) : null,
+        visitors: st.contract_id ? Object.fromEntries((demo.db.passes || []).filter((p) => !p.ended && p.ends_at > clock.now() && demo.shares(p.contract_id, st.contract_id))
+          .map((p) => [p.employee_id, new Date(p.ends_at).toISOString()])) : {},
         employees: demo.db.employees.filter((e) => e.active && e.badge_uid).map((e) => ({ id: e.id, badge_uid: e.badge_uid, barcode: e.barcode || null, name: e.name, role: e.role, has_pin: !!e.pin, contract_id: e.contract_id || null })),
         equipment: demo.db.equipment.filter((q) => q.nfc_uid && q.status !== "retired").map((q) => ({
           id: q.id, nfc_uid: q.nfc_uid, barcode: q.barcode || null, name: q.name, category_id: q.category_id, status: q.status, contract_id: q.contract_id || null, loan_to: demo.loanOf(q.id)?.to || null,
@@ -838,6 +840,19 @@ const demo = {
       return { ok: true, cleared: n, equipment: { id: q.id, name: q.name } };
     },
     /* ---- Staff fobs (same checks as the database's station_staff_* functions) ---- */
+    /* Same as station_visitor_pass: a manager from this station lets a visitor's badge in until midnight. */
+    station_visitor_pass(a) {
+      const ss = demo.staffSession(a, "manager"); if (!ss.ok) return ss;
+      const st = demo.station(a.p_device_key), m = demo.db.employees.find((x) => x.active && x.badge_uid === normUid(a.p_badge_uid));
+      if (!demo.shares(st.contract_id, m.contract_id)) return { ok: false, error: "not_your_station" };
+      const v = demo.db.employees.find((x) => x.active && x.badge_uid === normUid(a.p_visitor_badge)); if (!v) return { ok: false, error: "unknown_badge" };
+      if (v.id === m.id) return { ok: false, error: "not_yourself" };
+      if (!st.contract_id || demo.shares(st.contract_id, v.contract_id)) return { ok: true, already: true, employee: { id: v.id, name: v.name } };
+      const tz = demo.db.org.timezone, ends = zoned(addDays(localDay(clock.now(), tz), 1), "00:00", tz);
+      const passes = (demo.db.passes ||= []); let p = passes.find((x) => x.employee_id === v.id && x.contract_id === st.contract_id && !x.ended && x.ends_at > clock.now());
+      if (p) p.ends_at = Math.max(p.ends_at, ends); else passes.push(p = { id: "vp" + passes.length, employee_id: v.id, contract_id: st.contract_id, ends_at: ends, by: m.id, station_id: st.id });
+      return { ok: true, pass_id: p.id, ends_at: new Date(p.ends_at).toISOString(), employee: { id: v.id, name: v.name }, home_contract: demo.cname(v.contract_id), approved_by: m.name };
+    },
     station_staff_login(a) {
       const ss = demo.staffSession(a, "manager"); if (!ss.ok) return ss;
       return { ok: true, staff: { id: ss.e.id, name: ss.e.name, role: ss.e.role },
@@ -944,7 +959,9 @@ const demo = {
       if (!emp) return { ok: false, error: "unknown_badge" };
       const eq = demo.db.equipment.find((q) => q.nfc_uid === normUid(p_equipment_uid));
       if (!eq) return { ok: false, error: "unknown_equipment" };
-      if (!p_queued && !demo.shares(st.contract_id, emp.contract_id)) return { ok: false, error: "other_contract", station_contract: demo.cname(st.contract_id), employee_contract: demo.cname(emp.contract_id) };
+      const visit = !demo.shares(st.contract_id, emp.contract_id) && demo.onPass(emp.id, st.contract_id);   // visitor pass (migration 34)
+      if (!p_queued && !demo.shares(st.contract_id, emp.contract_id) && !visit)
+        return { ok: false, error: "other_contract", station_contract: demo.cname(st.contract_id), employee_contract: demo.cname(emp.contract_id), employee: { id: emp.id, name: emp.name } };
       let ln = demo.loanOf(eq.id);
       if (ln && st.contract_id && demo.shares(st.contract_id, ln.from) && !demo.shares(st.contract_id, ln.to)) {   // back at the owner's station
         demo.endLoan(eq.id, "returned");
@@ -958,6 +975,7 @@ const demo = {
       }
       const itemContract = eq.contract_id || null;
       const r = demo.recordEvent(eq, emp, p_action || null, p_occurred_at ? Date.parse(p_occurred_at) : clock.now(), st.id, p_client_txn_id, !p_queued);
+      if (r.ok && visit) r.flags.push("visitor");
       if (r.ok && r.action === "checkout" && ln) { r.flags.push("on_loan"); r.loan_from = demo.cname(ln.from); }
       if (r.ok && r.action === "checkin" && st.contract_id && itemContract !== st.contract_id && !r.flags.includes("late_sync")) {
         r.flags.push("returned_other_contract");
@@ -1016,6 +1034,9 @@ const demo = {
     return { ok: true, transaction_id: txn.id, action, flags, equipment: { id: eq.id, name: eq.name }, employee: { id: emp.id, name: emp.name },
       previous_holder: ph ? { id: ph.id, name: ph.name } : null,
       due_at: due ? new Date(due).toISOString() : null, due_rule: rule, problem: action === "checkout" ? this.openProblem(eq.id) : null };
+  },
+  onPass(empId, stContract) {
+    return (this.db.passes || []).some((p) => p.employee_id === empId && !p.ended && clock.now() < p.ends_at && this.shares(p.contract_id, stContract));
   },
   staffSession(a, min) {
     const st = this.station(a.p_device_key); if (!st) return { ok: false, error: "station_not_authorized" };
@@ -1261,6 +1282,7 @@ function renderMain() {
   if (S.screen === "summary" && S.summary) return renderSummary(el);
   if (S.screen === "check" && S.check) return renderCheck(el);
   if (S.screen === "pin" && S.pinEntry) return renderPin(el);
+  if (S.screen === "visit" && S.visit) return renderVisit(el);
   if (S.screen === "staff" && S.staff) return renderStaff(el);
   if (S.saved.paused) {
     el.innerHTML = `<div class="idle paused">
@@ -1304,6 +1326,9 @@ const settings = () => S.saved.config?.organization?.settings || { allow_return_
 const reasons = () => S.saved.config?.problem_reasons || [];
 // Contracts this station serves (null = all). Someone or something with no contract works everywhere.
 const serves = (contractId) => { const reach = S.saved.cache?.reach; return !reach || !contractId || reach.includes(contractId); };
+// A visitor from another contract with a pass for this station (migration 34) until it runs out.
+const visitingUntil = (empId) => { const t = S.saved.cache?.visitors?.[empId]; return t && Date.parse(t) > clock.now() ? Date.parse(t) : null; };
+const servesEmp = (emp) => serves(emp.contract_id) || !!visitingUntil(emp.id);
 const stationContract = () => S.saved.config?.station?.contract?.name || null;
 const contractLabel = (id) => S.saved.cache?.contract_names?.[id] || "another team";
 // An item can be checked out here if it's ours, or it's on loan to us.
@@ -1862,7 +1887,7 @@ async function refreshData(withConfig) {
       else if (c.error === "station_not_authorized") return lockedOut();
     }
     const r = await call("station_sync_cache", { p_device_key: S.saved.deviceKey });
-    if (r.ok) { S.saved.cache = { employees: r.employees, equipment: r.equipment, reach: r.reach ?? null, contract_names: r.contract_names || {} }; S.saved.lastSync = clock.now(); persist(); renderStatus(); if (S.screen === "session") renderMain(); }
+    if (r.ok) { S.saved.cache = { employees: r.employees, equipment: r.equipment, reach: r.reach ?? null, contract_names: r.contract_names || {}, visitors: r.visitors || {} }; S.saved.lastSync = clock.now(); persist(); renderStatus(); if (S.screen === "session") renderMain(); }
     else if (r.error === "station_not_authorized") lockedOut();
   } catch {}
 }
@@ -1913,10 +1938,12 @@ function handleTag(raw) {
   if (S.screen === "pin") { if (S.pinEntry && uid === S.pinEntry.emp.badge_uid) return; S.pinEntry = null; S.screen = "idle"; }
   const cache = S.saved.cache || { employees: [], equipment: [] };
   const emp = cache.employees.find((e) => e.badge_uid === uid);
-  if (emp && !serves(emp.contract_id)) {
-    beep("bad"); S.lookup = null;
-    return toast("Not your station", `This station is for ${stationContract() || "another team"}. Use your own team's station.`);
+  if (S.visit) {   // waiting for a manager to let a visitor in
+    if (uid === S.visit.emp.badge_uid) return;
+    if (emp && (emp.role === "manager" || emp.role === "admin") && serves(emp.contract_id)) return approveVisit(emp, null);
+    beep("bad"); return toast("Needs a manager from here", `Only a ${stationContract() || "station"} manager's fob can let them in.`);
   }
+  if (emp && !servesEmp(emp)) { beep("bad"); S.lookup = null; return startVisit(emp); }
   if (emp) {
     // Badge right after looking up an item: act on that item.
     const pend = S.lookup && Date.now() - S.lookup.at < LOOKUP_MS && !["maintenance", "retired"].includes(S.lookup.info.equipment.status) ? S.lookup.uid : null;
@@ -2166,7 +2193,44 @@ function beginStaff(emp, opts) {
   if (emp.has_pin) { S.pinEntry = { emp, digits: "", error: "", at: Date.now(), opts }; S.screen = "pin"; beep("ok"); return render(); }
   staffLogin(emp, null, opts);
 }
-function leavePin() { const back = S.pinEntry?.opts?.fromSetup; S.pinEntry = null; S.screen = back ? "setup" : "idle"; render(); }
+function leavePin() { const back = S.pinEntry?.opts?.fromSetup; S.pinEntry = null; S.visit = null; S.screen = back ? "setup" : "idle"; render(); }
+/* Visitors (migration 34): a badge from a team this station doesn't serve. A manager from here can let them in until midnight. */
+function startVisit(emp) {
+  S.session = null; S.toast = null; S.visit = { emp, at: Date.now() }; S.screen = "visit"; render();
+}
+function endVisit() { S.visit = null; S.pinEntry = null; S.screen = "idle"; render(); }
+function renderVisit(el) {
+  const V = S.visit, home = contractLabel(V.emp.contract_id);
+  el.innerHTML = `<div class="pinscreen visit">
+      <div><p class="tally" style="margin-bottom:1cqw">Not your station</p>
+        <h2>${esc(V.emp.name)}</h2>
+        <p>${home ? `${esc(home)} badge. ` : ""}This station is for ${esc(stationContract() || "another team")}.</p>
+        <p class="sup" style="margin-top:1.4cqw"><b>Visiting?</b> A ${esc(stationContract() || "station")} manager can let you check out here until midnight. <b>Manager: tap your fob.</b></p>
+        <button class="sbtn" data-act="visitCancel" style="margin-top:2cqw">Cancel</button></div>
+      <div class="rings" aria-hidden="true">${BADGE_SVG}</div>
+    </div>`;
+}
+async function approveVisit(mgr, pin) {
+  const V = S.visit; if (!V) return;
+  V.at = Date.now();
+  let r; try { r = await call("station_visitor_pass", { p_device_key: S.saved.deviceKey, p_badge_uid: mgr.badge_uid, p_pin: pin, p_visitor_badge: V.emp.badge_uid }); }
+  catch { r = { ok: false, error: "offline" }; }
+  if (r.error === "pin_required" || (r.error === "wrong_pin" && S.pinEntry)) {
+    beep(r.error === "wrong_pin" ? "bad" : "ok");
+    S.pinEntry = { emp: { ...mgr, has_pin: true }, digits: "", error: r.error === "wrong_pin" ? `Wrong PIN. ${r.tries_left} ${r.tries_left === 1 ? "try" : "tries"} left.` : "", at: Date.now(), opts: { visit: true } };
+    S.screen = "pin"; return render();
+  }
+  if (!r.ok) {
+    beep("bad"); const msg = { offline: ["No connection", "Letting a visitor in needs the internet. Try again when the station is back online."],
+      pin_locked: ["PIN locked", "Too many wrong PINs. Try again in 15 minutes."], not_your_station: ["Needs a manager from here", "That fob is for another team."],
+      not_staff: ["Needs a manager", "That badge can't let visitors in."], unknown_badge: ["Badge no longer active", "Ask a supervisor to check their badge."] }[r.error] || ["Didn't go through", "Try again. Error: " + r.error];
+    S.pinEntry = null; S.screen = S.visit ? "visit" : "idle"; render(); return toast(msg[0], msg[1]);
+  }
+  if (r.ends_at) { S.saved.cache.visitors = { ...(S.saved.cache.visitors || {}), [V.emp.id]: r.ends_at }; persist(); }
+  S.visit = null; S.pinEntry = null;
+  startSession(V.emp);
+  toast(r.already ? "They can already use this station" : "Visiting until midnight", r.already ? "" : `Let in by ${r.approved_by}. Tap ${term().equipment.toLowerCase()} to check it out.`, "ok", 5000);
+}
 function renderPin(el) {
   const P = S.pinEntry;
   el.innerHTML = `
@@ -2183,7 +2247,7 @@ function renderPin(el) {
 function pinPress(k) {
   const P = S.pinEntry; if (!P) return; P.at = Date.now();
   if (k === "DEL") P.digits = P.digits.slice(0, -1);
-  else if (k === "OK") { if (P.digits.length >= 4) return staffLogin(P.emp, P.digits, P.opts); P.error = "PINs are 4 to 8 digits."; }
+  else if (k === "OK") { if (P.digits.length >= 4) return P.opts?.visit ? approveVisit(P.emp, P.digits) : staffLogin(P.emp, P.digits, P.opts); P.error = "PINs are 4 to 8 digits."; }
   else if (P.digits.length < 8) { P.digits += k; P.error = ""; }
   renderMain();
 }
@@ -2567,6 +2631,7 @@ document.addEventListener("click", async (e) => {
   if (t.dataset.pin) return pinPress(t.dataset.pin);
   const T = S.staff;
   if (t.dataset.act === "pinCancel") return leavePin();
+  if (t.dataset.act === "visitCancel") return endVisit();
   if (!T) return;
   T.at = Date.now();
   if (t.dataset.k) return kbPress(t.dataset.k);
@@ -2827,6 +2892,7 @@ setInterval(() => {               // clock + sign-out timer
   renderTop();
   if (S.staff && Date.now() - S.staff.at > STAFF_MS) { exitStaff(); toast("Admin menu closed", "It closes after 90 seconds without a tap.", "warn"); }
   if (S.pinEntry && Date.now() - S.pinEntry.at > 30000) leavePin();
+  else if (S.visit && S.screen === "visit" && Date.now() - S.visit.at > 30000) endVisit();
   if (S.screen === "setup" && S.wiz?.step === "admin" && S.wiz.adminAt && !S.wiz.hinted && Date.now() - S.wiz.adminAt > 20500) { S.wiz.hinted = true; renderMain(); }
   if (S.summary) {
     const left = SUMMARY_MS - (Date.now() - S.summary.at);
@@ -2860,7 +2926,7 @@ setInterval(() => { if (S.saved.deviceKey) call("station_heartbeat", { p_device_
 const updater = {
   enabled: device === piDevice, reload: () => location.reload(),
   async post(path, body) { const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) }); return r.json(); },
-  idle: () => S.screen === "idle" && !S.session && !S.staff && !S.overlay && !S.lookup && !S.summary && !S.check && !S.pinEntry && !S.flushing && !S.busy,
+  idle: () => S.screen === "idle" && !S.session && !S.staff && !S.overlay && !S.lookup && !S.summary && !S.check && !S.pinEntry && !S.visit && !S.flushing && !S.busy,
   async tick() {
     if (!updater.enabled || !updater.idle()) return;
     try {

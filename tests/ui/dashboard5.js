@@ -168,6 +168,25 @@ const change = async (el, v) => { if (typeof v === "boolean") el.checked = v; el
   // Connection history in a station's details
   E("render()"); const s1 = E("DB.stations.find(x => !x.revoked && !x.removed).id"); E(`openDrawer('station', '${s1}')`); await sleep(20);
   check(/Connection, last 7 days/.test(drawer()) && /Online 9\d\.\d% of the time/.test(drawer()) && /Offline for 18 min/.test(drawer()), "a station's details show its uptime and outages", drawer().slice(0, 400));
+  // Visitors (migration 34): someone from United BW works Delta BW for a few days.
+  {
+    const ub = E("DB.employees.find(e => e.active && e.contract === 'ubw')"); E("DB.passes = []");
+    await go("employees");
+    check(/Visitors/.test(page()) && /Nobody visiting right now/.test(page()), "employees page has a visitors panel");
+    await submit('[data-form="visitorFind"]', { q: ub.name.split(" ")[0] }); await sleep(20);
+    const idx = E(`S.visitor.results.findIndex(r => r.id === '${ub.id}')`);
+    check(idx >= 0 && /United BW/.test(page()), "find them by name, with their team");
+    await click(`[data-act="visitorPick"][data-i="${idx}"]`);
+    doc.querySelector('[data-form="visitorPass"] [name=contract]').value = "ubw";
+    await submit('[data-form="visitorPass"]', {}); await sleep(20);
+    check(/can already use those stations/.test(doc.querySelector("#vpErr").textContent), "no pass needed into their own contract");
+    const d = new Date(Date.now() + 2 * 86400000), day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    doc.querySelector('[data-form="visitorPass"] [name=contract]').value = "dbw";
+    await submit('[data-form="visitorPass"]', { until: day, note: "Holiday rush" }); await sleep(20);
+    check(E("DB.passes.length") === 1 && new RegExp(ub.name + ".*Visiting Delta BW · through").test(page()) && /Holiday rush/.test(page()), "let them visit Delta BW for three days");
+    await click(`[data-act="endPass"][data-id="${E("DB.passes[0].id")}"]`); await sleep(20);
+    check(/Nobody visiting right now/.test(page()) && /Recent \(1\)/.test(page()), "end it early; it moves to recent");
+  }
   // A manager limited to Delta BW (migration 33): company settings are read-only, everything she adds goes in her contracts.
   E("DB.me.role = 'admin'; DB.me.contracts = ['dbw']; S.view = null; render()"); await go("settings");
   check(/You look after Delta BW/.test(page()) && doc.querySelector("main fieldset").disabled && !!doc.querySelector('[data-form="contractRequest"]') && !doc.querySelector('[data-form="contractWord"]'),

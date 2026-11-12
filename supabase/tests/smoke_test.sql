@@ -1510,6 +1510,59 @@ reset role;
 update equipment set contract_id = null where nfc_uid in ('04DE000101', '04DE000201');
 delete from equipment_categories where name = 'Tow bars';
 
+\echo '--- Visitor passes (migration 34)'
+reset role;
+select id as dbw from contracts where name = 'Delta BW' \gset
+select id as ubw from contracts where name = 'United BW' \gset
+select id as erm02 from stations where name = 'Equipment Room 02' \gset
+update stations set contract_id = :'dbw' where id = :'erm02';
+update employees set contract_id = :'dbw' where badge_uid = '04BA0000000A';                  -- Dana, a Delta BW manager
+update employees set contract_id = :'ubw' where badge_uid = '04BA00000002';                  -- a United BW crew member
+select id as visitor from employees where badge_uid = '04BA00000002' \gset
+select id as radiocat from equipment_categories where name = 'Radio' and org_id = '00000000-0000-0000-0000-00000000d3e0' \gset
+insert into equipment (org_id, category_id, name, nfc_uid, contract_id) values ('00000000-0000-0000-0000-00000000d3e0', :'radiocat', 'Visitor radio', '04DE0000AA01', :'dbw');
+set role anon;
+select pg_temp.ok(station_tap(:'key4', gen_random_uuid(), '04BA00000002', '04DE0000AA01')->>'error' = 'other_contract', 'a United BW badge is refused at the Delta BW station');
+select pg_temp.ok(station_visitor_pass(:'key4', '04BA0000000A', '0000', '04BA00000002')->>'error' = 'wrong_pin', 'letting them in needs the manager''s PIN');
+select pg_temp.ok(station_visitor_pass(:'key4', '04BA00000001', null, '04BA00000002')->>'error' = 'not_staff', 'and a manager''s fob');
+select station_visitor_pass(:'key4', '04BA0000000A', '2468', '04BA00000002') as vp \gset
+reset role;
+select pg_temp.ok((:'vp'::jsonb->>'ok')::boolean and :'vp'::jsonb->>'home_contract' = 'United BW' and (:'vp'::jsonb->>'ends_at')::timestamptz = private.end_of_today('00000000-0000-0000-0000-00000000d3e0'),
+                  'the manager lets them in until midnight');
+set role anon;
+select pg_temp.ok((station_sync_cache(:'key4')->'visitors') ? :'visitor', 'the station''s offline list knows about the pass');
+select station_tap(:'key4', gen_random_uuid(), '04BA00000002', '04DE0000AA01') as vt \gset
+select pg_temp.ok(:'vt'::jsonb->>'action' = 'checkout' and (:'vt'::jsonb->'flags') ? 'visitor', 'now they can check out, marked as a visitor');
+select station_tap(:'key4', gen_random_uuid(), '04BA00000002', '04DE0000AA01') \g /dev/null
+select station_visitor_pass(:'key4', '04BA0000000A', '2468', '04BA00000002') as vp2 \gset
+reset role;
+select pg_temp.ok((:'vp2'::jsonb->>'ok')::boolean and (select count(*) from visitor_passes where employee_id = :'visitor' and ended_at is null) = 1, 'approving again doesn''t make a second pass');
+update visitor_passes set ends_at = now() - interval '1 minute', starts_at = now() - interval '2 hours' where employee_id = :'visitor';
+set role anon;
+select pg_temp.ok(station_tap(:'key4', gen_random_uuid(), '04BA00000002', '04DE0000AA01')->>'error' = 'other_contract', 'once the pass runs out they''re refused again');
+reset role;
+-- Dashboard: Sierra (Delta BW) adds a pass ahead of time; Walter (United BW) sees his person is visiting.
+set role authenticated;
+select set_config('request.jwt.claim.sub', '99999999-0000-0000-0000-000000000009', false) \g /dev/null
+select set_member_contracts('00000000-0000-0000-0000-00000000d3e0', '51e77a00-0000-0000-0000-000000000051', array[:'dbw'::uuid]) \g /dev/null
+select set_config('request.jwt.claim.sub', '51e77a00-0000-0000-0000-000000000051', false) \g /dev/null
+select pg_temp.ok((find_visitors('00000000-0000-0000-0000-00000000d3e0', 'E1002')->0->>'contract') = 'United BW', 'Sierra finds the visitor by employee number');
+select pg_temp.ok(create_visitor_pass('00000000-0000-0000-0000-00000000d3e0', :'visitor', :'ubw', now() + interval '3 days')->>'error' = 'outside_scope', 'she can''t give passes into someone else''s contract');
+select pg_temp.ok(create_visitor_pass('00000000-0000-0000-0000-00000000d3e0', :'visitor', :'dbw', now() + interval '40 days')->>'error' = 'too_long', 'passes last a month at most');
+select create_visitor_pass('00000000-0000-0000-0000-00000000d3e0', :'visitor', :'dbw', now() + interval '3 days', 'Covering the holiday rush') as cp \gset
+select pg_temp.ok((:'cp'::jsonb->>'ok')::boolean and (list_visitor_passes('00000000-0000-0000-0000-00000000d3e0')->0->>'note') = 'Covering the holiday rush', 'she adds a 3-day pass');
+select pg_temp.ok(exists (select 1 from employees where id = :'visitor') and not exists (select 1 from employees where badge_uid = '04BA00000001' and contract_id = :'ubw'),
+                  'she sees her visitor''s name (for her history), not the rest of United BW');
+select set_config('request.jwt.claim.sub', '51e77a00-0000-0000-0000-000000000052', false) \g /dev/null
+select pg_temp.ok((list_visitor_passes('00000000-0000-0000-0000-00000000d3e0')->0->>'contract') = 'Delta BW'
+                  and not (list_visitor_passes('00000000-0000-0000-0000-00000000d3e0')->0->>'here')::boolean, 'Walter sees his person is visiting Delta BW');
+select pg_temp.ok((end_visitor_pass((:'cp'::jsonb->>'id')::uuid)->>'ok')::boolean, 'and either side can end it');
+reset role;
+update employees set contract_id = null where badge_uid in ('04BA0000000A', '04BA00000002');
+update stations set contract_id = null where id = :'erm02';
+delete from transactions where equipment_id in (select id from equipment where nfc_uid = '04DE0000AA01');
+delete from equipment where nfc_uid = '04DE0000AA01';
+
 \echo '--- Deleting a company removes all its data'
 delete from organizations where slug = 'demo';
 select pg_temp.ok((select count(*) from equipment) = 0 and (select count(*) from transactions) = 0, 'company delete cascades cleanly');
