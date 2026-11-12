@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runs every test. Needs: Postgres 15+ (psql as the postgres user), Node 20+, and for the
+# Runs every test. Needs: Postgres 15+ (psql as the postgres user), Node 22+, and for the
 # "live" tests a PostgREST binary at .tools/postgrest (or POSTGREST_BIN).
 #   tests/run.sh          everything
 #   tests/run.sh db       database only
