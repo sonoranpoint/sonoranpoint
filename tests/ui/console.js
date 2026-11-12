@@ -196,7 +196,11 @@ const api_set = async (id) => { E(`api.updateCustomer('${id}', { logo_dark_url: 
     const sh = doc.querySelector('[data-form="ctshare"]'); sh.elements.share.checked = true; await submit('[data-form="ctshare"]');
     check(E(`custOf('${demoId}').share_contracts`) === true, "turn on sharing between their top-level contracts");
     await click(`[data-act="ctEdit"][data-id="${wc}"]`); await click(`[data-act="ctAskDel"][data-id="${wc}"]`); await click(`[data-act="ctDel"][data-id="${wc}"]`);
-    check(!E(`custOf('${demoId}').contracts.some(k => k.id === '${wc}')`), "an empty contract can be removed");
+    check(E(`custOf('${demoId}').contracts.some(k => k.id === '${wc}')`) && /1 dashboard user/.test(ct()), "a contract someone's invited to can't be removed (they'd lose it)");
+    await click('[data-act="ctCancel"]');
+    await click(`[data-act="invCancel"][data-id="${E(`custOf('${demoId}').invites.find(i => i.email === 'walter@demoair.example').id`)}"]`);
+    await click(`[data-act="ctEdit"][data-id="${wc}"]`); await click(`[data-act="ctAskDel"][data-id="${wc}"]`); await click(`[data-act="ctDel"][data-id="${wc}"]`);
+    check(!E(`custOf('${demoId}').contracts.some(k => k.id === '${wc}')`), "once nobody's on it, it can be removed");
   }
   // team
   await go("team");
