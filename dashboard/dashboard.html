@@ -208,6 +208,11 @@ button.row:hover { background: var(--surface-2); }
 .scopes label { display: flex; align-items: center; gap: 10px; padding: 7px 0; font-weight: 700; border-bottom: 1px solid var(--line); }
 .scopes label:last-child { border-bottom: 0; }
 .inv-scopes { flex-basis: 100%; margin: 6px 0 0; }
+.roleform { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 14px; border-bottom: 1px solid var(--line); }
+.roleform .full { grid-column: 1 / -1; } .roleform > label { display: flex; flex-direction: column; gap: 5px; font-weight: 700; font-size: 13.5px; }
+.perm-boxes label { align-items: flex-start; font-weight: 400; } .perm-boxes label b { display: block; } .perm-boxes .sub { display: block; font-size: 12.5px; color: var(--muted); }
+.roles-t td .sub { display: block; font-size: 12.5px; color: var(--muted); }
+@media (max-width: 640px) { .roleform { grid-template-columns: 1fr; } }
 .vpform { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; align-items: end; }
 .vpform .full { grid-column: 1 / -1; } .vpform label { display: flex; flex-direction: column; gap: 5px; font-weight: 700; font-size: 13.5px; }
 .linkrow { cursor: pointer; } .linkrow:hover b { text-decoration: underline; }
@@ -845,6 +850,7 @@ function buildDemo() {
     { station: "st2", at: now - 6 * 86400000, kind: "moved_contract", details: window.SP_DEMO ? { from: "Shipping", to: "Maintenance" } : { from: "Delta BW", to: "United BW" }, by: "Morgan Reyes" },
   ];
   return { now, org, categories, equipment, employees, shifts, stations, txns, alerts, audit, reportAcks, occs, members, invites, reasons, problems, emailPrefs, contracts, loans, stationEvents, outages,
+           roles: [{ id: "rl", name: "Ramp lead", perms: ["people", "status", "equipment"], contract_id: null, contract: null }],
            me: { id: "u1", name: "Morgan Reyes", role: "owner", email: "morgan.reyes@" + DEMO_MAIL } };
 }
 const DB = buildDemo();
@@ -853,13 +859,36 @@ const RANK = { viewer: 0, supervisor: 1, admin: 2, owner: 3 };
 // Shown names for dashboard roles (the stored values stay viewer/supervisor/admin/owner).
 const ROLE_NAME = { viewer: "View Only", supervisor: "Supervisor", admin: "Manager", owner: "Admin" };
 const can = (need) => RANK[DB.me.role] >= RANK[need];
+/* Permissions (migration 40). Admins have all; built-in roles have a fixed set; a custom role has its own boxes. */
+const PERMS = [["people", "People", "Add and edit employees, badges and who's on which shift"], ["status", "Equipment status", "Mark items lost or in maintenance, report and clear problems, lend items"],
+  ["alerts", "Alerts and reports", "Mark alerts seen, sign off shift reports"], ["visitors", "Visitors", "Let people from other contracts use your stations"],
+  ["equipment", "Equipment", "Add and edit equipment, categories, time limits, import, labels"], ["stations", "Stations", "Add, rename and remove stations, setup codes"],
+  ["fobs", "Station fobs", "Give manager or admin fobs and set PINs"], ["shifts", "Shifts", "Create shifts and change their times"], ["team", "Team", "Invite and manage dashboard users"]];
+const ALL_PERMS = PERMS.map(([k]) => k);
+const ROLE_PERMS = { viewer: [], supervisor: ["people", "status", "alerts", "visitors"], admin: ALL_PERMS, owner: ALL_PERMS };
+const permsOf = (m) => m.role === "owner" ? ALL_PERMS : m.custom ? (DB.roles || []).find((r) => r.id === m.custom)?.perms || [] : ROLE_PERMS[m.role] || [];
+const has = (perm) => permsOf(DB.me).includes(perm);
+const roleLabel = (m) => m.custom ? (DB.roles || []).find((r) => r.id === m.custom)?.name || m.role_name || "Custom role" : ROLE_NAME[m.role];
 // Contracts the signed-in person covers (null = all: Admins, and everyone when there are no contracts). The database
 // applies the same limit (migration 33): someone else sees only their contracts and what's under them.
 // An Admin with no contracts runs the whole company; an Admin given contracts runs only those (migration 37).
 const myScopeIds = () => !(DB.contracts || []).length || (DB.me.role === "owner" && !(DB.me.contracts || []).length) ? null : DB.me.contracts || [];
 // Company-wide settings (name, logo, categories, checkout rules) are for people who see the whole company.
 const canCompany = () => can("admin") && !myScopeIds();
-const canManageRole = (role) => DB.me.role === "owner" || (DB.me.role === "admin" && role !== "owner");
+// Who you can give a role to (same rules as the database): Admins anything; built-in Managers anything but Admin; someone with
+// the Team box only roles whose boxes they have themselves.
+const coversPerms = (perms) => (perms || []).every((p) => has(p));
+const canManageRole = (role) => DB.me.role === "owner" || (DB.me.role === "admin" && !DB.me.custom && role !== "owner")
+  || (has("team") && RANK[role] < RANK.admin && coversPerms(ROLE_PERMS[role]));
+const roleOf = (id) => (DB.roles || []).find((r) => r.id === id);
+const canGiveRole = (r) => !!r && (DB.me.role === "owner" || (has("team") && coversPerms(r.perms)));
+const canManageMember = (m) => canManageRole(m.role) && (!m.custom || canGiveRole(roleOf(m.custom)));
+// Role picker values: built-in role names, or "role:<id>" for a custom role.
+function roleOptions(sel) {
+  const built = ["viewer", "supervisor", "admin", "owner"].filter(canManageRole).map((r) => `<option value="${r}" ${sel === r ? "selected" : ""}>${ROLE_NAME[r]}</option>`).join("");
+  const mine = (DB.roles || []).filter(canGiveRole);
+  return built + (mine.length ? `<optgroup label="Your roles">${mine.map((r) => `<option value="role:${r.id}" ${sel === "role:" + r.id ? "selected" : ""}>${esc(r.name)}</option>`).join("")}</optgroup>` : "");
+}
 
 /* =====================================================================
    API — the only way screens read or change data
@@ -1038,7 +1067,7 @@ const api = {
   /* shifts insert / update (admins) + shift_assignments (supervisors) */
   saveShift(id, d, crew) {
     const s0 = id ? DB.shifts.find((x) => x.id === id) : null;
-    if (can("admin")) {
+    if (has("shifts")) {
       const name = (d.name || "").trim(), t = /^([01][0-9]|2[0-3]):[0-5][0-9]$/;
       if (!name) return { ok: false, error: "Enter a shift name." };
       if (DB.shifts.some((x) => x.id !== id && x.name.toLowerCase() === name.toLowerCase())) return { ok: false, error: "There's already a shift with that name." };
@@ -1051,8 +1080,8 @@ const api = {
       const patch = { name, start: d.start, end: d.end, days: days.length === 7 ? null : days.sort(), grace, early, ...("contract" in d ? { contract: d.contract || null } : {}) };
       if (s0) Object.assign(s0, patch); else { id = "s" + Date.now(); DB.shifts.push({ id, active: true, ...patch }); }
       DB.audit.push({ at: Date.now(), actor: DB.me.name, text: `${s0 ? "edited" : "added"} shift ${name}` });
-    } else if (!s0 || !can("supervisor")) return { ok: false, error: "Not allowed." };
-    if (can("supervisor") && crew) for (const e of DB.employees) {
+    } else if (!s0 || !has("people")) return { ok: false, error: "Not allowed." };
+    if (has("people") && crew) for (const e of DB.employees) {
       const on = crew.includes(e.id), has = e.shifts.includes(id);
       if (on && !has) e.shifts.push(id); else if (!on && has) e.shifts = e.shifts.filter((x) => x !== id);
     }
@@ -1090,7 +1119,7 @@ const api = {
     if (role !== "employee" && !(e0 && e0.pin) && !/^[0-9]{4,8}$/.test(d.pin || "")) return { ok: false, error: "A manager or admin fob needs a PIN of 4 to 8 digits." };
     if (d.pin && !/^[0-9]{4,8}$/.test(d.pin)) return { ok: false, error: "PINs are 4 to 8 digits." };
     const patch = { first, last, name: [first, last].filter(Boolean).join(" "), number: number || null, badge: badge || null, barcode: code, shifts: d.shifts || [], ...("contract" in d ? { contract: d.contract || null } : {}) };
-    if (can("admin")) { patch.role = role; if (d.pin) patch.pin = true; if (role === "employee") patch.pin = false; }
+    if (has("fobs")) { patch.role = role; if (d.pin) patch.pin = true; if (role === "employee") patch.pin = false; }
     if (id) { Object.assign(e0, patch); return { ok: true, id }; }
     const nid = "e" + Date.now();
     DB.employees.push({ id: nid, active: true, role: "employee", ...patch });
@@ -1099,7 +1128,7 @@ const api = {
   },
   /* equipment_categories + equipment insert, many at once (rows already checked by impCheck) */
   importEquipment(items, newCats) {
-    if (!can("admin")) return { ok: false, error: "Ask a manager or admin to import equipment." };
+    if (!has("equipment")) return { ok: false, error: "Ask a manager or admin to import equipment." };
     for (const name of newCats || []) if (!DB.categories.some((c) => c.name.toLowerCase() === name.toLowerCase())) DB.categories.push({ id: "c" + Date.now() + Math.random().toString(36).slice(2, 6), name, rule: "none", hours: null, extended: null, sort: DB.categories.length + 1 });
     const t = Date.now();
     items.forEach((x, i) => { const cat = x.cat || DB.categories.find((c) => c.name.toLowerCase() === x.catName.toLowerCase()).id;
@@ -1110,7 +1139,7 @@ const api = {
   },
   /* employees insert + shift_assignments, many at once */
   importEmployees(items) {
-    if (!can("supervisor")) return { ok: false, error: "Ask a supervisor to import employees." };
+    if (!has("people")) return { ok: false, error: "Ask a supervisor to import employees." };
     const t = Date.now();
     items.forEach((x, i) => DB.employees.push({ id: `e${t}_${i}`, active: true, role: "employee", first: x.first, last: x.last, name: x.name, number: x.number,
       badge: x.badge || (x.barcode ? barcodeUid(x.barcode) : null), barcode: x.barcode, shifts: x.shifts, contract: x.contract }));
@@ -1119,7 +1148,7 @@ const api = {
   },
   /* equipment / employees update barcode, many at once (labels printed for things that had none) */
   setBarcodes(kind, pairs) {
-    if (kind === "equipment" ? !can("admin") : !can("supervisor")) return { ok: false, error: "Ask a manager or admin to give these a barcode." };
+    if (kind === "equipment" ? !has("equipment") : !has("people")) return { ok: false, error: "Ask a manager or admin to give these a barcode." };
     const list = kind === "equipment" ? DB.equipment : DB.employees, key = kind === "equipment" ? "tag" : "badge";
     for (const [id, code] of pairs) { const x = list.find((y) => y.id === id); if (!x || x.barcode) continue;
       if (list.some((y) => y.barcode === code)) return { ok: false, error: `The barcode ${code} is already used. Try again.` };
@@ -1130,12 +1159,13 @@ const api = {
   members() { return { members: [...DB.members].sort((a, b) => RANK[b.role] - RANK[a.role] || a.name.localeCompare(b.name)), invites: DB.invites }; },
   invite(email, role, name, contracts = []) {
     email = (email || "").trim().toLowerCase();
+    const custom = String(role).startsWith("role:") ? role.slice(5) : null; if (custom) { if (!canGiveRole(roleOf(custom))) return { ok: false, error: "You can't give that role." }; role = "viewer"; }
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return { ok: false, error: "Enter a full email address." };
     if (!canManageRole(role)) return { ok: false, error: "Only an admin can add admins." };
     if (DB.members.some((m) => m.email === email)) return { ok: false, error: "That person is already on the team." };
     if (DB.contracts?.length && !contracts.length && (role !== "owner" || myScopeIds())) return { ok: false, error: `Pick at least one ${CTERM().one.toLowerCase()} for them.` };
     DB.invites = DB.invites.filter((i) => i.email !== email);
-    DB.invites.unshift({ id: "i" + Date.now(), email, role, contracts, created: Date.now(), expires: Date.now() + 14 * 86400000 });
+    DB.invites.unshift({ id: "i" + Date.now(), email, role, custom, contracts, created: Date.now(), expires: Date.now() + 14 * 86400000 });
     return { ok: true };
   },
   /* Visitor passes (migration 34): rpc list_visitor_passes / find_visitors / create_visitor_pass / end_visitor_pass */
@@ -1146,7 +1176,7 @@ const api = {
       .slice(0, 8).map((e) => ({ id: e.id, name: e.name, number: e.number, contract_id: e.contract, contract: contractName(e.contract) || null }));
   },
   async addVisitorPass(emp, contract, ends, note) {
-    if (!can("supervisor")) return { ok: false, error: "Ask a supervisor or manager to add visitors." };
+    if (!has("visitors")) return { ok: false, error: "Ask a supervisor or manager to add visitors." };
     if (!contract) return { ok: false, error: `Pick the ${CTERM().one.toLowerCase()} they're visiting.` };
     if (!ends || ends <= Date.now()) return { ok: false, error: "Pick a day that hasn't passed." };
     if (ends > Date.now() + 31 * 86400000) return { ok: false, error: "Passes last a month at most." };
@@ -1166,9 +1196,29 @@ const api = {
   },
   setMemberRole(id, role) {
     const m = DB.members.find((x) => x.id === id);
-    if (!canManageRole(m.role) || !canManageRole(role)) return { ok: false, error: "Only an admin can change admins." };
+    const custom = String(role).startsWith("role:") ? role.slice(5) : null;
+    if (!canManageMember(m) || (custom ? !canGiveRole(roleOf(custom)) : !canManageRole(role))) return { ok: false, error: "You can't give that role." };
+    if (custom) role = "viewer";
     if (m.role === "owner" && role !== "owner" && DB.members.filter((x) => x.role === "owner").length === 1) return { ok: false, error: "The company needs at least one admin. Make someone else an admin first." };
-    m.role = role; if (m.id === DB.me.id) DB.me.role = role; return { ok: true };
+    m.role = role; m.custom = custom; if (m.id === DB.me.id) Object.assign(DB.me, { role, custom }); return { ok: true };
+  },
+  /* rpc list_custom_roles / save_custom_role / delete_custom_role (Admins, for their own area) */
+  roles() { return (DB.roles || []).map((r) => ({ ...r, members: DB.members.filter((m) => m.custom === r.id).length })); },
+  saveRole(id, d) {
+    if (DB.me.role !== "owner") return { ok: false, error: "Only an admin can make roles." };
+    const name = (d.name || "").trim(), perms = ALL_PERMS.filter((p) => (d.perms || []).includes(p));
+    if (!name || name.length > 40) return { ok: false, error: "Give it a name (up to 40 characters)." };
+    if (["admin", "manager", "supervisor", "view only"].includes(name.toLowerCase())) return { ok: false, error: "That name is a built-in role. Pick another." };
+    if ((DB.roles || []).some((r) => r.id !== id && r.name.toLowerCase() === name.toLowerCase())) return { ok: false, error: "There's already a role with that name." };
+    const sc = myScopeIds(), contract = sc ? (DB.me.contracts || [])[0] || null : null;
+    if (id) { Object.assign(roleOf(id), { name, perms }); return { ok: true, id }; }
+    const nid = "r" + Date.now(); (DB.roles ||= []).push({ id: nid, name, perms, contract_id: contract, contract: contract ? contractName(contract) : null, can_edit: true, can_give: true });
+    return { ok: true, id: nid };
+  },
+  deleteRole(id) {
+    const n = DB.members.filter((m) => m.custom === id).length + DB.invites.filter((i) => i.custom === id).length;
+    if (n) return { ok: false, error: `${n} ${n === 1 ? "person has" : "people have"} this role. Give them another one first.` };
+    DB.roles = DB.roles.filter((r) => r.id !== id); return { ok: true };
   },
   removeMember(id) {
     const m = DB.members.find((x) => x.id === id);
@@ -1185,7 +1235,7 @@ const api = {
   },
   /* rpc lend_equipment / end_equipment_loan (supervisors) */
   lend(eqId, to, notes) {
-    if (!can("supervisor")) return { ok: false, error: "Your role can't lend equipment." };
+    if (!has("status")) return { ok: false, error: "Your role can't lend equipment." };
     const q = eqOf(eqId); if (!q.contract) return { ok: false, error: `Put it in a ${CTERM().one.toLowerCase()} first. With none, it works everywhere already.` };
     if (!contractOf(to)) return { ok: false, error: `Pick who to lend it to.` };
     if (contractsShare(q.contract, to)) return { ok: false, error: "They can already use it." };
@@ -1202,7 +1252,7 @@ const api = {
   problems() { return (DB.problems || []).map((p) => ({ ...p, equipment: eqOf(p.eq)?.name || "Removed item" })).sort((a, b) => (!!a.cleared_at - !!b.cleared_at) || (b.at - a.at)); },
   /* rpc report_problem */
   reportProblem(eqId, reasonId, notes) {
-    if (!can("supervisor")) return { ok: false, error: "Your role can't report problems here. Report it at a station instead." };
+    if (!has("status")) return { ok: false, error: "Your role can't report problems here. Report it at a station instead." };
     const r = DB.reasons.find((x) => x.id === reasonId && !x.archived); if (!r) return { ok: false, error: "Pick what's wrong." };
     notes = (notes || "").trim().slice(0, 500);
     const open = DB.problems.find((p) => p.eq === eqId && !p.cleared_at && p.reason_id === r.id);
@@ -1230,7 +1280,7 @@ const api = {
   /* notification_prefs: what each person gets emailed about */
   emailPrefs(userId) { return (DB.emailPrefs || {})[userId] || []; },
   setEmailPrefs(userId, kinds) {
-    if (userId !== DB.me.id && !can("admin")) return { ok: false, error: "Only managers and admins can change someone else's emails." };
+    if (userId !== DB.me.id && !has("team")) return { ok: false, error: "Only managers and admins can change someone else's emails." };
     DB.emailPrefs[userId] = kinds; return { ok: true };
   },
 };
@@ -1367,8 +1417,8 @@ function render() {
   if (DEEP && applyDeep()) return;
   const open = api.alerts().filter((a) => !a.resolved_at && !a.ack_at).length + api.problems().filter((p) => !p.cleared_at).length;
   const nav = [["overview", "Dashboard", "home"], ["equipment", "Equipment", "box"], ["activity", "Activity", "list"], ["employees", "Employees", "users"],
-    ["stations", "Stations", "station"], ["shifts", "Shifts", "calendar"], ["alerts", "Alerts", "bell", open], "-", ["settings", "Settings", "sliders"], ...(can("admin") ? [["team", "Team access", "shield"]] : [])];
-  if (S.route === "team" && !can("admin")) S.route = "overview";
+    ["stations", "Stations", "station"], ["shifts", "Shifts", "calendar"], ["alerts", "Alerts", "bell", open], "-", ["settings", "Settings", "sliders"], ...(has("team") ? [["team", "Team access", "shield"]] : [])];
+  if (S.route === "team" && !has("team")) S.route = "overview";
   const many = LIVE && L.companies.length > 1;
   $("#app").className = "app" + (S.navOpen ? " navopen" : "");
   $("#app").innerHTML = `
@@ -1389,7 +1439,7 @@ function render() {
         <a class="iconbtn" href="#alerts" aria-label="${open ? `${open} open alert${open === 1 ? "" : "s"}` : "Alerts"}">${ic("bell")}${open ? `<span class="badge">${open > 99 ? "99+" : open}</span>` : ""}</a>
         <div class="account"><button type="button" data-act="acctMenu" aria-haspopup="true" aria-expanded="${S.pop === "acct"}"><span class="avatar" aria-hidden="true">${esc(initialsOf(DB.me.name))}</span><span class="nm">${esc(DB.me.name.includes("@") ? DB.me.name.split("@")[0] : DB.me.name)}</span>${ic("chevDown")}</button>
           <div class="pop" role="menu" ${S.pop === "acct" ? "" : "hidden"}>
-            <div class="who"><b>${esc(DB.me.name)}</b><small>${esc(ROLE_NAME[DB.me.role])} · ${esc(DB.org.name)}</small></div>
+            <div class="who"><b>${esc(DB.me.name)}</b><small>${esc(roleLabel(DB.me))} · ${esc(DB.org.name)}</small></div>
             ${LIVE ? `<button data-act="editName">${ic("user")}Edit name</button><button data-act="signOut">${ic("logout")}Sign out</button>`
               : `<label>Preview as<select id="viewAs" aria-label="Preview the dashboard as">${Object.keys(RANK).reverse().map((r) => `<option value="${r}" ${DB.me.role === r ? "selected" : ""}>${ROLE_NAME[r]}</option>`).join("")}</select></label>`}
             <div class="themes" role="group" aria-label="Appearance"><small>Appearance</small>${THEMES.map(([k, l]) => `<button data-act="theme" data-v="${k}" aria-pressed="${getTheme() === k}">${ic(k === "light" ? "sun" : k === "dark" ? "moon" : "monitor")}${l}${getTheme() === k ? ic("check", "tick") : ""}</button>`).join("")}</div>
@@ -1435,7 +1485,7 @@ function accountNote() {
   if (st === "paused" && DB.org.paused_reason === "trial_ended") return `<div class="acct-note warn" role="status"><b>Your trial has ended, so your stations are paused.</b> Everything recorded so far is still here. To keep going, email <a href="mailto:support@sonoranpoint.com">support@sonoranpoint.com</a> and we'll turn your stations back on.</div>`;
   // Trial ending within a week: managers and admins hear when their stations will pause (a day after, migration 32).
   const end = DB.org.trial_ends;
-  if (st === "trial" && end && end - Date.now() < 7 * 864e5 && can("admin")) {
+  if (st === "trial" && end && end - Date.now() < 7 * 864e5 && (can("admin") || has("team"))) {
     const day = (ms) => { try { return new Date(ms).toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric", timeZone: DB.org.timezone || undefined }); } catch { return new Date(ms).toDateString(); } };
     return `<div class="acct-note info" role="status"><b>Your trial ends ${esc(day(end))}.</b> ${DB.org.pause_trial !== false ? `If it isn't extended, your stations pause on ${esc(day(end + 864e5))}. ` : ""}To keep going, email <a href="mailto:support@sonoranpoint.com">support@sonoranpoint.com</a>.</div>`;
   }
@@ -1519,12 +1569,12 @@ function vOverview() {
           <span><b>${esc(x.equipment)} ${esc(x.action === "checkout" ? "checked out" : x.forOther ? "returned for " + (x.previous || "someone") : "returned")}${x.flags.includes("returned_after_extended") ? ` <span class="chip warn">late</span>` : ""}${x.flags.includes("reported_problem") ? ` <span class="chip warn">had a reported problem</span>` : ""}</b>
             <span class="sub">${esc(x.by)}${x.place ? " · " + esc(x.place) : ""}</span></span><time datetime="${new Date(x.at).toISOString()}">${esc(agoShort(x.at))}</time></button>`).join("")
           || `<div class="empty">No taps yet. Checkouts and returns show up here as they happen at a station.</div>`}</div></section></div>
-      <div><section class="panel"><div class="panel-h"><h2>Stations</h2>${can("admin") ? `<a class="more" href="#stations">Manage stations</a>` : ""}</div>
+      <div><section class="panel"><div class="panel-h"><h2>Stations</h2>${has("stations") ? `<a class="more" href="#stations">Manage stations</a>` : ""}</div>
         <div class="list">${live.map((s) => { const k = stStats(s); return `<button class="strow" data-open="station:${s.id}">
           <span class="pip ${s.pending ? "quiet" : s.online ? "" : "warn"}"></span>
           <span><b>${esc(s.name)}</b><span class="sub">${s.pending ? "Waiting for setup" : s.online ? "Online" : "Offline · seen " + esc(ago(s.last_seen))}</span></span>
           <span class="n"><b>${k.taps}</b><small>Taps today</small></span><span class="n"><b>${k.out}</b><small>Out</small></span>${ic("chevRight")}</button>`; }).join("")
-          || `<div class="empty">No stations yet.${can("admin") ? ` <a class="link" href="#stations">Add your first station</a>` : ""}</div>`}</div></section>
+          || `<div class="empty">No stations yet.${has("stations") ? ` <a class="link" href="#stations">Add your first station</a>` : ""}</div>`}</div></section>
         ${last ? `<section class="panel"><div class="panel-h"><h2>Last shift report</h2><a class="more" href="#shifts">All reports</a></div>
           <button class="ev" data-open="report:${last.key}"><span class="tile">${ic("calendar")}</span>
             <span><b>${esc(last.shift.name)} shift · ${esc(fmtDay(last.day))}</b><span class="sub">${fmtTime(last.start)} to ${fmtTime(last.end)}</span></span>
@@ -1534,7 +1584,7 @@ function vOverview() {
 }
 // Shown to admins on the home screen until the company is set up (or they hide it).
 function gettingStarted() {
-  if (!can("admin")) return "";
+  if (!has("equipment")) return "";
   const key = "sp.setupHidden." + (DB.org.id || "demo");
   try { if (localStorage.getItem(key)) return ""; } catch {}
   const st = api.stations(), team = api.members();
@@ -1568,7 +1618,7 @@ function vEquipment() {
     .sort((a, b) => (b.is_overdue - a.is_overdue) || (b.is_extended - a.is_extended) || a.name.localeCompare(b.name, undefined, { numeric: true }));
   const seg = [["all", "All"], ["out", "Out"], ["overdue", "Overdue"], ["extended", "Out too long"], ["available", "Available"], ["lost", "Lost"], ["maintenance", "Maintenance"], ["problem", "Problems"], ...((DB.loans || []).some((l) => !l.ended_at) ? [["loan", "On loan"]] : [])];
   S.eqRows = rows;
-  return head("Equipment", `${all.length} items · also addable at a station with a manager or admin fob`, `<span class="actions"><button class="btn" data-act="csvEquipment">${ic("download")}Download CSV</button>${can("supervisor") ? `<button class="btn" data-act="labOpen" data-k="equipment">${ic("tag")}Print labels</button>` : ""}${can("admin") ? `<a class="btn" href="#import-equipment">${ic("upload")}Import</a><button class="btn primary" data-act="newEq">Add equipment</button>` : ""}</span>`) + `
+  return head("Equipment", `${all.length} items · also addable at a station with a manager or admin fob`, `<span class="actions"><button class="btn" data-act="csvEquipment">${ic("download")}Download CSV</button>${has("equipment") ? `<button class="btn" data-act="labOpen" data-k="equipment">${ic("tag")}Print labels</button>` : ""}${has("equipment") ? `<a class="btn" href="#import-equipment">${ic("upload")}Import</a><button class="btn primary" data-act="newEq">Add equipment</button>` : ""}</span>`) + `
     <div class="filters">
       <input class="field" id="eqSearch" type="search" aria-label="Search equipment" placeholder="Search name, asset tag, barcode or person" value="${esc(f.eqSearch)}" data-f="eqSearch">
       <select class="field" id="eqCat" aria-label="Category" data-f="eqCat"><option value="">All categories</option>${DB.categories.map((c) => `<option value="${c.id}" ${f.eqCat === c.id ? "selected" : ""}>${esc(c.name)}</option>`).join("")}</select>
@@ -1589,7 +1639,7 @@ function vEquipment() {
 /* ---------------- Employees ---------------- */
 // Visitors (migration 34): people from other contracts let into yours, and your people visiting elsewhere.
 function vVisitors() {
-  if (!DB.contracts?.length || !DB.passes || !can("supervisor")) return "";
+  if (!DB.contracts?.length || !DB.passes || !has("visitors")) return "";
   const T = CTERM(), now = Date.now(), V = S.visitor || {};
   const list = api.passes().filter((p) => !p.ended && p.ends > now), past = api.passes().filter((p) => p.ended || p.ends <= now).slice(0, 5);
   const until = (p) => { const last = new Date(p.ends - 1), sameDay = last.toDateString() === new Date().toDateString();
@@ -1617,7 +1667,7 @@ function vEmployees() {
   const q = S.f.empSearch.trim().toLowerCase();
   const rows = api.employees().filter((e) => (!q || `${e.name} ${e.number} ${e.barcode || ""}`.toLowerCase().includes(q)) && (!S.f.empContract || inBranch(e.contract, S.f.empContract)))
     .sort((a, b) => (b.active - a.active) || (b.out - a.out) || a.name.localeCompare(b.name));
-  return head("Employees", `${rows.filter((e) => e.active).length} active · also addable at a station with a manager or admin fob`, can("supervisor") ? `<span class="actions"><button class="btn" data-act="labOpen" data-k="employees">${ic("tag")}Print labels</button><a class="btn" href="#import-employees">${ic("upload")}Import</a><button class="btn primary" data-act="newEmp">Add employee</button></span>` : "") + `
+  return head("Employees", `${rows.filter((e) => e.active).length} active · also addable at a station with a manager or admin fob`, (has("people") || has("equipment")) ? `<span class="actions"><button class="btn" data-act="labOpen" data-k="employees">${ic("tag")}Print labels</button><a class="btn" href="#import-employees">${ic("upload")}Import</a><button class="btn primary" data-act="newEmp">Add employee</button></span>` : "") + `
     <div class="filters"><input class="field" type="search" id="empSearch" aria-label="Search employees" placeholder="Search name or employee #" value="${esc(S.f.empSearch)}" data-f="empSearch">${DB.contracts?.length ? `<select class="field" id="empContract" aria-label="${esc(CTERM().one)}" data-f="empContract">${contractOptions(S.f.empContract || "", `All ${CTERM().many.toLowerCase()}`, null, true)}</select>` : ""}</div>
     <section class="panel"><div class="tablewrap"><table class="cardify">
       <thead><tr><th>Name</th><th>Role</th><th>Shift</th><th>Badge</th><th>Has out</th><th>Last tap</th></tr></thead>
@@ -1698,7 +1748,7 @@ function impCheck(kind) {
       if (!name) why.push("no name");
       let cat = catName ? DB.categories.find((c) => lc(c.name) === lc(catName)) : null;
       if (!catName) why.push("no category");
-      else if (!cat) { if (can("admin")) newCats.set(lc(catName), catName); else why.push(`no category called “${catName}”`); }
+      else if (!cat) { if (has("equipment")) newCats.set(lc(catName), catName); else why.push(`no category called “${catName}”`); }
       if (asset && usedAsset.has(lc(asset))) why.push(`asset tag ${asset} is already on ${usedAsset.get(lc(asset))}`);
       if (code && code.length > 40) why.push("barcode is over 40 characters");
       else if (code && usedCode.has(code)) why.push(`barcode ${code} is already on ${usedCode.get(code)}`);
@@ -1731,7 +1781,7 @@ function impCheck(kind) {
 }
 function vImport(kind) {
   const isEq = kind === "equipment", T = isEq ? "equipment" : "employees", back = `#${kind}`;
-  if (isEq ? !can("admin") : !can("supervisor")) return head(`Import ${T}`, "") + `<div class="readonly-note">You have ${esc(ROLE_NAME[DB.me.role])} access. Ask a manager or admin to import ${T}.</div>`;
+  if (isEq ? !has("equipment") : !has("people")) return head(`Import ${T}`, "") + `<div class="readonly-note">You have ${esc(roleLabel(DB.me))} access. Ask a manager or admin to import ${T}.</div>`;
   const I = S.imp?.kind === kind ? S.imp : (S.imp = { kind, rows: null, map: [], hasHead: true, defCat: "", done: null, text: "" });
   const F = IMP_FIELDS[kind]();
   const intro = `<div><a class="back" href="${back}">‹ ${isEq ? "Equipment" : "Employees"}</a></div>` + head(`Import ${T}`, isEq
@@ -1854,8 +1904,8 @@ function labelPages(items, codes, L) {
 const labDefaults = (kind) => ({ kind, type: "barcode", sheet: "a5160", startAt: 1, showCompany: true, showExtra: true, cat: "", q: "", off: new Set() });
 function vLabels() {
   const L = S.lab || (S.lab = labDefaults("equipment"));
-  const isEq = L.kind === "equipment", canEdit = isEq ? can("admin") : can("supervisor");
-  if (!can("supervisor")) return head("Print labels", "") + `<div class="readonly-note">You have ${esc(ROLE_NAME[DB.me.role])} access. Ask a supervisor or manager to print labels.</div>`;
+  const isEq = L.kind === "equipment", canEdit = isEq ? has("equipment") : has("people");
+  if (!(has("people") || has("equipment"))) return head("Print labels", "") + `<div class="readonly-note">You have ${esc(roleLabel(DB.me))} access. Ask a supervisor or manager to print labels.</div>`;
   const q = L.q.trim().toLowerCase();
   const all = isEq ? api.equipment().filter((x) => x.status !== "retired") : api.employees().filter((e) => e.active);
   const shown = all.filter((x) => (!isEq || !L.cat || x.cat === L.cat) && (!q || `${x.name} ${x.asset || ""} ${x.number || ""} ${x.barcode || ""}`.toLowerCase().includes(q)))
@@ -1981,7 +2031,7 @@ function problemRow(p, withItem = true) {
       <span class="sub">Reported by ${esc(p.by || "someone")}${p.place ? " at " + esc(p.place) : ""} · ${esc(fmtWhen(p.at))}${!p.cleared_at && p.blocks ? " · can't be checked out" : ""}</span>
       ${p.notes ? `<span class="sub note">“${esc(p.notes)}”</span>` : ""}
       ${p.cleared_at ? `<span class="sub">Cleared by ${esc(p.cleared_by || "a supervisor")} · ${esc(fmtWhen(p.cleared_at))}${p.clear_notes ? `: “${esc(p.clear_notes)}”` : ""}</span>` : ""}</span>
-    ${p.cleared_at ? `<span class="chip quiet">Cleared</span>` : !can("supervisor") ? "" : clearing
+    ${p.cleared_at ? `<span class="chip quiet">Cleared</span>` : !has("status") ? "" : clearing
       ? `<form class="inline-form" data-form="clear:${p.id}"><input class="field" name="note" aria-label="What was done" placeholder="What was done (optional)" maxlength="200"><button class="btn primary sm">Clear</button><button type="button" class="btn sm" data-act="clearCancel">Cancel</button></form>`
       : `<button class="btn sm" data-act="clearStart" data-id="${p.id}">Clear</button>`}
   </div>`;
@@ -2009,7 +2059,7 @@ function vAlerts() {
           <span class="sub">Out since ${esc(fmtWhen(a.out_at))} · ${a.kind === "overdue" ? "was due " + esc(fmtWhen(a.threshold_at)) : "passed the limit " + esc(fmtWhen(a.threshold_at))}
           ${a.resolved_at ? ` · back ${esc(fmtWhen(a.resolved_at))} (out ${dur((a.resolved_at - a.out_at) / HOUR)})` : ` · out ${dur((Date.now() - a.out_at) / HOUR)} so far`}</span>
           ${a.ack_at ? `<span class="sub">Seen by ${esc(a.ack_by)}${a.notes ? `: “${esc(a.notes)}”` : ""}</span>` : ""}</span>
-        ${a.ack_at ? `<span class="chip quiet">Seen</span>` : !can("supervisor") ? `<span class="chip warn">Not seen</span>` : S.f.acking === a.id
+        ${a.ack_at ? `<span class="chip quiet">Seen</span>` : !has("alerts") ? `<span class="chip warn">Not seen</span>` : S.f.acking === a.id
           ? `<form class="inline-form" data-form="ack:${a.id}"><input class="field" name="note" aria-label="Note" placeholder="Note (optional)" maxlength="200"><button class="btn primary sm">Save</button></form>`
           : `<button class="btn sm" data-act="ackStart" data-id="${a.id}">Mark seen</button>`}
       </div>`).join("") || `<div class="empty">${tab === "open" ? "No open alerts. Everything is back or within its time limit." : "No closed alerts yet."}</div>`}</div></section>`}`;
@@ -2025,13 +2075,13 @@ function vShifts() {
   reps.forEach((r) => { (byDay[dayKey(r.day)] = byDay[dayKey(r.day)] || []).push(r); });
   const crewN = (id) => DB.employees.filter((e) => e.active && e.shifts.includes(id)).length;
   const shiftList = DB.shifts.filter((x) => inView(x.contract));
-  return head("Shifts", "Who works when, and what each crew hadn't returned by the end of their shift.", `<span class="actions"><button class="btn" data-act="csvReports">${ic("download")}Download reports</button>${can("admin") ? `<button class="btn primary" data-open="shiftForm:">Add a shift</button>` : ""}</span>`) +
-    `<section class="panel"><div class="panel-h"><h2>Shifts</h2>${can("supervisor") ? "" : `<span class="muted" style="font-size:13px">View Only</span>`}</div><div class="tablewrap"><table class="tbl">
+  return head("Shifts", "Who works when, and what each crew hadn't returned by the end of their shift.", `<span class="actions"><button class="btn" data-act="csvReports">${ic("download")}Download reports</button>${has("shifts") ? `<button class="btn primary" data-open="shiftForm:">Add a shift</button>` : ""}</span>`) +
+    `<section class="panel"><div class="panel-h"><h2>Shifts</h2>${(has("people") || has("shifts")) ? "" : `<span class="muted" style="font-size:13px">View Only</span>`}</div><div class="tablewrap"><table class="tbl">
       <thead><tr><th>Shift</th><th>Time</th><th>Days</th><th>Grace</th><th>Crew</th><th></th></tr></thead><tbody>
       ${shiftList.map((x) => `<tr ${x.active ? "" : 'style="opacity:.6"'}><td><b>${esc(x.name)}</b>${x.active ? "" : ` <span class="chip quiet">Not in use</span>`}${x.contract ? `<span class="sub">${esc(contractName(x.contract))}</span>` : ""}</td>
         <td>${fmtClock(x.start)} to ${fmtClock(x.end)}${x.end < x.start ? ` <span class="muted">(next day)</span>` : ""}</td><td>${esc(daysText(x.days))}</td>
         <td>${x.grace} min</td><td>${crewN(x.id)}</td>
-        <td style="text-align:right"><button class="btn sm" data-open="shiftForm:${x.id}">${can("supervisor") ? "Edit" : "View"}</button></td></tr>`).join("")}
+        <td style="text-align:right"><button class="btn sm" data-open="shiftForm:${x.id}">${(has("people") || has("shifts")) ? "Edit" : "View"}</button></td></tr>`).join("")}
       </tbody></table></div></section>
     <h2 style="margin:6px 0 0;font-family:var(--display);font-size:22px">Shift reports</h2>
     <p class="muted" style="margin:0 0 4px">Made automatically after every shift ends (plus its grace period).</p>
@@ -2065,7 +2115,7 @@ function stationStats() {
 }
 function vStations() {
   const ns = S.f.newStation; const stat = stationStats();
-  return head("Stations", "Each station needs a one-time activation code to connect.", can("admin") ? `<button class="btn primary" data-act="addStation">Add a station</button>` : "") +
+  return head("Stations", "Each station needs a one-time activation code to connect.", has("stations") ? `<button class="btn primary" data-act="addStation">Add a station</button>` : "") +
     (ns ? `<section class="panel"><div class="panel-b" style="display:flex;flex-direction:column;gap:12px">${ns.code
       ? `<h2 style="margin:0;font-family:var(--display);font-size:26px">Activation code for ${esc(ns.name)}</h2>
          <div class="codebox" aria-label="Activation code">${esc(ns.code)}</div>
@@ -2077,7 +2127,7 @@ function vStations() {
       <p class="muted" style="margin:6px 0 12px;font-size:13.5px">These no longer work. To use one again, open it and make a new activation code. Won't need it again? Open it and remove it for good.</p>${stationCards(api.stations().filter((s) => s.revoked), stat)}</details>` : "");
 }
 function stationCards(list, stat) {
-  if (!list.length) return `<div class="empty">No stations yet.${can("admin") ? " Add one to get an activation code." : ""}</div>`;
+  if (!list.length) return `<div class="empty">No stations yet.${has("stations") ? " Add one to get an activation code." : ""}</div>`;
   return `<div class="cards">${list.map((s) => `<div class="card ${s.revoked ? "gone" : ""}">
       <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start"><h3>${esc(s.name)}</h3>
         ${s.revoked ? `<span class="chip quiet">Disconnected</span>` : s.pending ? `<span class="chip info">Waiting for setup</span>` : s.online ? `<span class="chip ok">Online</span>` : `<span class="chip warn">Offline</span>`}</div>
@@ -2094,7 +2144,7 @@ function vSettings() {
   const ro = !canCompany();
   return head("Settings", "Changes reach every station within a minute.") + (ro ? `<div class="readonly-note">${can("admin")
     ? `You look after ${esc((DB.me.contracts || []).map(contractName).filter(Boolean).join(", ") || `your ${CTERM().many.toLowerCase()}`)}. Company-wide settings are changed by your company's admin, or by us if you don't have one: use “Ask us for a change” below.`
-    : `You have ${esc(ROLE_NAME[DB.me.role])} access. Ask a manager or admin to change settings.`}</div>` : "") + `<fieldset ${ro ? "disabled" : ""} style="border:0;padding:0;margin:0;display:flex;flex-direction:column;gap:22px;min-width:0">
+    : `You have ${esc(roleLabel(DB.me))} access. Ask a manager or admin to change settings.`}</div>` : "") + `<fieldset ${ro ? "disabled" : ""} style="border:0;padding:0;margin:0;display:flex;flex-direction:column;gap:22px;min-width:0">
     <section class="panel"><div class="panel-h"><h2>Company</h2></div><form class="panel-b form-grid" data-form="company">
       <label for="sName">Company name</label><input class="field" id="sName" name="name" value="${esc(o.name)}" maxlength="80">
       <label>Logo<small>Your normal logo. It sits on a white bar at the top of your stations and this menu. PNG, JPG or SVG.</small></label>
@@ -2162,7 +2212,7 @@ function vContracts() {
     eq: DB.equipment.filter((x) => x.contract === id && x.status !== "retired").length });
   const rules = (c) => [c.hasKids ? (c.share ? `Badges and equipment work across everything ${c.kind === "location" ? "here" : "under it"}` : c.kind === "location" ? `What's here doesn't share` : `The ${T.many.toLowerCase()} under it don't share`) : "",
     c.move ? "Items move to where they're returned" : ""].filter(Boolean).join(" · ");
-  const leads = (id) => (can("admin") ? api.members().members : []).filter((m) => m.role === "admin" && (m.contracts || []).includes(id)).map((m) => m.name);
+  const leads = (id) => (has("team") ? api.members().members : []).filter((m) => m.role === "admin" && (m.contracts || []).includes(id)).map((m) => m.name);
   const hasLoc = tree.some((c) => c.kind === "location");
   return `<section class="panel" id="contracts"><div class="panel-h"><h2>${hasLoc ? `Locations and ${esc(T.many.toLowerCase())}` : esc(T.many)}</h2></div>
     <div class="panel-b muted" style="font-size:13.5px;padding-bottom:0">${tree.length
@@ -2174,7 +2224,7 @@ function vContracts() {
         <span><b>${esc(c.name)}</b>${c.kind === "location" ? ` <span class="chip info" style="font-size:11.5px;padding:1px 7px">Location</span>` : ""}<span class="sub">${[ls.length ? `Lead: ${ls.join(", ")}` : "", n.st && `${n.st} station${n.st > 1 ? "s" : ""}`, n.emp && `${n.emp} ${n.emp > 1 ? "people" : "person"}`, n.eq && `${n.eq} item${n.eq > 1 ? "s" : ""}`].filter(Boolean).map(esc).join(" · ") || (c.hasKids ? "" : "Nothing in it yet")}</span></span>
         <span class="sub cflags">${esc(rules(c))}</span><span></span></div>`; }).join("")}
     </div>` : ""}
-    ${can("admin") ? (S.ctSent ? `<div class="panel-b" style="border-top:1px solid var(--line)"><b>Request sent.</b> <span class="muted">We'll reply by email, usually within one business day.</span> <button class="btn sm" data-act="ctMore">Ask for something else</button></div>`
+    ${(can("admin") || has("team")) ? (S.ctSent ? `<div class="panel-b" style="border-top:1px solid var(--line)"><b>Request sent.</b> <span class="muted">We'll reply by email, usually within one business day.</span> <button class="btn sm" data-act="ctMore">Ask for something else</button></div>`
       : `<form class="panel-b" data-form="contractRequest" style="border-top:1px solid var(--line);display:flex;flex-direction:column;gap:8px">
       <label for="ctReq"><b>Ask us for a change</b><span class="sub muted" style="display:block;font-size:13.5px">Add, rename, move or remove ${esc(T.many.toLowerCase())}, change how they share, or name a new lead.</span></label>
       <textarea class="field" id="ctReq" name="message" rows="3" maxlength="4000" placeholder="Like: add Wheelchair under PHX, with Walter as its lead (walter@yourcompany.com)."></textarea>
@@ -2186,9 +2236,9 @@ function vContracts() {
 }
 // Who gets emailed about what. Everyone can set their own; admins can set anyone's.
 function vEmailAlerts() {
-  const people = can("admin") ? api.members().members : [{ id: DB.me.id, name: DB.me.name, email: DB.me.email || "" }];
+  const people = has("team") ? api.members().members : [{ id: DB.me.id, name: DB.me.name, email: DB.me.email || "" }];
   return `<section class="panel" id="email"><div class="panel-h"><h2>${ic("mail")}Email alerts</h2></div>
-    <div class="panel-b muted" style="font-size:13.5px;padding-bottom:0">${can("admin") ? "Choose who gets an email, and about what. People can change their own." : "Choose what you get an email about."}
+    <div class="panel-b muted" style="font-size:13.5px;padding-bottom:0">${has("team") ? "Choose who gets an email, and about what. People can change their own." : "Choose what you get an email about."}
       Several alerts at once arrive as one email. Emails go to the address each person signs in with.</div>
     <div class="tablewrap"><table class="email-t cardify">
       <thead><tr><th>Person</th>${EMAIL_KINDS.map(([k, l, d]) => `<th title="${esc(d)}">${l}</th>`).join("")}</tr></thead>
@@ -2197,16 +2247,36 @@ function vEmailAlerts() {
         ${EMAIL_KINDS.map(([k, l]) => `<td data-label="${l}"><input type="checkbox" aria-label="Email ${esc(m.name)}: ${l}" data-email="${m.id}" value="${k}" ${on.includes(k) ? "checked" : ""}></td>`).join("")}</tr>`; }).join("")}</tbody></table></div>
     <div class="panel-b muted" style="border-top:1px solid var(--line);font-size:13.5px">${EMAIL_KINDS.map(([, l, d]) => `<b>${l}:</b> ${d.charAt(0).toLowerCase() + d.slice(1)}.`).join(" ")}</div></section>`;
 }
+// Custom roles (migration 40): Admins pick the boxes and save them under a name; they show in every role picker.
+function vRoles() {
+  const roles = api.roles(), R = S.roleEdit, admin = DB.me.role === "owner";
+  if (!admin && !roles.length) return "";
+  const form = (r) => `<form class="panel-b roleform" data-form="role:${r?.id || ""}">
+      <label class="full">Name<input class="field" name="name" maxlength="40" required value="${esc(r?.name || "")}" placeholder="Like: Ramp lead"></label>
+      ${r ? "" : `<label>Start from<select class="field" data-roletpl><option value="">Nothing</option><option value="supervisor">Supervisor</option><option value="admin">Manager</option>${roles.map((x) => `<option value="role:${x.id}">${esc(x.name)}</option>`).join("")}</select></label>`}
+      <fieldset class="full scopes perm-boxes"><legend>What they can do</legend><span class="sub muted">Everyone can see their own ${DB.contracts?.length ? esc(CTERM().many.toLowerCase()) : "company"}'s equipment, activity, alerts and reports.</span>
+        ${PERMS.map(([k, l, d]) => `<label><input type="checkbox" name="perm" value="${k}" ${(r?.perms || []).includes(k) ? "checked" : ""}> <span><b>${esc(l)}</b><span class="sub">${esc(d)}</span></span></label>`).join("")}</fieldset>
+      <div class="full actions"><button class="btn primary">${r ? "Save role" : "Make role"}</button><button class="btn" type="button" data-act="roleCancel">Cancel</button><span class="err" id="roleErr" role="alert"></span></div></form>`;
+  return `<section class="panel" id="roles"><div class="panel-h"><h2>Your roles</h2>${admin && R === undefined ? `<button class="btn sm" data-act="roleNew">Make a role</button>` : ""}</div>
+    <div class="panel-b muted" style="font-size:13.5px;padding-bottom:0">${admin ? `Pick what a role can do and save it under a name. It shows in the role list when you invite someone.${myScopeIds() ? ` Roles you make are for ${esc((DB.me.contracts || []).map(contractName).filter(Boolean).join(", "))}.` : ""}` : "Roles your admins made."}</div>
+    ${R === null ? form(null) : ""}
+    <div class="list">${roles.map((r) => R === r.id ? form(r) : `<div class="row" style="grid-template-columns:minmax(0,1fr) auto"><span><b>${esc(r.name)}</b>${r.contract ? ` <span class="muted">${esc(r.contract)}</span>` : ""}
+        <span class="sub">${r.perms.length ? esc(r.perms.map((p) => PERMS.find(([k]) => k === p)[1]).join(", ")) : "Sees only"} · ${r.members} ${r.members === 1 ? "person" : "people"}</span></span>
+        <span class="actions">${admin && r.can_edit !== false ? (S.confirm === "rmrole:" + r.id ? `<span class="confirm" style="padding:4px 8px">Delete ${esc(r.name)}? <button class="btn sm danger" data-act="roleDel" data-id="${r.id}">Delete</button><button class="btn sm" data-act="noConfirm">No</button></span>`
+          : `<button class="btn sm" data-act="roleEdit" data-id="${r.id}">Change</button><button class="btn sm danger" data-act="roleAskDel" data-id="${r.id}">Delete</button>`) : ""}</span></div>`).join("")
+      || (R === null ? "" : `<div class="empty" style="text-align:left">No roles yet. Make one when View Only, Supervisor and Manager don't fit, like a ramp lead who manages people and equipment but not stations.</div>`)}</div></section>`;
+}
 function vTeam() {
   const { members, invites } = api.members();
-  const roleSel = (m) => `<select class="field" aria-label="Role for ${esc(m.name)}" data-member="${m.id}" ${canManageRole(m.role) ? "" : "disabled"}>
-    ${Object.keys(RANK).reverse().map((r) => `<option value="${r}" ${m.role === r ? "selected" : ""} ${canManageRole(r) ? "" : "disabled"}>${ROLE_NAME[r]}</option>`).join("")}</select>`;
+  const roleSel = (m) => canManageMember(m) && m.id !== DB.me.id
+    ? `<select class="field" aria-label="Role for ${esc(m.name)}" data-member="${m.id}">${roleOptions(m.custom ? "role:" + m.custom : m.role)}</select>`
+    : `<span class="chip ${m.role === "owner" ? "brand" : "quiet"}">${esc(roleLabel(m))}</span>`;
   return head("Team access", "Who can sign in to this dashboard. Station fobs are separate: set those up under Employees or at a station.") + `
     <section class="panel"><div class="panel-h"><h2>Invite someone</h2></div>
       <form class="panel-b inline-form" data-form="invite">
         <input class="field" name="name" aria-label="Their name" placeholder="Their name" maxlength="60" style="max-width:200px">
         <input class="field" name="email" type="email" aria-label="Email address" placeholder="name@company.com" required style="max-width:300px">
-        <select class="field" name="role" aria-label="Role" style="max-width:180px">${["viewer", "supervisor", "admin", "owner"].filter(canManageRole).map((r) => `<option value="${r}">${ROLE_NAME[r]}</option>`).join("")}</select>
+        <select class="field" name="role" aria-label="Role" style="max-width:200px">${roleOptions("viewer")}</select>
         <button class="btn primary">Send invite</button><span class="err" id="invErr" role="alert"></span>
         ${DB.contracts?.length ? `<fieldset class="scopes inv-scopes"><legend>${esc(CTERM().many)} they'll see</legend>${contractTree().map((c) => `<label style="padding-left:${c.depth * 22}px"><input type="checkbox" name="c" value="${c.id}" ${(myScopeIds() || []).length === 1 && myScopeIds()[0] === c.id ? "checked" : ""}> ${esc(c.name)}</label>`).join("")}
           <span class="sub muted">${myScopeIds() ? "They'll only see what you tick." : "Leave all unticked for an Admin over the whole company."}</span></fieldset>` : ""}
@@ -2219,15 +2289,17 @@ function vTeam() {
           : (() => { const names = (m.contracts || []).map(contractName).filter(Boolean).join(", ");
               return canManageRole(m.role) && m.id !== DB.me.id ? `<button class="link ${names ? "" : "late"}" data-open="memberScope:${m.id}">${esc(names || "Nothing yet: pick some")}</button>` : `<span class="${names ? "" : "late"}">${esc(names || "Nothing yet")}</span>`; })()}</td>` : ""}<td class="num">${esc(ago(m.last))}</td>
         <td>${S.confirm === "rm:" + m.id ? `<span class="confirm" style="padding:4px 8px">Remove ${esc(m.name.split(" ")[0])}? <button class="btn sm danger" data-act="rmMember" data-id="${m.id}">Remove</button><button class="btn sm" data-act="noConfirm">Cancel</button></span>`
-          : canManageRole(m.role) && m.id !== DB.me.id ? `<button class="btn sm danger" data-act="askRm" data-id="${m.id}">Remove</button>` : ""}</td></tr>`).join("")}</tbody></table></div></section>
+          : canManageMember(m) && m.id !== DB.me.id ? `<button class="btn sm danger" data-act="askRm" data-id="${m.id}">Remove</button>` : ""}</td></tr>`).join("")}</tbody></table></div></section>
     ${invites.length ? `<section class="panel"><div class="panel-h"><h2>Waiting to accept (${invites.length})</h2></div><div class="list">${invites.map((i) => `
       <div class="row" style="grid-template-columns:minmax(0,1fr) auto auto"><span><b>${esc(i.email)}</b><span class="sub">Invited ${esc(ago(i.created))} · link expires ${esc(fmtWhen(i.expires))}</span></span>
-        <span class="chip brand">${ROLE_NAME[i.role]}</span>${canManageRole(i.role) ? `<button class="btn sm" data-act="cancelInv" data-id="${i.id}">Cancel invite</button>` : ""}</div>`).join("")}</div></section>` : ""}
-    <section class="panel"><div class="panel-h"><h2>What each role can do</h2></div><div class="tablewrap"><table>
-      <thead><tr><th></th><th>View Only</th><th>Supervisor</th><th>Manager</th><th>Admin</th></tr></thead>
-      <tbody>${[["See equipment, activity, alerts, reports", 0], ["Add and edit employees, deactivate badges", 1], ["Mark items lost or in maintenance", 1], ["Mark alerts seen, sign off shift reports", 1],
-        ["Add and edit equipment and categories, time limits", 2], ["Stations, company settings, checkout rules", 2], ["Station fob roles and PINs", 2], ["Invite and manage the team (except admins)", 2], ["Manage admins", 3]]
-        .map(([t, n]) => `<tr><td>${t}</td>${[0, 1, 2, 3].map((i) => `<td aria-label="${i >= n ? "Yes" : "No"}">${i >= n ? "✓" : "<span class='muted'>–</span>"}</td>`).join("")}</tr>`).join("")}</tbody></table></div>
+        <span class="chip brand">${esc(roleLabel(i))}</span>${canManageRole(i.role) && (!i.custom || canGiveRole(roleOf(i.custom))) ? `<button class="btn sm" data-act="cancelInv" data-id="${i.id}">Cancel invite</button>` : ""}</div>`).join("")}</div></section>` : ""}
+    ${vRoles()}
+    <section class="panel"><div class="panel-h"><h2>What each role can do</h2></div><div class="tablewrap"><table class="roles-t">
+      <thead><tr><th></th><th>View Only</th><th>Supervisor</th><th>Manager</th><th>Admin</th>${api.roles().map((r) => `<th>${esc(r.name)}</th>`).join("")}</tr></thead>
+      <tbody><tr><td>See equipment, activity, alerts and reports${DB.contracts?.length ? ` <span class="muted">(their ${esc(CTERM().many.toLowerCase())})</span>` : ""}</td>${"<td aria-label='Yes'>✓</td>".repeat(4 + api.roles().length)}</tr>
+        ${PERMS.map(([k, l, d]) => `<tr><td>${esc(l)}<span class="sub">${esc(d)}</span></td>${["viewer", "supervisor", "admin", "owner"].map((r) => ROLE_PERMS[r].includes(k))
+          .concat(api.roles().map((r) => r.perms.includes(k))).map((y) => `<td aria-label="${y ? "Yes" : "No"}">${y ? "✓" : "<span class='muted'>–</span>"}</td>`).join("")}</tr>`).join("")}
+        <tr><td>Company settings, manage Admins</td><td aria-label="No"><span class='muted'>–</span></td><td aria-label="No"><span class='muted'>–</span></td><td aria-label="Settings only">Settings</td><td aria-label="Yes">✓</td>${"<td aria-label='No'><span class='muted'>–</span></td>".repeat(api.roles().length)}</tr></tbody></table></div>
       ${DB.contracts?.length ? `<div class="panel-b muted" style="border-top:1px solid var(--line);font-size:13.5px">Your company is split into ${esc(CTERM().many.toLowerCase())}: everyone sees only the ${esc(CTERM().many.toLowerCase())} they're given, except Admins with none, who run the whole company.
         An Admin of a ${esc(CTERM().one.toLowerCase())} runs it fully, including its other Admins; company-wide settings stay with whole-company Admins.</div>` : ""}</section>`;
 }
@@ -2253,17 +2325,17 @@ function dEquipment(id) {
       <dt>Tag</dt><dd class="mono">${realTag(x.tag) ? esc(fmtUid(x.tag)) : `<span class="muted" style="font-family:var(--body)">${x.barcode ? "No NFC tag (uses its barcode)" : "Not tagged yet"}</span>`}</dd>${x.barcode ? `<dt>Barcode</dt><dd class="mono">${esc(x.barcode)}</dd>` : ""}${x.notes ? `<dt>Notes</dt><dd>${esc(x.notes)}</dd>` : ""}
       ${DB.contracts?.length ? `<dt>Belongs to</dt><dd>${esc(contractName(x.contract) || "Whole company")}</dd>` : ""}</dl></div>
     ${loanSect(x)}
-    ${can("admin") ? `<div class="actions"><button class="btn" data-act="editEq">Edit details</button></div>` : ""}
+    ${has("equipment") ? `<div class="actions"><button class="btn" data-act="editEq">Edit details</button></div>` : ""}
     ${problemsSect(x)}
-    ${can("supervisor") ? `<div class="sect"><h3>Status</h3>
+    ${(has("status") || has("equipment")) ? `<div class="sect"><h3>Status</h3>
       ${c === "lost" ? `<div class="confirm">Mark ${esc(x.name)} lost? Its alerts close, and whoever finds it can tap it at a station to return it.
           <button class="btn sm danger" data-act="doStatus" data-s="lost">Mark lost</button><button class="btn sm" data-act="noConfirm">Cancel</button></div>`
       : `<div class="actions">
         ${x.status !== "lost" ? `<button class="btn danger" data-act="askLost">Mark lost</button>` : ""}
         ${x.status !== "maintenance" ? `<button class="btn" data-act="doStatus" data-s="maintenance">Send to maintenance</button>` : ""}
         ${["lost", "maintenance", "retired"].includes(x.status) ? `<button class="btn primary" data-act="doStatus" data-s="available">Back in service</button>` : ""}
-        ${can("admin") && x.status !== "retired" ? `<button class="btn" data-act="doStatus" data-s="retired">Retire</button>` : ""}</div>`}</div>` : ""}
-    ${can("admin") ? `<div class="sect"><h3>Limits for this item</h3><form class="inline-form" data-form="limits:${x.id}">
+        ${has("equipment") && x.status !== "retired" ? `<button class="btn" data-act="doStatus" data-s="retired">Retire</button>` : ""}</div>`}</div>` : ""}
+    ${has("equipment") ? `<div class="sect"><h3>Limits for this item</h3><form class="inline-form" data-form="limits:${x.id}">
       <select class="field" name="mode" aria-label="Time limit for this item" style="flex-basis:100%">
         <option value="category" ${x.mode === "category" ? "selected" : ""}>Follow ${esc(x.category)} (${esc(limitText(limitOf({ ...x, mode: "category" })))})</option>
         <option value="hours" ${x.mode === "hours" ? "selected" : ""}>Own number of hours</option>
@@ -2283,12 +2355,12 @@ function loanSect(x) {
   const l = x.loan, T = CTERM();
   const targets = contractTree().filter((c) => !contractsShare(x.contract, c.id));
   const past = (DB.loans || []).filter((y) => y.eq === x.id && y.ended_at).sort((a, b) => b.at - a.at).slice(0, 3);
-  if (!l && !can("supervisor") && !past.length) return "";
+  if (!l && !has("status") && !past.length) return "";
   return `<div class="sect"><h3>Loan</h3>
     ${l ? `<div class="notice">On loan to <b>${esc(contractName(l.to))}</b> since ${esc(fmtWhen(l.at))}${l.by ? `, lent by ${esc(l.by)}` : ""}.${l.notes ? ` “${esc(l.notes)}”` : ""}
         It comes back when it's tapped at one of ${esc(contractName(x.contract))}'s stations.</div>
-        ${can("supervisor") ? `<div class="actions" style="margin-top:10px"><button class="btn" data-act="endLoan">End the loan now</button></div>` : ""}`
-      : can("supervisor") && targets.length ? `<form class="inline-form" data-form="lend:${x.id}">
+        ${has("status") ? `<div class="actions" style="margin-top:10px"><button class="btn" data-act="endLoan">End the loan now</button></div>` : ""}`
+      : has("status") && targets.length ? `<form class="inline-form" data-form="lend:${x.id}">
         <select class="field" name="to" aria-label="Lend to" required><option value="">Lend to…</option>${targets.map((c) => `<option value="${c.id}">${"\u2003".repeat(c.depth)}${esc(c.name)}</option>`).join("")}</select>
         <input class="field" name="notes" aria-label="Note" placeholder="Note (optional)" maxlength="300"><button class="btn primary">Lend</button><span class="err" role="alert">${esc(S.formErr || "")}</span></form>
         <p class="muted" style="margin:8px 0 0;font-size:13px">They can check it out at their stations until it's tapped back at one of ${esc(contractName(x.contract))}'s.</p>`
@@ -2305,10 +2377,10 @@ function problemsSect(x) {
       <label class="stack">Details (optional)<textarea class="field" name="notes" rows="2" maxlength="500" placeholder="Like: cracked screen, cord frayed"></textarea></label>
       <span class="err" role="alert">${esc(S.formErr || "")}</span>
       <div class="actions"><button class="btn primary">Report problem</button><button type="button" class="btn" data-act="reportCancel">Cancel</button></div></form>` : "";
-  if (!open.length && !past.length && !can("supervisor")) return "";
+  if (!open.length && !past.length && !has("status")) return "";
   return `<div class="sect"><h3>Problems</h3>
     ${open.length ? `<div class="list flat">${open.map((p) => problemRow(p, false)).join("")}</div>` : form ? "" : `<p class="muted" style="margin:0 0 8px">Nothing reported.</p>`}
-    ${form || (can("supervisor") && reasons.length ? `<div class="actions"><button class="btn" data-act="reportStart">${ic("wrench")}Report a problem</button></div>` : "")}
+    ${form || (has("status") && reasons.length ? `<div class="actions"><button class="btn" data-act="reportStart">${ic("wrench")}Report a problem</button></div>` : "")}
     ${past.length ? `<details class="past"><summary>Cleared before (${past.length})</summary><div class="list flat">${past.map((p) => problemRow(p, false)).join("")}</div></details>` : ""}</div>`;
 }
 function dEmployee(id) {
@@ -2323,7 +2395,7 @@ function dEmployee(id) {
         <span><b>${esc(q.name)}</b><span class="sub">Since ${esc(fmtWhen(q.out_at))}${q.due_at ? " · due " + esc(fmtWhen(q.due_at)) : ""}</span></span>${statusChip(q)}</button>`).join("")}</div>` : `<p class="muted" style="margin:0">Nothing checked out.</p>`}</div>
     <div class="sect"><dl class="kv"><dt>Badge</dt><dd class="mono">${realTag(e.badge) ? esc(fmtUid(e.badge)) : `<span class="muted" style="font-family:var(--body)">${e.barcode ? "No NFC badge (uses its barcode)" : "No badge yet"}</span>`}</dd>${e.barcode ? `<dt>Badge barcode</dt><dd class="mono">${esc(e.barcode)}</dd>` : ""}<dt>Late returns (7 days)</dt><dd>${lateCount}</dd>
       <dt>Last tap</dt><dd>${e.last ? esc(fmtWhen(e.last)) : "Never"}</dd></dl></div>
-    ${can("supervisor") ? `<div class="actions"><button class="btn" data-act="editEmp">Edit details</button></div>
+    ${has("people") ? `<div class="actions"><button class="btn" data-act="editEmp">Edit details</button></div>
     <div class="sect"><h3>Access</h3>${c === "deactivate" ? `<div class="confirm">Deactivate ${esc(e.name)}? Their badge stops working right away. Their history stays.
         <button class="btn sm danger" data-act="doActive" data-v="0">Deactivate</button><button class="btn sm" data-act="noConfirm">Cancel</button></div>`
       : e.active ? `<button class="btn danger" data-act="askDeactivate">Deactivate</button>` : `<button class="btn primary" data-act="doActive" data-v="1">Reactivate</button>`}</div>` : ""}
@@ -2341,7 +2413,7 @@ function dReport(key) {
       : `<p class="muted" style="margin:0">Everything the ${esc(r.shift.name)} crew took was back on time.</p>`}</div>
     ${r.inProgress ? `<div class="notice">This shift is still going. The report is saved 15 minutes after it ends.</div>`
       : r.ack ? `<div class="notice">Signed off by ${esc(r.ack.by)} ${esc(fmtWhen(r.ack.at))}${r.ack.note ? `: “${esc(r.ack.note)}”` : ""}</div>`
-      : !can("supervisor") ? `<div class="readonly-note">Not signed off yet. A supervisor or manager can sign it off.</div>`
+      : !has("alerts") ? `<div class="readonly-note">Not signed off yet. A supervisor or manager can sign it off.</div>`
       : `<div class="sect"><h3>Sign off</h3><form class="inline-form" data-form="report:${esc(r.key)}"><input class="field" name="note" aria-label="Note" placeholder="Note, like: PDA 02 found in van 4" maxlength="200">
         <button class="btn primary">Sign off</button></form></div>`}
   </div>`;
@@ -2354,13 +2426,13 @@ function dStation(id) {
     <div class="sect"><dl class="kv"><dt>Last seen</dt><dd>${s.last_seen ? esc(ago(s.last_seen)) : "Never"}</dd><dt>Software</dt><dd>${esc(s.version || "—")}</dd>
       <dt>Taps today</dt><dd>${k.taps}</dd><dt>Items out</dt><dd>${k.out}</dd><dt>Taps (7 days)</dt><dd>${taps.length}</dd><dt>Added</dt><dd>${esc(fmtWhen(s.added))}</dd>${s.replaced ? `<dt>Replaced</dt><dd>${esc(fmtWhen(s.replaced))}<span class="muted" style="display:block;font-weight:400;font-size:13px">New hardware, same station and history</span></dd>` : ""}${s.pending ? `<dt>Activation code</dt><dd${s.code ? ` class="mono"` : ""}>${s.code ? esc(s.code) : "Not shown again after it's made. Use New activation code below if it's lost."}</dd>` : ""}</dl></div>
     ${!s.online && !s.revoked && !s.pending ? `<div class="notice">Offline stations keep working: taps are saved on the station and sync when it reconnects. Check its power and Wi-Fi.</div>` : ""}
-    ${can("admin") && !s.revoked ? `<div class="sect"><h3>Name and location</h3><form class="inline-form" data-form="stationEdit:${s.id}">
+    ${has("stations") && !s.revoked ? `<div class="sect"><h3>Name and location</h3><form class="inline-form" data-form="stationEdit:${s.id}">
       <input class="field" name="name" aria-label="Station name" required maxlength="60" value="${esc(s.name)}">
       <input class="field" name="location" aria-label="Location" placeholder="Location (optional)" maxlength="60" value="${esc(s.location || "")}">
       ${DB.contracts?.length ? `<select class="field" name="contract" aria-label="${esc(CTERM().one)}">${contractOptions(s.contract || "", "Whole company (serves everyone)")}</select>` : ""}
       <button class="btn primary">Save</button><span class="err" role="alert">${esc(S.formErr || "")}</span></form>
       <p class="muted" style="margin:8px 0 0;font-size:13px">The station shows its new name within a minute.</p></div>` : ""}
-    ${!can("admin") ? "" : `<div class="sect"><h3>Access</h3>${c === "revoke" ? `<div class="confirm">Disconnect ${esc(s.name)}? It stops working right away. Use this if a station is lost or stolen.
+    ${!has("stations") ? "" : `<div class="sect"><h3>Access</h3>${c === "revoke" ? `<div class="confirm">Disconnect ${esc(s.name)}? It stops working right away. Use this if a station is lost or stolen.
         <button class="btn sm danger" data-act="doRevoke">Disconnect</button><button class="btn sm" data-act="noConfirm">Cancel</button></div>`
       : c === "remove" ? `<div class="confirm">Remove ${esc(s.name)} for good? It leaves your station list${s.revoked ? "" : " and stops working right away"}. Its taps stay in Activity.
         <button class="btn sm danger" data-act="doRemoveStation">Remove</button><button class="btn sm" data-act="noConfirm">Cancel</button></div>`
@@ -2406,7 +2478,7 @@ function dEmpForm(id) {
         <select class="field" name="contract">${contractOptions(id ? e.contract : S.f.empContract || myDefaultContract() || "", "Whole company (works everywhere)")}</select></label>` : ""}
       <div class="full" style="display:flex;flex-direction:column;gap:5px"><b style="font-size:13.5px">Shifts</b>
         <div class="checks">${DB.shifts.filter((s) => s.active || e.shifts.includes(s.id)).map((s) => `<label><input type="checkbox" name="shifts" value="${s.id}" ${e.shifts.includes(s.id) ? "checked" : ""}> ${esc(s.name)} <span class="muted">${fmtClock(s.start)}–${fmtClock(s.end)}</span></label>`).join("")}</div></div>
-      ${can("admin") ? `<label>Station fob<small>Managers and admins open the station's Admin menu</small>
+      ${has("fobs") ? `<label>Station fob<small>Managers and admins open the station's Admin menu</small>
         <select class="field" name="role" data-act-change="formRole">${["employee", "manager", "admin"].map((r) => `<option value="${r}" ${role === r ? "selected" : ""}>${{ employee: "Regular badge", manager: "Manager fob", admin: "Admin fob" }[r]}</option>`).join("")}</select></label>
         ${role !== "employee" ? `<label>${e.pin ? "New PIN" : "PIN"}<small>${e.pin ? "Leave blank to keep the current PIN" : "4 to 8 digits, needed for the Admin menu"}</small><input class="field" name="pin" inputmode="numeric" maxlength="8" autocomplete="off"></label>` : "<span></span>"}` : ""}
       <div class="err full" role="alert">${esc(S.formErr || "")}</div>
@@ -2425,7 +2497,7 @@ function dMemberScope(id) {
 }
 function dShiftForm(id) {
   const x = id ? DB.shifts.find((s) => s.id === id) : { name: "", start: "05:00", end: "13:30", days: null, grace: 15, early: 60, active: true };
-  const admin = can("admin"), sup = can("supervisor"), c = S.confirm;
+  const admin = has("shifts"), sup = has("people"), c = S.confirm;
   const days = x.days || [1, 2, 3, 4, 5, 6, 7];
   const people = DB.employees.filter((e) => e.active || e.shifts.includes(id)).sort((a, b) => a.name.localeCompare(b.name));
   return drawerHead(id ? (sup ? `Edit ${esc(x.name)} shift` : `${esc(x.name)} shift`) : "Add a shift", id ? `${fmtClock(x.start)} to ${fmtClock(x.end)} · ${esc(daysText(x.days))}` : "Times are in the company's time zone.") + `<div class="drawer-b">
@@ -2524,6 +2596,11 @@ document.addEventListener("click", async (e) => {
   if (a === "askDelCat") { S.confirm = "delcat:" + t.dataset.id; return render(); }
   if (a === "delCat") { const r = api.deleteCategory(t.dataset.id); S.confirm = null; toast(r.ok ? "Category deleted" : "It still has equipment"); return render(); }
   if (a === "askRm") { S.confirm = "rm:" + t.dataset.id; return render(); }
+  if (a === "roleNew") { S.roleEdit = null; render(); $('[data-form="role:"] [name=name]')?.focus(); return; }
+  if (a === "roleEdit") { S.roleEdit = t.dataset.id; S.confirm = null; render(); $(`[data-form="role:${t.dataset.id}"] [name=name]`)?.focus(); return; }
+  if (a === "roleCancel") { S.roleEdit = undefined; return render(); }
+  if (a === "roleAskDel") { S.confirm = "rmrole:" + t.dataset.id; return render(); }
+  if (a === "roleDel") { const r = await api.deleteRole(t.dataset.id); S.confirm = null; toast(r.ok ? "Role deleted" : r.error); return render(); }
   if (a === "rmMember") { const r = api.removeMember(t.dataset.id); S.confirm = null; toast(r.ok ? "Removed from the team" : r.error); return render(); }
   if (a === "cancelInv") { api.cancelInvite(t.dataset.id); toast("Invite cancelled"); return render(); }
   if (a === "askStopShift") { S.confirm = "stopShift"; return renderLayer(); }
@@ -2571,7 +2648,11 @@ document.addEventListener("change", (e) => {
   if (t.id === "logoFile" && t.files?.[0]) { const file = t.files[0]; S.logoBusy = true; render();
     uploadLogo(file).then((url) => { api.saveSettings({ logo_url: url }); toast("Logo updated. Stations show it within a minute."); })
       .catch((err) => toast(err.message)).finally(() => { S.logoBusy = false; render(); }); return; }
-  if (t.id === "viewAs") { DB.me.role = t.value; S.drawer = null; S.confirm = null; toast(`Previewing as ${ROLE_NAME[t.value]}`); return render(); }
+  if (t.id === "viewAs") { DB.me.role = t.value; DB.me.custom = null; S.drawer = null; S.confirm = null; toast(`Previewing as ${ROLE_NAME[t.value]}`); return render(); }
+  if (t.matches("[data-roletpl]")) {
+    const v = t.value, perms = !v ? [] : v.startsWith("role:") ? roleOf(v.slice(5))?.perms || [] : ROLE_PERMS[v] || [];
+    t.form.querySelectorAll("input[name=perm]").forEach((c) => { c.checked = perms.includes(c.value); }); return;
+  }
   if (t.dataset.member) { const r = api.setMemberRole(t.dataset.member, t.value); toast(r.ok ? "Role updated" : r.error); return render(); }
   if (t.dataset.actChange === "formRole") { const form = t.form; const keep = Object.fromEntries(new FormData(form)); S.formRole = t.value; renderLayer();
     const f2 = $(".drawer form"); for (const [k, v] of Object.entries(keep)) if (f2.elements[k] && k !== "shifts" && k !== "role") f2.elements[k].value = v; return; }
@@ -2678,6 +2759,11 @@ document.addEventListener("submit", async (e) => {
     const r = api.addCategory({ name: data.name, rule: data.rule, hours: data.hours === "" ? null : Number(data.hours) });
     if (!r.ok) { $("#catErr").textContent = r.error; return; }
     toast("Category added"); return render();
+  }
+  if (kind.startsWith("role:")) {
+    const id = kind.slice(5) || null, perms = new FormData(f).getAll("perm");
+    const r = await api.saveRole(id, { name: data.name, perms }); if (!r.ok) { $("#roleErr").textContent = r.error; return; }
+    S.roleEdit = undefined; toast(id ? "Role saved" : `${data.name.trim()} is ready to give to people`); return render();
   }
   if (kind === "invite") {
     const r = api.invite(data.email, data.role, (data.name || "").trim(), new FormData(f).getAll("c"));
@@ -2802,8 +2888,8 @@ const live = {
         stc: t.station_contract_id, source: t.source, flags: t.flags || [], notes: t.notes })),
       alerts: alerts.map((a) => ({ id: a.id, eq: a.equipment_id, emp: a.employee_id, kind: a.kind, out_at: ms(a.checked_out_at), threshold_at: ms(a.threshold_at), raised_at: ms(a.raised_at),
         resolved_at: ms(a.resolved_at), ack_by: who(a.acknowledged_by), ack_at: ms(a.acknowledged_at), notes: a.notes })),
-      reports, members: (team.members || []).map((m) => ({ id: m.user_id, name: m.name || m.email.split("@")[0], email: m.email, role: m.role, joined: ms(m.joined_at), last: ms(m.last_sign_in_at) })),
-      invites: (team.invites || []).map((i) => ({ id: i.id, email: i.email, role: i.role, created: ms(i.created_at), expires: ms(i.expires_at) })),
+      reports, members: (team.members || []).map((m) => ({ id: m.user_id, name: m.name || m.email.split("@")[0], email: m.email, role: m.role, custom: m.custom_role_id || null, role_name: m.role_name, joined: ms(m.joined_at), last: ms(m.last_sign_in_at) })),
+      invites: (team.invites || []).map((i) => ({ id: i.id, email: i.email, role: i.role, custom: i.custom_role_id || null, role_name: i.role_name, created: ms(i.created_at), expires: ms(i.expires_at), contracts: i.contracts || [] })),
       me: { id: L.user.id, name: L.names[L.user.id], role, email: L.user.email }, audit: [], reportAcks: {}, occs: [],
       reasons: reasons.map((r) => ({ id: r.id, label: r.label, blocks: r.blocks_checkout, sort: r.sort_order })),
       contracts: contracts.map((c) => ({ id: c.id, parent: c.parent_id, name: c.name, kind: c.kind || "contract", share: c.share_children, move: c.move_on_return, sort: c.sort_order })),
@@ -2816,6 +2902,9 @@ const live = {
     // Barcodes need database update 24; until it's run the fields stay hidden.
     DB.hasBarcode = await q(sb.from("equipment").select("barcode").limit(1)).then(() => true).catch(() => false);
     DB.me.contracts = coversOf(L.user.id); DB.members.forEach((m) => { m.contracts = coversOf(m.id); });
+    // Custom roles (migration 40): the list, and which one you have.
+    DB.roles = await rpc("list_custom_roles", { p_org: org }).then((r) => r.map((x) => ({ ...x, perms: x.perms || [] }))).catch(() => []);
+    DB.me.custom = await q(sb.from("org_members").select("custom_role_id").eq("org_id", org).eq("user_id", L.user.id)).then((r) => r[0]?.custom_role_id || null).catch(() => null);
     // Visitors (migration 34): passes in and out of your contracts; a visitor's own record shows only for names in history.
     DB.passes = await rpc("list_visitor_passes", { p_org: org }).then((r) => r.map(mapPass)).catch(() => null);
     DB.employees.forEach((e) => { e.visitor = !!myScopeIds() && !contractOf(e.contract); });
@@ -2903,7 +2992,7 @@ const REMOTE = {
   setShiftActive: ([id, active]) => upd("shifts", id, { active }),
   saveShift: async ([id, d, crew], r) => {
     const s = DB.shifts.find((x) => x.id === r.id); let sid = id;
-    if (can("admin")) {
+    if (has("shifts")) {
       const row = { name: s.name, start_time: s.start, end_time: s.end, days_of_week: s.days || null, grace_minutes: s.grace, early_checkout_minutes: s.early, ...(DB.contracts?.length ? { contract_id: s.contract || null } : {}) };
       if (id) await upd("shifts", id, row); else { sid = (await q(sb.from("shifts").insert({ org_id: ORG(), ...row }).select("id").single())).id; L.idMap[r.id] = sid; s.id = sid; }
     }
@@ -2920,7 +3009,7 @@ const REMOTE = {
     let eid = id;
     if (id) await upd("employees", id, row); else { eid = (await q(sb.from("employees").insert({ org_id: ORG(), ...row }).select("id").single())).id; L.idMap[r.id] = eid; e.id = eid; if (S.drawer?.id === r.id) S.drawer.id = eid; }
     await syncAssignments("employee_id", eid, e.shifts || [], "shift_id");
-    if (can("admin")) await okRpc("set_employee_station_role", { p_employee: eid, p_role: e.role || "employee", p_pin: d.pin || null });
+    if (has("fobs")) await okRpc("set_employee_station_role", { p_employee: eid, p_role: e.role || "employee", p_pin: d.pin || null });
   },
   setBarcodes: async ([kind, pairs]) => {
     const table = kind === "equipment" ? "equipment" : "employees";
@@ -2946,11 +3035,13 @@ const REMOTE = {
     }
   },
   invite: async ([email, role, name, contracts]) => {
-    const r = await okRpc("invite_member", { p_org: ORG(), p_email: email.trim().toLowerCase(), p_role: role, ...(contracts?.length ? { p_contracts: contracts } : {}) });
+    const custom = String(role).startsWith("role:") ? role.slice(5) : null;
+    const r = await okRpc("invite_member", { p_org: ORG(), p_email: email.trim().toLowerCase(), p_role: custom ? "viewer" : role, ...(contracts?.length ? { p_contracts: contracts } : {}), ...(custom ? { p_custom_role: custom } : {}) });
     const err = await sendInviteEmail(email.trim().toLowerCase(), r.token, name);
     if (err) toast("Invite saved, but the email didn't send: " + err);
   },
-  setMemberRole: ([id, role]) => okRpc("set_member_role", { p_org: ORG(), p_user: id, p_role: role }),
+  setMemberRole: ([id, role]) => String(role).startsWith("role:") ? okRpc("set_member_role", { p_org: ORG(), p_user: id, p_role: "viewer", p_custom_role: role.slice(5) })
+    : okRpc("set_member_role", { p_org: ORG(), p_user: id, p_role: role }),
   removeMember: ([id]) => okRpc("remove_member", { p_org: ORG(), p_user: id }),
   cancelInvite: ([id]) => rpc("cancel_invite", { p_invite: id }),
   setMemberContracts: ([id, ids]) => okRpc("set_member_contracts", { p_org: ORG(), p_user: id, p_contracts: ids }),
@@ -2990,6 +3081,21 @@ function goLive() {
     await reloadPasses(); return { ok: true };
   };
   api.endVisitorPass = async (id) => { try { await rpc("end_visitor_pass", { p_pass: id }); } catch (e) { return { ok: false, error: niceErr(e) }; } await reloadPasses(); return { ok: true }; };
+  // Custom roles: straight to the server, then reload the list.
+  const ROLE_ERR = { bad_name: "Give it a name (up to 40 characters).", built_in_name: "That name is a built-in role. Pick another.", duplicate_name: "There's already a role with that name.",
+    outside_scope: "That's outside what you look after.", unknown_perm: "Pick from the list." };
+  const reloadRoles = async () => { DB.roles = await rpc("list_custom_roles", { p_org: ORG() }).then((r) => r.map((x) => ({ ...x, perms: x.perms || [] }))).catch(() => DB.roles); };
+  api.saveRole = async (id, d) => {
+    try { const r = await rpc("save_custom_role", { p_org: ORG(), p: { id: id || null, name: (d.name || "").trim(), perms: ALL_PERMS.filter((p) => (d.perms || []).includes(p)) } });
+      if (!r.ok) return { ok: false, error: ROLE_ERR[r.error] || r.error }; await reloadRoles(); return { ok: true, id: r.id }; }
+    catch (e) { return { ok: false, error: niceErr(e) }; }
+  };
+  api.deleteRole = async (id) => {
+    try { const r = await rpc("delete_custom_role", { p_role: id });
+      if (!r.ok) return { ok: false, error: r.error === "in_use" ? `${r.count} ${r.count === 1 ? "person has" : "people have"} this role. Give them another one first.` : r.error }; }
+    catch (e) { return { ok: false, error: niceErr(e) }; }
+    await reloadRoles(); return { ok: true };
+  };
   // Need the server's answer before showing anything.
   api.createStation = async (name, location) => {
     let loc = null;

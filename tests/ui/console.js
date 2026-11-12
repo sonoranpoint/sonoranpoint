@@ -182,6 +182,11 @@ const api_set = async (id) => { E(`api.updateCustomer('${id}', { logo_dark_url: 
     await submit('[data-form="member"]');
     check(/Pick at least one/.test(doc.querySelector("#team").textContent), "someone who isn't an admin can't be left with none");
     await click('[data-act="mCancel"]');
+    // Their own roles (migration 40) show in the role list
+    await click('[data-act="mEdit"][data-id="ops@demoair.example"]');
+    { const f = doc.querySelector('[data-form="member"]'); check([...f.elements.role.options].some((o) => o.value === "role:rl"), "a customer's own roles are in the role list"); f.elements.role.value = "role:rl"; }
+    await submit('[data-form="member"]');
+    check(E(`custOf('${demoId}').members.find(m => m.email === 'ops@demoair.example').custom`) === "rl" && /Ramp lead · /.test(doc.querySelector("#team").textContent), "give someone their Ramp lead role");
     // An Admin of just some contracts (migration 37)
     await click('[data-act="mEdit"][data-id="dana@demoair.example"]');
     { const f = doc.querySelector('[data-form="member"]'); f.elements.role.value = "owner"; f.querySelectorAll("input[name=contracts]").forEach((i) => { i.checked = i.value === "bw"; }); }

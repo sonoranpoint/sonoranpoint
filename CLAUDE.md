@@ -24,7 +24,7 @@ See README.md for the full product description.
 - Push to `main` → GitHub Actions runs `tests/run.sh db`, `ui` and `live` (PostgREST downloaded in CI), then deploys app + console to Cloudflare Pages
   (projects `sonoranpoint-app`, `sonoranpoint-console`, `sonoranpoint-site`).
 - Database changes are NOT automatic. Add a new migration file (never edit one already run on the live
-  project), then tell Dez to run it in the Supabase SQL editor. Migrations 1–31 have been run, 32–39 not yet (checked 2026-11-12;
+  project), then tell Dez to run it in the Supabase SQL editor. Migrations 1–31 have been run, 32–40 not yet (checked 2026-11-12;
   ask if unsure). Alert emails are live (Resend key in Vault, first send
   confirmed 2026-10-20).
 - Station changes reach the Pis by themselves: every deploy publishes `app.sonoranpoint.com/station-release/latest.json` + a zip
@@ -75,6 +75,17 @@ See README.md for the full product description.
   "Visitors" (supervisors+): `find_visitors` (whole company), `create_visitor_pass` (into your contracts, up to 31 days),
   `end_visitor_pass`, `list_visitor_passes` (in and out of your contracts). Hosts can read the visitor's employee row
   (`private.visited_me`, 60 days) for names in history; the dashboard marks those `e.visitor` and leaves them off the Employees list.
+
+## Custom roles (migration 40)
+- Nine permissions (`private.all_perms()`): people, status, alerts, visitors, equipment, stations, fobs, shifts, team. Checks use
+  `private.has_perm(org, perm)` (from `perms_of`: Admin = all, built-in Manager = all, Supervisor = people/status/alerts/visitors,
+  View Only = none, custom role = its `perms`). Company-wide settings still need a whole-company Admin or built-in Manager (`has_org_role` admin + unscoped).
+- `public.custom_roles` (functions only): `save_custom_role` / `delete_custom_role` (Admins; a contract Admin's roles get their
+  contract and are only seen in it), `list_custom_roles`. A member with a custom role is stored as `role = 'viewer'` +
+  `org_members.custom_role_id`; invites carry `custom_role_id`. `set_member_role(..., p_custom_role)`, `invite_member(..., p_custom_role)`.
+  No escalation: `can_give_custom` / `can_manage_role` / `can_manage_member` only allow roles whose boxes you have.
+- Dashboard: `PERMS`, `ROLE_PERMS`, `has(perm)`, `roleLabel`, `roleOptions` ("role:<id>" values), Team page "Your roles" (`vRoles`).
+  Console team panel lists the customer's roles in its role picker (`roleName`, `splitRole`).
 
 ## Stations
 - Removing a station (`remove_station` / `platform_remove_station`, migration 20) sets `removed_at` (and `revoked_at`); the row stays so

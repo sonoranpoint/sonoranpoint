@@ -58,8 +58,29 @@ const drawer = () => doc.querySelector(".drawer")?.textContent.replace(/\s+/g, "
   doc.querySelector('.inv-scopes input[value="bw"]').checked = true;
   await submit('[data-form="invite"]', { email: "Payroll@DemoAir.example", role: "viewer" });
   check(/payroll@demoair.example/.test(doc.body.textContent) && /Waiting to accept \(2\)/.test(doc.body.textContent), "invite a view-only person -> waiting to accept");
-  const sel = doc.querySelector('[data-member="u1"]'); sel.value = "admin"; sel.dispatchEvent(new dom.window.Event("change", { bubbles: true })); await sleep(15);
-  check(E("DB.members.find(m => m.id === 'u1').role") === "owner", "the only owner can't demote themselves");
+  check(!doc.querySelector('[data-member="u1"]') && E("api.setMemberRole('u1', 'admin').ok") === false && E("DB.members.find(m => m.id === 'u1').role") === "owner", "the only admin can't change their own role");
+  // Custom roles (migration 40): make one from boxes, then give it to someone
+  check(/Your roles/.test(doc.body.textContent) && /Ramp lead/.test(doc.body.textContent), "roles section lists the company's roles");
+  await click('[data-act="roleNew"]');
+  { const f = doc.querySelector('[data-form="role:"]'), tpl = f.querySelector("[data-roletpl]"); tpl.value = "supervisor"; tpl.dispatchEvent(new dom.window.Event("change", { bubbles: true })); await sleep(10);
+    check([...f.querySelectorAll("input[name=perm]:checked")].map((c) => c.value).join() === "people,status,alerts,visitors", "start from Supervisor ticks its boxes");
+    f.querySelector('input[name=perm][value="alerts"]').checked = false; f.querySelector('input[name=perm][value="equipment"]').checked = true; }
+  await submit('[data-form="role:"]', { name: "Supervisor" });
+  check(/built-in role/.test(doc.querySelector("#roleErr").textContent), "a role can't take a built-in name");
+  await submit('[data-form="role:"]', { name: "Gear lead" });
+  const gl = E("DB.roles.find(r => r.name === 'Gear lead')");
+  check(gl && gl.perms.join() === "people,status,visitors,equipment" && /Gear lead/.test(doc.querySelector(".roles-t thead").textContent), "save it; it shows in the table");
+  { const s2 = doc.querySelector('[data-member="u3"]'); check([...s2.options].some((o) => o.value === "role:" + gl.id), "it's in the role list");
+    s2.value = "role:" + gl.id; s2.dispatchEvent(new dom.window.Event("change", { bubbles: true })); await sleep(15); }
+  check(E("DB.members.find(m => m.id === 'u3').custom") === gl.id && E("DB.members.find(m => m.id === 'u3').role") === "viewer", "give Kelly the Gear lead role");
+  await click(`[data-act="roleAskDel"][data-id="${gl.id}"]`); await click(`[data-act="roleDel"][data-id="${gl.id}"]`);
+  check(!!E(`roleOf('${gl.id}')`) && /1 person has this role/.test(doc.body.textContent), "a role someone has can't be deleted");
+  // As Kelly (Gear lead): People and Equipment yes, Alerts and Stations no, Team no
+  E(`DB.me.role = 'viewer'; DB.me.custom = '${gl.id}'; render()`); await sleep(20);
+  check(E("has('equipment') && has('people') && !has('alerts') && !has('stations') && !has('team')") && !/Team access/.test(doc.querySelector(".snav").textContent), "a custom role gets exactly its boxes");
+  await go("equipment"); check(!!doc.querySelector('[data-act="newEq"]'), "Gear lead: can add equipment");
+  await go("stations"); check(!doc.querySelector('[data-act="addStation"]'), "Gear lead: can't add stations");
+  E("DB.me.role = 'owner'; DB.me.custom = null; DB.members.find(m => m.id === 'u3').custom = null; render()"); await go("team");
   const sel3 = doc.querySelector('[data-member="u3"]'); sel3.value = "viewer"; sel3.dispatchEvent(new dom.window.Event("change", { bubbles: true })); await sleep(15);
   check(E("DB.members.find(m => m.id === 'u3').role") === "viewer", "change Kelly to View only");
   await click('[data-act="askRm"][data-id="u4"]'); await click('[data-act="rmMember"][data-id="u4"]');

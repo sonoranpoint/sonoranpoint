@@ -1666,6 +1666,62 @@ update stations set contract_id = null where id = :'erm02';
 delete from transactions where equipment_id in (select id from equipment where nfc_uid = '04DE0000AA01');
 delete from equipment where nfc_uid = '04DE0000AA01';
 
+\echo '--- Custom roles (migration 40)'
+reset role;
+select id as dbw from contracts where name = 'Delta BW' \gset
+select id as ubw from contracts where name = 'United BW' \gset
+-- Sierra is Admin of Delta BW (migration 37 tests); she makes a role for her crew leads
+set role authenticated;
+select set_config('request.jwt.claim.sub', '99999999-0000-0000-0000-000000000009', false) \g /dev/null
+select set_member_role('00000000-0000-0000-0000-00000000d3e0', '51e77a00-0000-0000-0000-000000000051', 'owner') \g /dev/null
+select set_member_contracts('00000000-0000-0000-0000-00000000d3e0', '51e77a00-0000-0000-0000-000000000051', array[:'dbw'::uuid]) \g /dev/null
+select set_config('request.jwt.claim.sub', '51e77a00-0000-0000-0000-000000000051', false) \g /dev/null
+select pg_temp.ok(save_custom_role('00000000-0000-0000-0000-00000000d3e0', '{"name":"Manager","perms":[]}')->>'error' = 'built_in_name', 'a role can''t take a built-in name');
+select save_custom_role('00000000-0000-0000-0000-00000000d3e0', '{"name":"Ramp lead","perms":["people","equipment","team"]}') as rl \gset
+select save_custom_role('00000000-0000-0000-0000-00000000d3e0', '{"name":"Station tech","perms":["stations","fobs"]}') as st \gset
+reset role;
+select pg_temp.ok((:'rl'::jsonb->>'ok')::boolean and (select contract_id from custom_roles where name = 'Ramp lead') = :'dbw'::uuid, 'a Delta BW Admin''s role belongs to Delta BW');
+insert into auth.users (id, email) values ('40400000-0000-0000-0000-000000000040', 'ramplead@example.com'), ('40400000-0000-0000-0000-000000000041', 'other@example.com');
+set role authenticated;
+select set_config('request.jwt.claim.sub', '51e77a00-0000-0000-0000-000000000051', false) \g /dev/null
+select invite_member('00000000-0000-0000-0000-00000000d3e0', 'ramplead@example.com', 'supervisor', null, (:'rl'::jsonb->>'id')::uuid) as rinv \gset
+reset role;
+select pg_temp.ok((select role = 'viewer' and custom_role_id = (:'rl'::jsonb->>'id')::uuid and contracts = array[:'dbw'::uuid] from org_invites where email = 'ramplead@example.com' and accepted_at is null),
+                  'she invites a ramp lead with that role (stored as View Only + the role), for Delta BW');
+set role authenticated;
+select set_config('request.jwt.claim.sub', '40400000-0000-0000-0000-000000000040', false) \g /dev/null
+select accept_invite(:'rinv'::jsonb->>'token') \g /dev/null
+select pg_temp.ok(private.perms_of('00000000-0000-0000-0000-00000000d3e0', auth.uid()) @> array['people','equipment','team'] and not private.has_perm('00000000-0000-0000-0000-00000000d3e0', 'stations'),
+                  'the ramp lead has exactly the role''s permissions');
+with x as (insert into equipment (org_id, category_id, name, contract_id) select '00000000-0000-0000-0000-00000000d3e0', id, 'Lead radio', :'dbw' from equipment_categories where org_id = '00000000-0000-0000-0000-00000000d3e0' limit 1 returning 1)
+select pg_temp.ok((select count(*) from x) = 1, 'equipment permission: they can add equipment');
+select pg_temp.ok(pg_temp.raises($$select create_station('00000000-0000-0000-0000-00000000d3e0', 'Nope')$$), 'no stations permission: they can''t add stations');
+select pg_temp.ok(pg_temp.raises($$select save_custom_role('00000000-0000-0000-0000-00000000d3e0', '{"name":"Mine","perms":["people"]}')$$), 'only Admins make roles');
+select pg_temp.ok(pg_temp.raises($$select invite_member('00000000-0000-0000-0000-00000000d3e0', 'sup@x.example', 'supervisor')$$), 'they can''t give Supervisor (it has boxes they don''t)');
+select pg_temp.ok(pg_temp.raises($$select invite_member('00000000-0000-0000-0000-00000000d3e0', 'tech@x.example', 'viewer', null, '$$ || (:'st'::jsonb->>'id') || $$')$$), 'or a role with boxes they don''t have');
+select pg_temp.ok((invite_member('00000000-0000-0000-0000-00000000d3e0', 'other@example.com', 'viewer', null, (:'rl'::jsonb->>'id')::uuid)->>'ok')::boolean, 'but they can give their own role (in their contract)');
+select pg_temp.ok((invite_member('00000000-0000-0000-0000-00000000d3e0', 'viewer2@x.example', 'viewer')->>'ok')::boolean, 'and View Only');
+-- Walter (United BW) doesn't see Delta BW's roles
+select set_config('request.jwt.claim.sub', '51e77a00-0000-0000-0000-000000000052', false) \g /dev/null
+select pg_temp.ok(not (list_custom_roles('00000000-0000-0000-0000-00000000d3e0')::text like '%Ramp lead%'), 'another contract doesn''t see Delta BW''s roles');
+-- A whole-company Admin's role is everyone's
+select set_config('request.jwt.claim.sub', 'aaaaaaaa-0000-0000-0000-000000000001', false) \g /dev/null
+select save_custom_role('00000000-0000-0000-0000-00000000d3e0', '{"name":"Auditor","perms":[]}') as au \gset
+select set_config('request.jwt.claim.sub', '51e77a00-0000-0000-0000-000000000052', false) \g /dev/null
+select pg_temp.ok(list_custom_roles('00000000-0000-0000-0000-00000000d3e0')::text like '%Auditor%', 'a company-wide role shows to everyone');
+select set_config('request.jwt.claim.sub', '51e77a00-0000-0000-0000-000000000051', false) \g /dev/null
+select pg_temp.ok(pg_temp.raises($$select save_custom_role('00000000-0000-0000-0000-00000000d3e0', '{"id":"$$ || (:'au'::jsonb->>'id') || $$","name":"Auditor","perms":["team"]}')$$),
+                  'a contract Admin can''t change a company-wide role');
+select pg_temp.ok(delete_custom_role((:'rl'::jsonb->>'id')::uuid)->>'error' = 'in_use', 'a role someone has can''t be deleted');
+-- Built-in roles keep working the same
+select set_config('request.jwt.claim.sub', 'aaaaaaaa-0000-0000-0000-000000000001', false) \g /dev/null
+select pg_temp.ok(private.has_perm('00000000-0000-0000-0000-00000000d3e0', 'team') and private.has_perm('00000000-0000-0000-0000-00000000d3e0', 'fobs'), 'Admins have every permission');
+reset role;
+select pg_temp.ok(private.role_perms('supervisor') = array['people','status','alerts','visitors'] and private.role_perms('viewer') = '{}', 'built-in Supervisor and View Only are unchanged');
+delete from org_invites where custom_role_id is not null or email in ('viewer2@x.example');
+delete from org_members where user_id = '40400000-0000-0000-0000-000000000040';
+delete from equipment where name = 'Lead radio';
+
 \echo '--- Deleting a company removes all its data'
 delete from organizations where slug = 'demo';
 select pg_temp.ok((select count(*) from equipment) = 0 and (select count(*) from transactions) = 0, 'company delete cascades cleanly');

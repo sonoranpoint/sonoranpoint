@@ -623,7 +623,7 @@ function buildDemo() {
   const waiting = (name, location, daysAgo) => st(name, location, { activated_at: null, last_seen: null, version: null, admin_claimed_at: null,
     code: newCode(), code_expires: now - daysAgo * DAY + 7 * DAY, created: now - daysAgo * DAY });
   const C = (o) => ({ id: uid("org"), logo_url: "", timezone: "America/Phoenix", terms: { ...DEFAULT_TERMS }, modules: [], station_limit: null,
-    trial_ends: null, pause_trial: true, paused_reason: null, share_contracts: false, move_on_return: false, notes: "", invites: [], log: [], contracts: [], locations: [], events: [], logo_dark_url: "", ...o });
+    trial_ends: null, pause_trial: true, paused_reason: null, roles: [], share_contracts: false, move_on_return: false, notes: "", invites: [], log: [], contracts: [], locations: [], events: [], logo_dark_url: "", ...o });
   const demoContracts = [{ id: "bw", parent_id: null, name: "BW" }, { id: "aw", parent_id: null, name: "AW", share: true, move: true },
     { id: "dbw", parent_id: "bw", name: "Delta BW" }, { id: "ubw", parent_id: "bw", name: "United BW" }, { id: "daw", parent_id: "aw", name: "Delta AW" }, { id: "uaw", parent_id: "aw", name: "United AW" }];
   const customers = [
@@ -632,7 +632,7 @@ function buildDemo() {
       notes: "Pilot site, Terminal 3. First customer: use for reference calls.",
       usage: { employees: 13, equipment: 29, taps7d: 412, last_tap: now - 6 * MIN },
       members: [["morgan@demoair.example", "owner", 1 * HOUR], ["dana@demoair.example", "admin", 3 * HOUR, ["bw"]], ["kelly@demoair.example", "supervisor", 26 * HOUR, ["dbw"]], ["ops@demoair.example", "viewer", 5 * DAY, ["bw", "aw"]]],
-      contracts: demoContracts,
+      contracts: demoContracts, roles: [{ id: "rl", name: "Ramp lead", perms: ["people", "status", "equipment"], contract_id: null }],
       stations: [st("Equipment Room 01", "Terminal 3", { contract_id: "dbw" }), st("Bag Room", "Terminal 4", { last_seen: now - 3.2 * HOUR, created: now - 12 * DAY, activated_at: now - 12 * DAY, contract_id: "ubw" })] }),
     C({ name: "Copper State Cargo", slug: "copperstate", status: "active", plan: "standard", primary: "#8A3B12", accent: "#E8B04A", modules: ["shifts"], station_limit: 4,
       contact_name: "Rafael Montoya", contact_email: "rmontoya@copperstate.example", contact_phone: "(520) 555-0177", created: now - 26 * DAY,
@@ -788,6 +788,9 @@ const CT_ERR = { name_required: "Enter a name.", name_too_long: "Keep it under 6
   outside_scope: "That's outside their branch.", already_member: "That person is already on their team.", bad_email: "Enter a full email address.",
   last_owner: "They need at least one admin. Make someone else an admin first.", not_member: "They're no longer on the team.", not_a_member: "They're no longer on the team.", not_found: "That's gone. Refresh the page." };
 const MEMBER_ROLE = { owner: "Admin", admin: "Manager", supervisor: "Supervisor", viewer: "View Only" };
+// A customer's own roles (migration 40): stored as View Only plus the role's boxes. Pickers use "role:<id>".
+const roleName = (c, m) => m.custom ? (c.roles || []).find((r) => r.id === m.custom)?.name || "Custom role" : MEMBER_ROLE[m.role];
+const splitRole = (role) => String(role).startsWith("role:") ? ["viewer", role.slice(5)] : [role, null];
 const ctWord = (c) => ({ one: c.terms?.contract || "Contract", many: c.terms?.contract_plural || "Contracts" });
 const isLoc = (k) => k?.kind === "location";
 // Nobody from the customer has signed in yet. An Admin is optional (migration 36): some companies only have a lead per contract.
@@ -910,25 +913,26 @@ const api = {
   },
   /* rpc invite_member(org, email, role, contracts) — managers, supervisors, view only (admins: inviteOwner) */
   inviteMember(orgId, email, role, contracts = []) {
-    const c = custOf(orgId); email = (email || "").trim().toLowerCase();
+    const c = custOf(orgId); email = (email || "").trim().toLowerCase(); let custom; [role, custom] = splitRole(role);
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return { ok: false, error: CT_ERR.bad_email };
     if (c.members.some((m) => m.email === email)) return { ok: false, error: CT_ERR.already_member };
     const err = memberCheck(c, role, contracts); if (err) return { ok: false, error: CT_ERR[err] };
     c.invites = c.invites.filter((i) => i.email !== email);
-    const token = newToken(); c.invites.unshift({ id: uid("inv"), email, role, contracts, expires: Date.now() + 14 * DAY, token });
-    log(c, "invited " + MEMBER_ROLE[role].toLowerCase(), changeText({ email, text: contracts.map((id) => c.contracts.find((k) => k.id === id)?.name).join(", ") }));
+    const token = newToken(); c.invites.unshift({ id: uid("inv"), email, role, custom, contracts, expires: Date.now() + 14 * DAY, token });
+    log(c, "invited " + roleName(c, { role, custom }).toLowerCase(), changeText({ email, text: contracts.map((id) => c.contracts.find((k) => k.id === id)?.name).join(", ") }));
     return { ok: true, email, token };
   },
   /* rpc set_member_role + set_member_contracts */
   setMember(orgId, memberId, role, contracts = []) {
     const c = custOf(orgId), m = c.members.find((x) => x.id === memberId); if (!m) return { ok: false, error: CT_ERR.not_member };
+    let custom; [role, custom] = splitRole(role);
     if (m.role === "owner" && role !== "owner" && c.members.filter((x) => x.role === "owner").length === 1) return { ok: false, error: CT_ERR.last_owner };
     const err = memberCheck(c, role, contracts); if (err) return { ok: false, error: CT_ERR[err] };
-    if (m.role !== role) log(c, "changed team role", changeText({ email: m.email, role: MEMBER_ROLE[role] }));
+    if (m.role !== role || (m.custom || null) !== custom) log(c, "changed team role", changeText({ email: m.email, role: roleName(c, { role, custom }) }));
     const next = c.contracts.length ? contracts : [];
     if (c.contracts.length && JSON.stringify([...(m.contracts || [])].sort()) !== JSON.stringify([...next].sort()))
       log(c, "changed contracts", changeText({ email: m.email, text: next.map((id) => c.contracts.find((k) => k.id === id)?.name).join(", ") }));
-    Object.assign(m, { role, contracts: next }); return { ok: true };
+    Object.assign(m, { role, custom, contracts: next }); return { ok: true };
   },
   /* rpc remove_member */
   removeMember(orgId, memberId) {
@@ -1235,8 +1239,9 @@ const live = {
     Object.assign(c, { detail: true, terms: { ...DEFAULT_TERMS, ...(o.terminology || {}) }, timezone: o.timezone, contact_phone: o.contact_phone || "", notes: o.notes || "",
       logo_url: o.logo_url || "", ...("logo_dark_url" in o ? { logo_dark_url: o.logo_dark_url || "" } : {}), stations: r.stations.map(mapStation), contracts: r.contracts || [], locations: r.locations || [],
       events: (r.station_events || []).map((e) => ({ station: e.station_id, at: ms(e.at), kind: e.kind, details: e.details || {}, by: e.by })),
-      members: r.members.map((m) => ({ id: m.user_id || m.email, user_id: m.user_id, email: m.email, name: m.name || "", role: m.role, last_sign_in: ms(m.last_sign_in_at), contracts: m.contracts || [] })),
-      invites: r.invites.map((i) => ({ id: i.id, email: i.email, role: i.role, expires: ms(i.expires_at), contracts: i.contracts || [] })),
+      members: r.members.map((m) => ({ id: m.user_id || m.email, user_id: m.user_id, email: m.email, name: m.name || "", role: m.role, custom: m.custom_role_id || null, last_sign_in: ms(m.last_sign_in_at), contracts: m.contracts || [] })),
+      invites: r.invites.map((i) => ({ id: i.id, email: i.email, role: i.role, custom: i.custom_role_id || null, expires: ms(i.expires_at), contracts: i.contracts || [] })),
+      roles: (r.custom_roles || []).map((x) => ({ ...x, perms: x.perms || [] })),
       share_contracts: !!o.settings?.share_contracts, move_on_return: !!o.settings?.move_on_return });
     c.member_count = c.members.length; if (c.members.length) c.has_owner = c.members.some((m) => m.role === "owner");
   },
@@ -1321,8 +1326,9 @@ const liveApi = {
   async inviteMember(orgId, email, role, contracts = []) {
     email = (email || "").trim().toLowerCase();
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return { ok: false, error: CT_ERR.bad_email };
-    const err = memberCheck(custOf(orgId), role, contracts); if (err) return { ok: false, error: CT_ERR[err] };
-    let r; try { r = await rpc("invite_member", { p_org: orgId, p_email: email, p_role: role, p_contracts: contracts }); } catch (e) { return { ok: false, error: nice(e) }; }
+    const [base, custom] = splitRole(role);
+    const err = memberCheck(custOf(orgId), base, contracts); if (err) return { ok: false, error: CT_ERR[err] };
+    let r; try { r = await rpc("invite_member", { p_org: orgId, p_email: email, p_role: base, p_contracts: contracts, ...(custom ? { p_custom_role: custom } : {}) }); } catch (e) { return { ok: false, error: nice(e) }; }
     if (!r.ok) return { ok: false, error: CT_ERR[r.error] || r.error };
     const mailErr = await sendInviteEmail(r.email, r.token);
     await live.refresh(orgId).catch(() => {});
@@ -1330,9 +1336,10 @@ const liveApi = {
   },
   async setMember(orgId, memberId, role, contracts = []) {
     const c = custOf(orgId), m = c.members.find((x) => x.id === memberId); if (!m) return { ok: false, error: CT_ERR.not_member };
+    let custom; [role, custom] = splitRole(role);
     const err = memberCheck(c, role, contracts); if (err) return { ok: false, error: CT_ERR[err] };
     try {
-      if (m.role !== role) { const r = await rpc("set_member_role", { p_org: orgId, p_user: m.user_id, p_role: role }); if (!r.ok) return { ok: false, error: CT_ERR[r.error] || r.error }; }
+      if (m.role !== role || (m.custom || null) !== custom) { const r = await rpc("set_member_role", { p_org: orgId, p_user: m.user_id, p_role: role, ...(custom ? { p_custom_role: custom } : {}) }); if (!r.ok) return { ok: false, error: CT_ERR[r.error] || r.error }; }
       if (c.contracts.length) { const r = await rpc("set_member_contracts", { p_org: orgId, p_user: m.user_id, p_contracts: contracts }); if (!r.ok) return { ok: false, error: CT_ERR[r.error] || r.error }; }
     } catch (e) { return { ok: false, error: nice(e) }; }
     await live.refresh(orgId).catch(() => {}); return { ok: true };
@@ -1951,19 +1958,20 @@ const memberScope = (c, m) => !(c.contracts || []).length ? "sees everything"
   : m.role === "owner" ? "whole company" : `no ${ctWord(c).many.toLowerCase()} yet, so they see nothing`;
 function teamPanel(c) {
   const owners = c.members.filter((m) => m.role === "owner"), tree = contractTreeOf(c);
-  const roleSel = (sel) => `<select class="field" name="role" aria-label="Role">${["owner", "admin", "supervisor", "viewer"].map((r) => `<option value="${r}" ${sel === r ? "selected" : ""}>${MEMBER_ROLE[r]}</option>`).join("")}</select>`;
+  const roleSel = (sel) => `<select class="field" name="role" aria-label="Role">${["owner", "admin", "supervisor", "viewer"].map((r) => `<option value="${r}" ${sel === r ? "selected" : ""}>${MEMBER_ROLE[r]}</option>`).join("")}
+    ${(c.roles || []).length ? `<optgroup label="Their roles">${c.roles.map((r) => `<option value="role:${r.id}" ${sel === "role:" + r.id ? "selected" : ""}>${esc(r.name)}</option>`).join("")}</optgroup>` : ""}</select>`;
   const defRole = S.invRole || (owners.length && tree.length ? "admin" : "owner");
   return `<section class="panel" id="team"><div class="panel-h"><h2>Their team</h2><span class="muted" style="font-size:13px">Leads add their own crew</span></div>
     <div class="list">${c.members.map((m) => S.mEdit === m.id ? `<form class="panel-b fgrid member-edit" data-form="member" data-id="${esc(m.id)}"><b class="full">${esc(m.name || m.email)}</b>
-        <label>Role${roleSel(m.role)}</label>${tree.length ? `<div class="full mcts">${ctChecks(c, m.contracts || [])}</div>` : ""}
+        <label>Role${roleSel(m.custom ? "role:" + m.custom : m.role)}</label>${tree.length ? `<div class="full mcts">${ctChecks(c, m.contracts || [])}</div>` : ""}
         <div class="err full" role="alert">${S.formErr?.form === "member" ? esc(S.formErr.text) : ""}</div>
         <div class="actions full"><button class="btn primary">Save</button><button class="btn" type="button" data-act="mCancel">Cancel</button>
           ${S.confirm === "mrm:" + m.id ? `<span class="confirm">Take ${esc(m.name || m.email)} off their team? <button class="btn sm danger" type="button" data-act="mRemove" data-id="${esc(m.id)}">Remove</button><button class="btn sm" type="button" data-act="noConfirm">No</button></span>`
             : `<button class="btn danger" type="button" data-act="mAskRemove" data-id="${esc(m.id)}">Remove</button>`}</div></form>`
       : `<div class="row"><span class="dot ${m.role === "owner" ? "ok" : ""}"></span><span>${m.name ? `<b>${esc(m.name)}</b><span class="sub">${esc(m.email)}</span>` : esc(m.email)}
-        <span class="sub ${memberScope(c, m).startsWith("no ") ? "badtext" : ""}">${MEMBER_ROLE[m.role]} · ${esc(memberScope(c, m))}${m.last_sign_in ? ` · signed in ${esc(ago(m.last_sign_in))}` : ""}</span></span>
+        <span class="sub ${memberScope(c, m).startsWith("no ") ? "badtext" : ""}">${esc(roleName(c, m))} · ${esc(memberScope(c, m))}${m.last_sign_in ? ` · signed in ${esc(ago(m.last_sign_in))}` : ""}</span></span>
         <button class="btn sm" data-act="mEdit" data-id="${esc(m.id)}" aria-label="Change ${esc(m.name || m.email)}">Change</button></div>`).join("")}
-      ${c.invites.map((i) => `<div class="row"><span class="dot info"></span><span>${esc(i.email)}<span class="sub">${i.role === "owner" && !(i.contracts || []).length ? "Admin invite sent" : `${MEMBER_ROLE[i.role]} invite sent${(i.contracts || []).length ? " for " + esc(i.contracts.map((id) => c.contracts.find((k) => k.id === id)?.name).filter(Boolean).join(", ")) : ""}`} · expires ${esc(fmtDate(i.expires))}</span></span>
+      ${c.invites.map((i) => `<div class="row"><span class="dot info"></span><span>${esc(i.email)}<span class="sub">${i.role === "owner" && !(i.contracts || []).length ? "Admin invite sent" : `${esc(roleName(c, i))} invite sent${(i.contracts || []).length ? " for " + esc(i.contracts.map((id) => c.contracts.find((k) => k.id === id)?.name).filter(Boolean).join(", ")) : ""}`} · expires ${esc(fmtDate(i.expires))}</span></span>
         <span class="acts"><button class="btn sm" data-act="resend" data-email="${esc(i.email)}" data-id="${esc(i.id)}">Resend</button><button class="btn sm" data-act="invCancel" data-id="${esc(i.id)}">Cancel</button></span></div>`).join("")}
       ${!c.members.length && !c.invites.length ? `<div class="empty">Nobody yet. Invite their admin, or a lead for each ${esc(ctWord(c).one.toLowerCase())} if they're run separately.</div>` : ""}</div>
     ${S.lastInvite ? `<div class="panel-b" style="border-top:1px solid var(--line);display:flex;flex-direction:column;gap:8px"><b>Invite for ${esc(S.lastInvite.email)}</b>
