@@ -24,7 +24,7 @@ See README.md for the full product description.
 - Push to `main` → GitHub Actions runs `tests/run.sh db` + `ui`, then deploys app + console to Cloudflare Pages
   (projects `sonoranpoint-app`, `sonoranpoint-console`, `sonoranpoint-site`).
 - Database changes are NOT automatic. Add a new migration file (never edit one already run on the live
-  project), then tell Dez to run it in the Supabase SQL editor. Migrations 1–31 have been run, 32 not yet (checked 2026-11-11;
+  project), then tell Dez to run it in the Supabase SQL editor. Migrations 1–31 have been run, 32 and 33 not yet (checked 2026-11-12;
   ask if unsure). Alert emails are live (Resend key in Vault, first send
   confirmed 2026-10-20).
 - Station changes reach the Pis by themselves: every deploy publishes `app.sonoranpoint.com/station-release/latest.json` + a zip
@@ -43,10 +43,17 @@ See README.md for the full product description.
   is inside the other or the group they meet in has `share_children` (top level: `settings.share_contracts`).
   `station_tap` enforces it; the sync cache carries `reach` so stations enforce it offline too.
 - Loans (`equipment_loans`, migration 16): an item lent to another contract is usable there until tapped back at an owner station.
-- Who sees what (migration 17): `member_contracts` limits a dashboard user to contracts (plus everything under and the
-  groups above; things with no contract always show; owners see all). Enforced in RLS (`private.can_see`,
-  `can_see_equipment`, `can_see_txn`) and in every dashboard function; alert emails follow it. The dashboard's
-  "Show" switcher (`S.view`, `wrapViews`) filters further on screen only.
+- Who sees what (migration 33, replacing 17's rules): in a company with contracts, everyone but its Admins (role owner) sees only
+  their `member_contracts` and everything under them — not the groups above, not things with no contract; no contracts = nothing.
+  Companies without contracts: everyone sees all. Enforced in RLS (`private.scope_of`/`sees`/`can_see`, `can_see_txn`, `can_see_tap`) and
+  in every dashboard function; alert emails follow it. The dashboard's "Show" switcher (`S.view`, `wrapViews`) filters further on screen only.
+- Setup is Sonoran Point's (migration 33): `save_contract`/`delete_contract` and the sharing switches (`platform_contract_settings`;
+  a trigger keeps customers from changing `settings.share_contracts`/`move_on_return`) are operator-only; customers get `ask_us` and
+  send `request_contract_change` (a support request, source 'dashboard', in console Requests). Console: "Contracts and leads" panel
+  (`contractsPanel(c, true)`, `ctForm`) and "Their team" (`teamPanel`: invite any role with contracts, change role/contracts, remove).
+  A lead = a Manager limited to contracts (can be several). Leads (`private.my_scope` not null) only invite/change/remove people inside
+  their branch (`private.in_my_branch`, `contracts_problem`), invites carry `org_invites.contracts`, and they can't change company-wide
+  things (`private.unscoped`: org row, logo, renaming/deleting categories and locations). Dashboard: `myScopeIds()`, `canCompany()`.
 
 ## Stations
 - Removing a station (`remove_station` / `platform_remove_station`, migration 20) sets `removed_at` (and `revoked_at`); the row stays so

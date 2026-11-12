@@ -207,6 +207,9 @@ button.row:hover { background: var(--surface-2); }
 .scopes { display: flex; flex-direction: column; gap: 2px; border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px; }
 .scopes label { display: flex; align-items: center; gap: 10px; padding: 7px 0; font-weight: 700; border-bottom: 1px solid var(--line); }
 .scopes label:last-child { border-bottom: 0; }
+.inv-scopes { flex-basis: 100%; margin: 6px 0 0; }
+.inv-scopes legend { font-weight: 700; font-size: 13.5px; padding: 0 4px; }
+.inv-scopes .sub { font-size: 13px; padding-top: 6px; }
 @media (max-width: 640px) { .viewsw span { display: none; } .viewsw select { max-width: 104px; padding: 0 6px; } }
 /* Contracts tree */
 .ctree { display: flex; flex-direction: column; gap: 2px; }
@@ -845,8 +848,11 @@ const RANK = { viewer: 0, supervisor: 1, admin: 2, owner: 3 };
 // Shown names for dashboard roles (the stored values stay viewer/supervisor/admin/owner).
 const ROLE_NAME = { viewer: "View Only", supervisor: "Supervisor", admin: "Manager", owner: "Admin" };
 const can = (need) => RANK[DB.me.role] >= RANK[need];
-// Contracts the signed-in person covers (null = all). The database applies the same limit.
-const myScopeIds = () => DB.me.role === "owner" || !(DB.me.contracts || []).length ? null : DB.me.contracts;
+// Contracts the signed-in person covers (null = all: Admins, and everyone when there are no contracts). The database
+// applies the same limit (migration 33): someone else sees only their contracts and what's under them.
+const myScopeIds = () => DB.me.role === "owner" || !(DB.contracts || []).length ? null : DB.me.contracts || [];
+// Company-wide settings (name, logo, categories, checkout rules) are for people who see the whole company.
+const canCompany = () => can("admin") && !myScopeIds();
 const canManageRole = (role) => DB.me.role === "owner" || (DB.me.role === "admin" && role !== "owner");
 
 /* =====================================================================
@@ -899,7 +905,8 @@ function wrapViews() {
 const loanOf = (eqId) => (DB.loans || []).find((l) => l.eq === eqId && !l.ended_at) || null;
 const inBranch = (id, top) => { let c = contractOf(id), n = 0; while (c && n++ < 50) { if (c.id === top) return true; c = contractOf(c.parent); } return false; };
 function contractOptions(sel, blank = "Whole company", skip) {
-  return `<option value="">${esc(blank)}</option>` + contractTree().filter((c) => !skip || !inBranch(c.id, skip))
+  // Someone limited to contracts can't put things outside them (the database refuses it), so no "whole company" for them.
+  return (myScopeIds() ? "" : `<option value="">${esc(blank)}</option>`) + contractTree().filter((c) => !skip || !inBranch(c.id, skip))
     .map((c) => `<option value="${c.id}" ${sel === c.id ? "selected" : ""}>${"\u2003".repeat(c.depth)}${esc(c.name)}</option>`).join("");
 }
 const EMAIL_KINDS = [["problem", "Problem reported", "Someone reports damage or another problem with an item"], ["overdue", "Overdue", "An item isn't back by its due time"],
@@ -1106,14 +1113,22 @@ const api = {
   },
   /* list_members / invite_member / set_member_role / remove_member / cancel_invite rpcs */
   members() { return { members: [...DB.members].sort((a, b) => RANK[b.role] - RANK[a.role] || a.name.localeCompare(b.name)), invites: DB.invites }; },
-  invite(email, role) {
+  invite(email, role, name, contracts = []) {
     email = (email || "").trim().toLowerCase();
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return { ok: false, error: "Enter a full email address." };
     if (!canManageRole(role)) return { ok: false, error: "Only an admin can add admins." };
     if (DB.members.some((m) => m.email === email)) return { ok: false, error: "That person is already on the team." };
+    if (role !== "owner" && DB.contracts?.length && !contracts.length) return { ok: false, error: `Pick at least one ${CTERM().one.toLowerCase()} for them.` };
     DB.invites = DB.invites.filter((i) => i.email !== email);
-    DB.invites.unshift({ id: "i" + Date.now(), email, role, created: Date.now(), expires: Date.now() + 14 * 86400000 });
+    DB.invites.unshift({ id: "i" + Date.now(), email, role, contracts: role === "owner" ? [] : contracts, created: Date.now(), expires: Date.now() + 14 * 86400000 });
     return { ok: true };
+  },
+  /* rpc request_contract_change: contracts are set up by Sonoran Point, so changes are asked for */
+  requestContractChange(message) {
+    message = (message || "").trim();
+    if (!message) return { ok: false, error: "Say what you'd like changed." };
+    if (message.length > 4000) return { ok: false, error: "Keep it under 4,000 characters." };
+    (DB.sentRequests ||= []).push({ at: Date.now(), message }); return { ok: true };
   },
   setMemberRole(id, role) {
     const m = DB.members.find((x) => x.id === id);
@@ -1128,10 +1143,11 @@ const api = {
     DB.members = DB.members.filter((x) => x.id !== id); return { ok: true };
   },
   cancelInvite(id) { DB.invites = DB.invites.filter((i) => i.id !== id); },
-  /* rpc set_member_contracts (admins): which contracts someone covers; none = everything */
+  /* rpc set_member_contracts (admins and managers, inside their own branch): which contracts someone covers */
   setMemberContracts(id, ids) {
     const m = DB.members.find((x) => x.id === id);
     if (m.role === "owner" && ids.length) return { ok: false, error: "Admins always see everything." };
+    if (m.role !== "owner" && !ids.length) return { ok: false, error: `Pick at least one. Someone who isn't an admin only sees the ${CTERM().many.toLowerCase()} they're given.` };
     m.contracts = ids; if (id === DB.me.id) DB.me.contracts = ids; return { ok: true };
   },
   /* rpc lend_equipment / end_equipment_loan (supervisors) */
@@ -1626,6 +1642,8 @@ function impCheck(kind) {
   const col = (r, f) => { const i = I.map.indexOf(f); return i < 0 ? "" : (r[i] || "").trim(); };
   const lc = (s) => s.toLowerCase();
   const contractBy = (name) => (DB.contracts || []).find((c) => lc(c.name) === lc(name));
+  // Someone limited to contracts can't add things to the whole company: rows without one go to the one they're showing, or their first.
+  const sc = myScopeIds(), defContract = sc ? (S.view && sc.includes(S.view) ? S.view : sc[0] || null) : null;
   const usedTags = new Map(), usedAsset = new Map(), usedCode = new Map(), usedNum = new Map();
   for (const q of DB.equipment) { if (q.tag) usedTags.set(q.tag, q.name); if (q.asset) usedAsset.set(lc(q.asset), q.name); if (q.barcode) usedCode.set(q.barcode, q.name); }
   for (const e of DB.employees) { if (e.badge) usedTags.set(e.badge, e.name); if (e.number) usedNum.set(lc(e.number), e.name); }
@@ -1647,7 +1665,7 @@ function impCheck(kind) {
       const contract = cName ? contractBy(cName) : null; if (cName && !contract) why.push(`no ${CTERM().one.toLowerCase()} called “${cName}”`);
       if (why.length) return bad.push({ line, label: name || r.join(" ").slice(0, 40), why });
       if (asset) usedAsset.set(lc(asset), name); if (code) usedCode.set(code, name); if (tag) usedTags.set(tag, name);
-      items.push({ line, name: name.slice(0, 80), catName: cat?.name || catName, cat: cat?.id || null, asset: asset || null, barcode: code, tag: tag || null, contract: contract?.id || null, notes: notes || null });
+      items.push({ line, name: name.slice(0, 80), catName: cat?.name || catName, cat: cat?.id || null, asset: asset || null, barcode: code, tag: tag || null, contract: contract?.id || defContract, notes: notes || null });
     } else {
       let first = col(r, "first"), last = col(r, "last"); const full = col(r, "name");
       if (!first && full) { if (full.includes(",")) { [last, first] = full.split(",").map((s) => s.trim()); } else { const w = full.split(/\s+/); first = w[0]; last = w.slice(1).join(" "); } }
@@ -1664,7 +1682,7 @@ function impCheck(kind) {
       const name = [first, last].filter(Boolean).join(" ");
       if (why.length) return bad.push({ line, label: name || r.join(" ").slice(0, 40), why });
       if (number) usedNum.set(lc(number), name); if (badge) usedTags.set(badge, name); if (code) empCodes.set(code, name);
-      items.push({ line, first: first.slice(0, 60), last: (last || "").slice(0, 60), name, number: number || null, badge: badge || null, barcode: code, contract: contract?.id || null, shifts: shifts.map((s) => s.id) });
+      items.push({ line, first: first.slice(0, 60), last: (last || "").slice(0, 60), name, number: number || null, badge: badge || null, barcode: code, contract: contract?.id || defContract, shifts: shifts.map((s) => s.id) });
     }
   });
   return { items, bad, newCats: [...newCats.values()] };
@@ -2031,8 +2049,10 @@ function stationCards(list, stat) {
 /* ---------------- Settings ---------------- */
 function vSettings() {
   const o = DB.org;
-  const ro = !can("admin");
-  return head("Settings", "Changes reach every station within a minute.") + (ro ? `<div class="readonly-note">You have ${esc(ROLE_NAME[DB.me.role])} access. Ask a manager or admin to change settings.</div>` : "") + `<fieldset ${ro ? "disabled" : ""} style="border:0;padding:0;margin:0;display:flex;flex-direction:column;gap:22px;min-width:0">
+  const ro = !canCompany();
+  return head("Settings", "Changes reach every station within a minute.") + (ro ? `<div class="readonly-note">${can("admin")
+    ? `You look after ${esc((DB.me.contracts || []).map(contractName).filter(Boolean).join(", ") || `your ${CTERM().many.toLowerCase()}`)}. Company-wide settings are changed by your company's admins.`
+    : `You have ${esc(ROLE_NAME[DB.me.role])} access. Ask a manager or admin to change settings.`}</div>` : "") + `<fieldset ${ro ? "disabled" : ""} style="border:0;padding:0;margin:0;display:flex;flex-direction:column;gap:22px;min-width:0">
     <section class="panel"><div class="panel-h"><h2>Company</h2></div><form class="panel-b form-grid" data-form="company">
       <label for="sName">Company name</label><input class="field" id="sName" name="name" value="${esc(o.name)}" maxlength="80">
       <label>Logo<small>Your normal logo. It sits on a white bar at the top of your stations and this menu. PNG, JPG or SVG.</small></label>
@@ -2072,7 +2092,6 @@ function vSettings() {
         <input class="field" name="hours" type="number" min="0.5" max="72" step="0.5" aria-label="Hours" placeholder="Hours" style="max-width:100px">
         <button class="btn primary">Add category</button><span class="err" id="catErr" role="alert"></span></form>
       <div class="panel-b muted" style="border-top:1px solid var(--line);font-size:13.5px">Changes save as you go and apply from the next checkout. <b>End of shift:</b> the hours are used when someone checks out while they're not on a shift. <b>Out-too-long:</b> leave blank to use the company setting. Single items can be changed from Equipment. Categories with equipment can't be deleted.</div></section>
-    ${vContracts()}
     <section class="panel"><div class="panel-h"><h2>Problem reasons</h2></div>
       <div class="panel-b muted" style="font-size:13.5px;padding-bottom:0">What crews pick from when they report a problem at a station. Normally a reported item can still be checked out: the station tells the person what was reported, and the checkout is flagged here. Turn on <b>Stops checkout</b> for anything that isn't safe to use: nobody can check it out until a supervisor clears it.</div>
       <div class="tablewrap"><table class="reasons-t">
@@ -2090,37 +2109,37 @@ function vSettings() {
       <div class="panel-b muted" style="border-top:1px solid var(--line);font-size:13.5px">Removing a reason takes it off the station. Problems already reported keep their wording.</div></section>
     <section class="panel"><div class="panel-h"><h2>Plan and modules</h2></div><div class="panel-b" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">
       <span class="chip ok">Shifts and shift reports: on</span><span class="muted">To add modules, contact support.</span></div></section></fieldset>
+    ${vContracts()}
     ${vEmailAlerts()}`;
 }
-// Contracts (or whatever the company calls them): the tree, sharing switches, what's in each.
+// Contracts (or whatever the company calls them): Sonoran Point sets them up (migration 33), so this shows the tree,
+// how it shares and what's in each, and admins and managers ask for changes here.
 function vContracts() {
   const T = CTERM(), tree = api.contracts(), o = DB.org;
   const count = (id) => ({ st: DB.stations.filter((x) => x.contract === id && !x.revoked).length, emp: DB.employees.filter((x) => x.contract === id && x.active).length,
     eq: DB.equipment.filter((x) => x.contract === id && x.status !== "retired").length });
-  const sw = (id, k, on, label) => `<label class="mini-switch"><span class="switch"><input type="checkbox" data-contract="${id}" data-k="${k}" ${on ? "checked" : ""}><span></span></span>${label}</label>`;
-  const adding = S.f.addContract;
+  const rules = (c) => [c.hasKids ? (c.share ? `Badges and equipment work across the ${T.many.toLowerCase()} under it` : `The ${T.many.toLowerCase()} under it don't share`) : "",
+    c.move ? "Items move to where they're returned" : ""].filter(Boolean).join(" · ");
+  const leads = (id) => (can("admin") ? api.members().members : []).filter((m) => m.role === "admin" && (m.contracts || []).includes(id)).map((m) => m.name);
   return `<section class="panel" id="contracts"><div class="panel-h"><h2>${esc(T.many)}</h2></div>
-    <div class="panel-b muted" style="font-size:13.5px;padding-bottom:0">Split your stations, people and equipment into ${esc(T.many.toLowerCase())}, like ${window.SP_DEMO ? "Shipping and Maintenance" : "Delta BW and United BW"}.
-      A station only serves its own ${esc(T.one.toLowerCase())}, unless the group they're in shares. People and items with none work everywhere.</div>
-    <div class="panel-b ctree">
-      ${tree.length ? "" : `<p class="muted" style="margin:0">No ${esc(T.many.toLowerCase())} yet: every station serves everyone.</p>`}
-      ${tree.length > 1 || tree.some((c) => c.hasKids) ? `<div class="crow top"><span><b>Whole company</b><span class="sub">Between your top-level ${esc(T.many.toLowerCase())}</span></span>
-        <span class="cflags">${sw("", "share", o.settings.share_contracts, "Share badges and equipment")}${sw("", "move", o.settings.move_on_return, "Items move to where they're returned")}</span><span></span></div>` : ""}
-      ${tree.map((c) => { const n = count(c.id); const conf = S.confirm === "delcontract:" + c.id; return `<div class="crow" style="--d:${c.depth}">
-        <span><input class="field cname" aria-label="${esc(T.one)} name" data-contract="${c.id}" data-k="name" value="${esc(c.name)}" maxlength="60">
-          <span class="sub">${[n.st && `${n.st} station${n.st > 1 ? "s" : ""}`, n.emp && `${n.emp} ${n.emp > 1 ? "people" : "person"}`, n.eq && `${n.eq} item${n.eq > 1 ? "s" : ""}`].filter(Boolean).join(" · ") || (c.hasKids ? "" : "Nothing assigned yet")}</span></span>
-        <span class="cflags">${c.hasKids ? sw(c.id, "share", c.share, `Share across the ${esc(T.many.toLowerCase())} under it`) + sw(c.id, "move", c.move, "Items move to where they're returned") : ""}</span>
-        <span class="cact">${conf ? `<span class="confirm" style="padding:4px 8px">Delete ${esc(c.name)}? <button class="btn sm danger" type="button" data-act="doDelContract" data-id="${c.id}">Delete</button><button class="btn sm" type="button" data-act="noConfirm">Cancel</button></span>`
-          : `<button class="btn sm" type="button" data-act="addContract" data-id="${c.id}">Add under it</button><button class="btn sm danger" type="button" data-act="askDelContract" data-id="${c.id}">Delete</button>`}</span></div>
-        ${adding === c.id ? `<form class="inline-form crow add" style="--d:${c.depth + 1}" data-form="newContract:${c.id}"><input class="field" name="name" aria-label="New ${esc(T.one.toLowerCase())} name" placeholder="Name, like ${window.SP_DEMO ? "Shipping" : "Delta BW"}" maxlength="60" required><button class="btn primary sm">Add</button><button class="btn sm" type="button" data-act="cancelContract">Cancel</button></form>` : ""}`; }).join("")}
-    </div>
-    <form class="panel-b inline-form" data-form="newContract:" style="border-top:1px solid var(--line)">
-      <input class="field" name="name" aria-label="New top-level ${esc(T.one.toLowerCase())}" placeholder="New ${esc(T.one.toLowerCase())}, like BW" maxlength="60" style="max-width:260px">
-      <button class="btn primary">Add ${esc(T.one.toLowerCase())}</button><span class="err" id="contractErr" role="alert"></span></form>
-    <form class="panel-b inline-form" data-form="contractWord" style="border-top:1px solid var(--line)">
+    <div class="panel-b muted" style="font-size:13.5px;padding-bottom:0">${tree.length
+      ? `Your stations, people and equipment are split into ${esc(T.many.toLowerCase())}. A station only serves its own ${esc(T.one.toLowerCase())} unless the group they're in shares. Each person on this dashboard sees only the ${esc(T.many.toLowerCase())} they're given; admins see everything.`
+      : `Split your stations, people and equipment by site, airline or operation, like ${window.SP_DEMO ? "Shipping and Maintenance" : "PHX Delta BW and PDX Delta BW"}, each with its own lead who only sees their own. Ask us below and we'll set it up.`}</div>
+    ${tree.length ? `<div class="panel-b ctree">
+      ${!myScopeIds() && (tree.length > 1 || tree.some((c) => c.hasKids)) ? `<div class="crow top"><span><b>Whole company</b><span class="sub">${o.settings?.share_contracts ? `Top-level ${esc(T.many.toLowerCase())} share badges and equipment` : `Top-level ${esc(T.many.toLowerCase())} don't share`}${o.settings?.move_on_return ? " · Items move to where they're returned" : ""}</span></span><span></span><span></span></div>` : ""}
+      ${tree.map((c) => { const n = count(c.id), ls = leads(c.id); return `<div class="crow" style="--d:${c.depth}">
+        <span><b>${esc(c.name)}</b><span class="sub">${[ls.length ? `Lead: ${ls.join(", ")}` : "", n.st && `${n.st} station${n.st > 1 ? "s" : ""}`, n.emp && `${n.emp} ${n.emp > 1 ? "people" : "person"}`, n.eq && `${n.eq} item${n.eq > 1 ? "s" : ""}`].filter(Boolean).map(esc).join(" · ") || (c.hasKids ? "" : "Nothing in it yet")}</span></span>
+        <span class="sub cflags">${esc(rules(c))}</span><span></span></div>`; }).join("")}
+    </div>` : ""}
+    ${can("admin") ? (S.ctSent ? `<div class="panel-b" style="border-top:1px solid var(--line)"><b>Request sent.</b> <span class="muted">We'll reply by email, usually within one business day.</span> <button class="btn sm" data-act="ctMore">Ask for something else</button></div>`
+      : `<form class="panel-b" data-form="contractRequest" style="border-top:1px solid var(--line);display:flex;flex-direction:column;gap:8px">
+      <label for="ctReq"><b>Ask us for a change</b><span class="sub muted" style="display:block;font-size:13.5px">Add, rename, move or remove ${esc(T.many.toLowerCase())}, change how they share, or name a new lead.</span></label>
+      <textarea class="field" id="ctReq" name="message" rows="3" maxlength="4000" placeholder="Like: add Wheelchair under PHX, with Walter as its lead (walter@yourcompany.com)."></textarea>
+      <div class="actions"><button class="btn primary">Send request</button><span class="err" id="ctReqErr" role="alert"></span></div></form>`) : ""}
+    ${tree.length && canCompany() ? `<form class="panel-b inline-form" data-form="contractWord" style="border-top:1px solid var(--line)">
       <label class="muted" for="cWord" style="font-size:13.5px">What do you call these?</label>
-      <input class="field" id="cWord" name="word" maxlength="24" value="${esc(T.one)}" style="max-width:180px"><button class="btn sm">Save</button></form>
-    <div class="panel-b muted" style="border-top:1px solid var(--line);font-size:13.5px">Put a station, person or item in a ${esc(T.one.toLowerCase())} from its panel. Only empty ones can be deleted.</div></section>`;
+      <input class="field" id="cWord" name="word" maxlength="24" value="${esc(T.one)}" style="max-width:180px"><button class="btn sm">Save</button></form>` : ""}
+    ${tree.length ? `<div class="panel-b muted" style="border-top:1px solid var(--line);font-size:13.5px">Put a station, person or item in a ${esc(T.one.toLowerCase())} from its panel.</div>` : ""}</section>`;
 }
 // Who gets emailed about what. Everyone can set their own; admins can set anyone's.
 function vEmailAlerts() {
@@ -2146,13 +2165,16 @@ function vTeam() {
         <input class="field" name="email" type="email" aria-label="Email address" placeholder="name@company.com" required style="max-width:300px">
         <select class="field" name="role" aria-label="Role" style="max-width:180px">${["viewer", "supervisor", "admin", "owner"].filter(canManageRole).map((r) => `<option value="${r}">${ROLE_NAME[r]}</option>`).join("")}</select>
         <button class="btn primary">Send invite</button><span class="err" id="invErr" role="alert"></span>
+        ${DB.contracts?.length ? `<fieldset class="scopes inv-scopes"><legend>${esc(CTERM().many)} they'll see</legend>${contractTree().map((c) => `<label style="padding-left:${c.depth * 22}px"><input type="checkbox" name="c" value="${c.id}" ${(myScopeIds() || []).length === 1 && myScopeIds()[0] === c.id ? "checked" : ""}> ${esc(c.name)}</label>`).join("")}
+          <span class="sub muted">Not needed for an Admin: admins see everything.</span></fieldset>` : ""}
       </form>
       <div class="panel-b muted" style="border-top:1px solid var(--line);font-size:13.5px">They get an email with a link that works for 14 days, only when signed in with that address.</div></section>
     <section class="panel"><div class="panel-h"><h2>People (${members.length})</h2></div><div class="tablewrap"><table>
       <thead><tr><th>Name</th><th>Role</th>${DB.contracts?.length ? `<th>Sees</th>` : ""}<th>Last signed in</th><th></th></tr></thead>
       <tbody>${members.map((m) => `<tr><td><b>${esc(m.name)}</b>${m.id === DB.me.id ? ` <span class="chip quiet">You</span>` : ""}<span class="sub">${esc(m.email)}</span></td>
         <td>${roleSel(m)}</td>${DB.contracts?.length ? `<td>${m.role === "owner" ? `<span class="muted">Everything</span>`
-          : `<button class="link" data-open="memberScope:${m.id}">${esc((m.contracts || []).length ? m.contracts.map(contractName).filter(Boolean).join(", ") : "Everything")}</button>`}</td>` : ""}<td class="num">${esc(ago(m.last))}</td>
+          : (() => { const names = (m.contracts || []).map(contractName).filter(Boolean).join(", ");
+              return canManageRole(m.role) && m.id !== DB.me.id ? `<button class="link ${names ? "" : "late"}" data-open="memberScope:${m.id}">${esc(names || "Nothing yet: pick some")}</button>` : `<span class="${names ? "" : "late"}">${esc(names || "Nothing yet")}</span>`; })()}</td>` : ""}<td class="num">${esc(ago(m.last))}</td>
         <td>${S.confirm === "rm:" + m.id ? `<span class="confirm" style="padding:4px 8px">Remove ${esc(m.name.split(" ")[0])}? <button class="btn sm danger" data-act="rmMember" data-id="${m.id}">Remove</button><button class="btn sm" data-act="noConfirm">Cancel</button></span>`
           : canManageRole(m.role) && m.id !== DB.me.id ? `<button class="btn sm danger" data-act="askRm" data-id="${m.id}">Remove</button>` : ""}</td></tr>`).join("")}</tbody></table></div></section>
     ${invites.length ? `<section class="panel"><div class="panel-h"><h2>Waiting to accept (${invites.length})</h2></div><div class="list">${invites.map((i) => `
@@ -2160,9 +2182,11 @@ function vTeam() {
         <span class="chip brand">${ROLE_NAME[i.role]}</span>${canManageRole(i.role) ? `<button class="btn sm" data-act="cancelInv" data-id="${i.id}">Cancel invite</button>` : ""}</div>`).join("")}</div></section>` : ""}
     <section class="panel"><div class="panel-h"><h2>What each role can do</h2></div><div class="tablewrap"><table>
       <thead><tr><th></th><th>View Only</th><th>Supervisor</th><th>Manager</th><th>Admin</th></tr></thead>
-      <tbody>${[["See everything: equipment, activity, alerts, reports", 0], ["Add and edit employees, deactivate badges", 1], ["Mark items lost or in maintenance", 1], ["Mark alerts seen, sign off shift reports", 1],
+      <tbody>${[["See equipment, activity, alerts, reports", 0], ["Add and edit employees, deactivate badges", 1], ["Mark items lost or in maintenance", 1], ["Mark alerts seen, sign off shift reports", 1],
         ["Add and edit equipment and categories, time limits", 2], ["Stations, company settings, checkout rules", 2], ["Station fob roles and PINs", 2], ["Invite and manage the team (except admins)", 2], ["Manage admins", 3]]
-        .map(([t, n]) => `<tr><td>${t}</td>${[0, 1, 2, 3].map((i) => `<td aria-label="${i >= n ? "Yes" : "No"}">${i >= n ? "✓" : "<span class='muted'>–</span>"}</td>`).join("")}</tr>`).join("")}</tbody></table></div></section>`;
+        .map(([t, n]) => `<tr><td>${t}</td>${[0, 1, 2, 3].map((i) => `<td aria-label="${i >= n ? "Yes" : "No"}">${i >= n ? "✓" : "<span class='muted'>–</span>"}</td>`).join("")}</tr>`).join("")}</tbody></table></div>
+      ${DB.contracts?.length ? `<div class="panel-b muted" style="border-top:1px solid var(--line);font-size:13.5px">Your company is split into ${esc(CTERM().many.toLowerCase())}: everyone but Admins sees only the ${esc(CTERM().many.toLowerCase())} they're given.
+        Managers look after their own ${esc(CTERM().many.toLowerCase())} and their people; company-wide settings stay with Admins.</div>` : ""}</section>`;
 }
 const VIEWS = { overview: vOverview, equipment: vEquipment, employees: vEmployees, activity: vActivity, alerts: vAlerts, shifts: vShifts, stations: vStations, settings: vSettings, team: vTeam, "import-equipment": () => vImport("equipment"), "import-employees": () => vImport("employees"), labels: vLabels };
 
@@ -2350,8 +2374,8 @@ function dMemberScope(id) {
   const m = api.members().members.find((x) => x.id === id); if (!m) return drawerHead("Not found");
   const T = CTERM(), on = new Set(m.contracts || []);
   return drawerHead(`What ${esc(firstName(m.name))} sees`, esc(m.email)) + `<div class="drawer-b">
-    <p class="muted" style="margin:0 0 12px">Pick the ${esc(T.many.toLowerCase())} ${esc(firstName(m.name))} covers. They'll see those, everything under them, and anything that belongs to the whole company,
-      on every page and in their alert emails. Pick none to let them see everything.</p>
+    <p class="muted" style="margin:0 0 12px">Pick the ${esc(T.many.toLowerCase())} ${esc(firstName(m.name))} covers. They'll see those and everything under them, nothing else,
+      on every page and in their alert emails. To let someone see the whole company, make them an Admin.</p>
     <form data-form="memberScope:${m.id}"><div class="scopes">${contractTree().map((c) => `<label style="padding-left:${c.depth * 22}px"><input type="checkbox" name="c" value="${c.id}" ${on.has(c.id) ? "checked" : ""}> ${esc(c.name)}</label>`).join("")}</div>
       <div class="err" role="alert">${esc(S.formErr || "")}</div>
       <div class="actions" style="margin-top:14px"><button class="btn primary">Save</button><button class="btn" type="button" data-act="close">Cancel</button></div></form></div>`;
@@ -2415,6 +2439,7 @@ document.addEventListener("click", async (e) => {
   if (a === "reportCancel") { S.f.reporting = null; S.formErr = null; return renderLayer(); }
   if (a === "clearStart") { S.f.clearing = t.dataset.id; render(); $(`[data-form="clear:${t.dataset.id}"] input`)?.focus(); return; }
   if (a === "clearCancel") { S.f.clearing = null; return render(); }
+  if (a === "ctMore") { S.ctSent = false; render(); $("#ctReq")?.focus(); return; }
   if (a === "addContract") { S.f.addContract = t.dataset.id; render(); $(`[data-form="newContract:${t.dataset.id}"] input`)?.focus(); return; }
   if (a === "cancelContract") { S.f.addContract = null; return render(); }
   if (a === "askDelContract") { S.confirm = "delcontract:" + t.dataset.id; return render(); }
@@ -2551,6 +2576,10 @@ document.addEventListener("submit", async (e) => {
   const f = e.target, kind = f.dataset.form || "", data = Object.fromEntries(new FormData(f));
   if (kind === "signin" || kind === "newpass" || kind === "profile") return authAction(kind, f);
   if (kind === "impPaste") { S.imp.text = data.text || ""; return impLoad(parseTable(S.imp.text)); }
+  if (kind === "contractRequest") {
+    const r = api.requestContractChange(data.message); if (!r.ok) { $("#ctReqErr").textContent = r.error; return; }
+    S.ctSent = true; toast("Sent. We'll get back to you by email."); return render();
+  }
   if (kind.startsWith("memberScope:")) {
     const ids = new FormData(f).getAll("c"); const r = api.setMemberContracts(kind.slice(12), ids);
     if (!r.ok) { S.formErr = r.error; renderLayer(); return; }
@@ -2613,7 +2642,7 @@ document.addEventListener("submit", async (e) => {
     toast("Category added"); return render();
   }
   if (kind === "invite") {
-    const r = api.invite(data.email, data.role, (data.name || "").trim());
+    const r = api.invite(data.email, data.role, (data.name || "").trim(), data.role === "owner" ? [] : new FormData(f).getAll("c"));
     if (!r.ok) { $("#invErr").textContent = r.error; return; }
     toast(`Invite sent to ${data.email.trim().toLowerCase()}`); return render();
   }
@@ -2877,8 +2906,8 @@ const REMOTE = {
       if (links.length) await q(sb.from("shift_assignments").insert(links));
     }
   },
-  invite: async ([email, role, name]) => {
-    const r = await okRpc("invite_member", { p_org: ORG(), p_email: email.trim().toLowerCase(), p_role: role });
+  invite: async ([email, role, name, contracts]) => {
+    const r = await okRpc("invite_member", { p_org: ORG(), p_email: email.trim().toLowerCase(), p_role: role, ...(contracts?.length ? { p_contracts: contracts } : {}) });
     const err = await sendInviteEmail(email.trim().toLowerCase(), r.token, name);
     if (err) toast("Invite saved, but the email didn't send: " + err);
   },
@@ -2886,6 +2915,7 @@ const REMOTE = {
   removeMember: ([id]) => okRpc("remove_member", { p_org: ORG(), p_user: id }),
   cancelInvite: ([id]) => rpc("cancel_invite", { p_invite: id }),
   setMemberContracts: ([id, ids]) => okRpc("set_member_contracts", { p_org: ORG(), p_user: id, p_contracts: ids }),
+  requestContractChange: ([message]) => okRpc("request_contract_change", { p_org: ORG(), p_message: message.trim() }),
   reportProblem: async ([eq, reason, notes], r) => { const x = await okRpc("report_problem", { p_equipment: eq, p_reason: reason, p_notes: notes || null }); if (r?.id && !r.already) L.idMap[r.id] = x.id; },
   clearProblem: ([id, notes]) => okRpc("clear_problem", { p_problem: id, p_notes: (notes || "").trim() || null }),
   saveReason: async ([id], r) => { const x = DB.reasons.find((y) => y.id === r.id); if (!x) return;

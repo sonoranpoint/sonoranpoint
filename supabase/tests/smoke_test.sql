@@ -949,15 +949,20 @@ insert into org_members (org_id, user_id, role) values ('00000000-0000-0000-0000
 update equipment set current_employee_id = null, checked_out_at = null, due_at = null, status = 'available' where nfc_uid in ('04DE000201', '04DE000202', '04DE000601');
 set role authenticated;
 select set_config('request.jwt.claim.sub', 'aaaaaaaa-0000-0000-0000-000000000001', false) \g /dev/null
+select pg_temp.ok(save_contract('00000000-0000-0000-0000-00000000d3e0', '{"name":"BW"}')->>'error' = 'ask_us', 'a customer''s admin can''t add contracts (they ask us)');
+select set_config('request.jwt.claim.sub', '99999999-0000-0000-0000-000000000009', false) \g /dev/null
 select save_contract('00000000-0000-0000-0000-00000000d3e0', '{"name":"BW"}')->>'id' as bw \gset
 select save_contract('00000000-0000-0000-0000-00000000d3e0', '{"name":"AW","share_children":true,"move_on_return":true}')->>'id' as aw \gset
 select save_contract('00000000-0000-0000-0000-00000000d3e0', jsonb_build_object('name', 'Delta BW', 'parent_id', :'bw'))->>'id' as dbw \gset
 select save_contract('00000000-0000-0000-0000-00000000d3e0', jsonb_build_object('name', 'United BW', 'parent_id', :'bw'))->>'id' as ubw \gset
 select save_contract('00000000-0000-0000-0000-00000000d3e0', jsonb_build_object('name', 'Delta AW', 'parent_id', :'aw'))->>'id' as daw \gset
 select save_contract('00000000-0000-0000-0000-00000000d3e0', jsonb_build_object('name', 'United AW', 'parent_id', :'aw'))->>'id' as uaw \gset
-select pg_temp.ok((select count(*) from contracts) = 6, 'admin builds the contract tree');
+reset role;
+select pg_temp.ok((select count(*) from contracts) = 6 and exists (select 1 from private.platform_log where action = 'added contract'), 'we build the contract tree from the console (logged)');
+set role authenticated;
 select pg_temp.ok(save_contract('00000000-0000-0000-0000-00000000d3e0', jsonb_build_object('name', 'delta bw', 'parent_id', :'bw'))->>'error' = 'duplicate_name', 'no two contracts with the same name in one group');
 select pg_temp.ok(save_contract('00000000-0000-0000-0000-00000000d3e0', jsonb_build_object('id', :'bw', 'name', 'BW', 'parent_id', :'dbw'))->>'error' = 'parent_inside_itself', 'a contract can''t go inside its own branch');
+select set_config('request.jwt.claim.sub', 'aaaaaaaa-0000-0000-0000-000000000001', false) \g /dev/null
 -- assign (dashboard edits: plain updates, allowed for admins)
 update stations set contract_id = :'dbw' where name = 'Equipment Room 02';
 update employees set contract_id = :'dbw' where employee_number = 'E1001';   -- Alex
@@ -997,12 +1002,14 @@ select pg_temp.ok((station_add_equipment(:'key4', '04BA0000000A', '2468', 'Radio
 reset role;
 select pg_temp.ok((select contract_id from equipment where nfc_uid = '04DE00007777') = :'dbw'::uuid, 'items added at a station join its contract');
 set role authenticated;
+select pg_temp.ok(delete_contract(:'dbw')->>'error' = 'ask_us', 'customers can''t delete contracts either');
+select set_config('request.jwt.claim.sub', '99999999-0000-0000-0000-000000000009', false) \g /dev/null
 select pg_temp.ok(delete_contract(:'dbw')->>'error' = 'in_use', 'a contract that''s in use can''t be deleted');
 select save_contract('00000000-0000-0000-0000-00000000d3e0', jsonb_build_object('name', 'Spare', 'parent_id', :'aw'))->>'id' as spare \gset
 select pg_temp.ok((delete_contract(:'spare')->>'ok')::boolean, 'an empty one can');
 select set_config('request.jwt.claim.sub', 'cccccccc-0000-0000-0000-000000000003', false) \g /dev/null
 select pg_temp.ok(pg_temp.raises($$select save_contract('00000000-0000-0000-0000-00000000d3e0', '{"name":"Nope"}')$$), 'a viewer can''t change contracts');
-select pg_temp.ok((select count(*) from contracts) = 6, 'but can see them');
+select pg_temp.ok((select count(*) from contracts) = 0 and (select count(*) from equipment) = 0, 'someone with no contracts picked (not an admin) sees none of them');
 reset role;
 \echo '--- Lending equipment between contracts'
 select id as blower1 from equipment where nfc_uid = '04DE000201' \gset
@@ -1057,10 +1064,10 @@ select pg_temp.ok(set_member_contracts('00000000-0000-0000-0000-00000000d3e0', '
 select pg_temp.ok((set_member_contracts('00000000-0000-0000-0000-00000000d3e0', 'cccccccc-0000-0000-0000-000000000003', array[:'dbw'::uuid])->>'ok')::boolean, 'admin makes Kelly a Delta BW supervisor');
 select set_config('request.jwt.claim.sub', 'cccccccc-0000-0000-0000-000000000003', false) \g /dev/null
 select pg_temp.ok((select count(*) from equipment where contract_id = :'ubw') = 0 and (select count(*) from equipment where contract_id = :'dbw') > 0
-                  and (select count(*) from equipment where contract_id is null) > 0, 'she sees Delta BW gear and company-wide gear, not United''s');
+                  and (select count(*) from equipment where contract_id is null) = 0, 'she sees Delta BW gear only: not United''s, not company-wide');
 select pg_temp.ok(not exists (select 1 from employees where employee_number = 'E1002') and exists (select 1 from employees where employee_number = 'E1001'), 'Delta BW crew only (no Jordan from United BW)');
 select pg_temp.ok(exists (select 1 from stations where id = :'erm02') and not exists (select 1 from stations where id = :'uawroom'), 'Delta BW stations only');
-select pg_temp.ok((select string_agg(name, ',' order by name) from contracts) = 'BW,Delta BW', 'her contract and the group above it');
+select pg_temp.ok((select string_agg(name, ',' order by name) from contracts) = 'Delta BW', 'her contract only, not the group above it');
 select pg_temp.ok((select count(*) from transactions where station_id = :'uawroom') = 0
                   and (select count(*) from transactions where station_id = :'erm02') > 0, 'history at United stations is hidden');
 select pg_temp.ok((select count(*) from equipment_problems p where not exists (select 1 from equipment e where e.id = p.equipment_id)) = 0, 'problems on United gear are hidden');
@@ -1082,9 +1089,10 @@ select pg_temp.ok((select count(*) from private.email_queue where to_email = 'vi
                   and (select count(*) from private.email_queue where to_email = 'viewer@example.com' and title like 'Blower 02%') = 1, 'alert emails only for her contracts');
 set role authenticated;
 select set_config('request.jwt.claim.sub', 'aaaaaaaa-0000-0000-0000-000000000001', false) \g /dev/null
-select set_member_contracts('00000000-0000-0000-0000-00000000d3e0', 'cccccccc-0000-0000-0000-000000000003', '{}') \g /dev/null
+select pg_temp.ok(set_member_contracts('00000000-0000-0000-0000-00000000d3e0', 'cccccccc-0000-0000-0000-000000000003', '{}')->>'error' = 'pick_contract', 'someone who isn''t an admin needs at least one contract');
+select set_member_contracts('00000000-0000-0000-0000-00000000d3e0', 'cccccccc-0000-0000-0000-000000000003', array[:'bw'::uuid, :'aw'::uuid]) \g /dev/null
 select set_config('request.jwt.claim.sub', 'cccccccc-0000-0000-0000-000000000003', false) \g /dev/null
-select pg_temp.ok((select count(*) from equipment where contract_id = :'ubw') > 0, 'with no contracts picked she sees everything again');
+select pg_temp.ok((select count(*) from equipment where contract_id = :'ubw') > 0, 'given both groups she sees everything under them');
 reset role;
 update org_members set role = 'viewer' where user_id = 'cccccccc-0000-0000-0000-000000000003';
 
@@ -1430,6 +1438,77 @@ select pg_temp.ok(exists (select 1 from private.email_batches where to_email = '
                   'with pausing off it doesn''t');
 update organizations set status = :'dgstatus', trial_ends_at = null, pause_at_trial_end = true, contact_email = null where id = :'dg';
 update organizations set pause_at_trial_end = true where slug = 'demo';
+
+\echo '--- Leads locked to their contracts (migration 33)'
+reset role;
+select id as bw from contracts where name = 'BW' and parent_id is null \gset
+select id as dbw from contracts where name = 'Delta BW' \gset
+select id as ubw from contracts where name = 'United BW' \gset
+insert into auth.users (id, email, raw_user_meta_data) values ('51e77a00-0000-0000-0000-000000000051', 'sierra@example.com', '{"full_name":"Sierra"}'),
+  ('51e77a00-0000-0000-0000-000000000052', 'walter@example.com', '{"full_name":"Walter"}');
+update equipment set contract_id = :'dbw' where nfc_uid = '04DE000101';
+update equipment set contract_id = :'ubw' where nfc_uid = '04DE000201';
+set role authenticated;
+select set_config('request.jwt.claim.sub', '99999999-0000-0000-0000-000000000009', false) \g /dev/null
+select pg_temp.ok(invite_member('00000000-0000-0000-0000-00000000d3e0', 'sierra@example.com', 'admin')->>'error' = 'pick_contract', 'a manager in a company with contracts needs one');
+select invite_member('00000000-0000-0000-0000-00000000d3e0', 'Sierra@Example.com', 'admin', array[:'dbw'::uuid]) as sinv \gset
+select invite_member('00000000-0000-0000-0000-00000000d3e0', 'walter@example.com', 'admin', array[:'ubw'::uuid]) as winv \gset
+select pg_temp.ok((:'sinv'::jsonb->>'ok')::boolean and (platform_customer('00000000-0000-0000-0000-00000000d3e0')->'invites') @> jsonb_build_array(jsonb_build_object('email', 'sierra@example.com', 'contracts', jsonb_build_array(:'dbw'))),
+                  'we invite Sierra as the Delta BW manager from the console');
+select set_config('request.jwt.claim.sub', '51e77a00-0000-0000-0000-000000000051', false) \g /dev/null
+select pg_temp.ok((accept_invite(:'sinv'::jsonb->>'token')->>'ok')::boolean, 'she accepts');
+select set_config('request.jwt.claim.sub', '51e77a00-0000-0000-0000-000000000052', false) \g /dev/null
+select accept_invite(:'winv'::jsonb->>'token') \g /dev/null
+select set_config('request.jwt.claim.sub', '51e77a00-0000-0000-0000-000000000051', false) \g /dev/null
+select pg_temp.ok((select array_agg(contract_id) from member_contracts where user_id = '51e77a00-0000-0000-0000-000000000051') = array[:'dbw'::uuid], 'and covers Delta BW');
+select pg_temp.ok(exists (select 1 from equipment where nfc_uid = '04DE000101') and not exists (select 1 from equipment where nfc_uid = '04DE000201')
+                  and not exists (select 1 from equipment where contract_id is null), 'she sees Delta BW gear only');
+select pg_temp.ok(save_contract('00000000-0000-0000-0000-00000000d3e0', '{"name":"Mine"}')->>'error' = 'ask_us', 'she can''t add contracts');
+update organizations set name = 'Hacked' where id = '00000000-0000-0000-0000-00000000d3e0';
+select pg_temp.ok((select name from organizations where id = '00000000-0000-0000-0000-00000000d3e0') <> 'Hacked', 'or change company settings');
+update equipment_categories set name = 'Hacked' where org_id = '00000000-0000-0000-0000-00000000d3e0';
+select pg_temp.ok(not exists (select 1 from equipment_categories where name = 'Hacked'), 'or rename the company''s categories');
+with x as (insert into equipment_categories (org_id, name) values ('00000000-0000-0000-0000-00000000d3e0', 'Tow bars') returning 1) select pg_temp.ok((select count(*) from x) = 1, 'but can add one');
+select pg_temp.ok(pg_temp.raises($$select invite_member('00000000-0000-0000-0000-00000000d3e0', 'x@example.com', 'owner')$$),
+                  'she can''t invite admins');
+select pg_temp.ok(invite_member('00000000-0000-0000-0000-00000000d3e0', 'crew@example.com', 'supervisor', array[:'ubw'::uuid])->>'error' = 'outside_scope', 'or anyone for another contract');
+select invite_member('00000000-0000-0000-0000-00000000d3e0', 'crew@example.com', 'supervisor') as cinv \gset
+reset role;
+select pg_temp.ok((select contracts from org_invites where email = 'crew@example.com' and accepted_at is null) = array[:'dbw'::uuid], 'her invites cover her contract');
+set role authenticated;
+select list_members('00000000-0000-0000-0000-00000000d3e0') as lm \gset
+select pg_temp.ok(not (:'lm'::jsonb::text like '%walter@example.com%') and :'lm'::jsonb::text like '%sierra@example.com%' and :'lm'::jsonb::text like '%crew@example.com%',
+                  'her team list leaves out other contracts'' people');
+select pg_temp.ok(pg_temp.raises($$select set_member_role('00000000-0000-0000-0000-00000000d3e0', '51e77a00-0000-0000-0000-000000000052', 'viewer')$$)
+                  and pg_temp.raises($$select remove_member('00000000-0000-0000-0000-00000000d3e0', '51e77a00-0000-0000-0000-000000000052')$$)
+                  and pg_temp.raises($$select set_member_contracts('00000000-0000-0000-0000-00000000d3e0', '51e77a00-0000-0000-0000-000000000052', array['$$ || :'dbw' || $$'::uuid])$$),
+                  'she can''t change, remove or reassign Walter');
+reset role; delete from private.email_batches; set role authenticated;
+select pg_temp.ok(request_contract_change('00000000-0000-0000-0000-00000000d3e0', 'Please add Wheelchair under PHX')->>'ok' = 'true', 'she asks us for a new contract');
+reset role;
+select pg_temp.ok(exists (select 1 from private.contact_requests where source = 'dashboard' and kind = 'support' and topic = 'Contract change' and email = 'sierra@example.com'
+                    and org_id = '00000000-0000-0000-0000-00000000d3e0' and message like '%Wheelchair%')
+                  and exists (select 1 from private.email_batches where to_email = 'dez@vendor.example' and subject like 'Contract change:%' and reply_to = 'sierra@example.com'),
+                  'it lands in the console''s requests and emails us');
+-- The company's own Admin can't flip sharing; we can.
+set role authenticated;
+select set_config('request.jwt.claim.sub', 'aaaaaaaa-0000-0000-0000-000000000001', false) \g /dev/null
+update organizations set settings = settings || '{"share_contracts": true, "x": 1}' where id = '00000000-0000-0000-0000-00000000d3e0';
+select pg_temp.ok((select coalesce((settings->>'share_contracts')::boolean, false) = false and settings->>'x' = '1' from organizations where id = '00000000-0000-0000-0000-00000000d3e0'),
+                  'a customer Admin''s settings save leaves contract sharing alone');
+select set_config('request.jwt.claim.sub', '99999999-0000-0000-0000-000000000009', false) \g /dev/null
+select platform_contract_settings('00000000-0000-0000-0000-00000000d3e0', true, false) as pcs \gset
+reset role;
+select pg_temp.ok((:'pcs'::jsonb->>'ok')::boolean and (select (settings->>'share_contracts')::boolean from organizations where id = '00000000-0000-0000-0000-00000000d3e0'), 'we can');
+set role authenticated;
+select platform_contract_settings('00000000-0000-0000-0000-00000000d3e0', false, false) \g /dev/null
+select set_member_contracts('00000000-0000-0000-0000-00000000d3e0', '51e77a00-0000-0000-0000-000000000051', array[:'dbw'::uuid, :'ubw'::uuid]) as smc \gset
+select pg_temp.ok((:'smc'::jsonb->>'ok')::boolean
+                  and (select (m->'contracts') @> jsonb_build_array(:'ubw') from jsonb_array_elements(platform_customer('00000000-0000-0000-0000-00000000d3e0')->'members') m where m->>'email' = 'sierra@example.com'),
+                  'we can give a lead more than one contract');
+reset role;
+update equipment set contract_id = null where nfc_uid in ('04DE000101', '04DE000201');
+delete from equipment_categories where name = 'Tow bars';
 
 \echo '--- Deleting a company removes all its data'
 delete from organizations where slug = 'demo';

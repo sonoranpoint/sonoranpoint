@@ -18,24 +18,18 @@ const change = async (el, v) => { if (typeof v === "boolean") el.checked = v; el
 (async () => {
   await sleep(100);
   await go("settings");
-  const rows = () => [...doc.querySelectorAll(".ctree .crow:not(.top) input.cname")].map((i) => i.value);
+  const rows = () => [...doc.querySelectorAll(".ctree .crow:not(.top) > span:first-child > b")].map((b) => b.textContent);
   check(JSON.stringify(rows()) === JSON.stringify(["BW", "Delta BW", "United BW", "AW", "Delta AW", "United AW"]), "settings shows the contract tree, groups first then what's under them");
-  check(/Whole company/.test(page()) && doc.querySelectorAll('input[data-contract="aw"][data-k="share"]:checked').length === 1 && doc.querySelectorAll('input[data-contract="bw"][data-k="share"]:checked').length === 0,
-        "each group has its own sharing switch (AW on, BW off)");
-  await click('[data-act="addContract"][data-id="aw"]');
-  await submit('[data-form="newContract:aw"]', { name: "American AW" });
-  check(rows().includes("American AW") && E("contractOf(DB.contracts.find(c => c.name === 'American AW').parent).name") === "AW", "add a contract under a group");
-  await click('[data-act="addContract"][data-id="aw"]'); await submit('[data-form="newContract:aw"]', { name: "delta aw" });
-  check(/already one with that name/.test(doc.body.textContent), "no two with the same name in a group");
-  await click('[data-act="askDelContract"][data-id="dbw"]'); await click('[data-act="doDelContract"]');
-  check(E("!!contractOf('dbw')") && /Move its/.test(doc.body.textContent), "a contract with people or gear in it can't be deleted");
-  const am = E("DB.contracts.find(c => c.name === 'American AW').id");
-  await click(`[data-act="askDelContract"][data-id="${am}"]`); await click('[data-act="doDelContract"]');
-  check(!rows().includes("American AW"), "an empty one can");
-  const sw = doc.querySelector('input[data-contract="bw"][data-k="share"]'); sw.checked = true; sw.dispatchEvent(new dom.window.Event("change", { bubbles: true })); await sleep(15);
-  check(E("contractOf('bw').share") === true, "turn sharing on for a group");
-  const top = doc.querySelector('input[data-contract=""][data-k="move"]'); top.checked = true; top.dispatchEvent(new dom.window.Event("change", { bubbles: true })); await sleep(15);
-  check(E("DB.org.settings.move_on_return") === true, "and the company-level switches");
+  check(/Whole company/.test(page()) && /Badges and equipment work across the contracts under it/.test(page()) && /The contracts under it don't share/.test(page()),
+        "it says how each group shares (AW on, BW off)");
+  check(!doc.querySelector('[data-act="addContract"], [data-act="askDelContract"], input.cname, #contracts input[type=checkbox]'), "contracts can't be added, renamed, deleted or reshared here (Sonoran Point does that)");
+  await submit('[data-form="contractRequest"]', { message: "  " });
+  check(/Say what you'd like changed/.test(doc.querySelector("#ctReqErr").textContent), "an empty request is caught");
+  await submit('[data-form="contractRequest"]', { message: "Add Wheelchair under AW with Walter as its lead" });
+  check(E("DB.sentRequests.length") === 1 && /Request sent/.test(page()), "admins ask us for a change from Settings");
+  await click('[data-act="ctMore"]');
+  check(!!doc.querySelector('[data-form="contractRequest"]'), "and can ask for something else");
+  E("contractOf('bw').share = true; DB.org.settings.move_on_return = true");
   await submit('[data-form="contractWord"]', { word: "Accounts" });
   check(E("CTERM().one") === "Account" && /Accounts/.test(page()), "rename what they're called (Accounts)");
   await submit('[data-form="contractWord"]', { word: "Contract" });
@@ -174,6 +168,20 @@ const change = async (el, v) => { if (typeof v === "boolean") el.checked = v; el
   // Connection history in a station's details
   E("render()"); const s1 = E("DB.stations.find(x => !x.revoked && !x.removed).id"); E(`openDrawer('station', '${s1}')`); await sleep(20);
   check(/Connection, last 7 days/.test(drawer()) && /Online 9\d\.\d% of the time/.test(drawer()) && /Offline for 18 min/.test(drawer()), "a station's details show its uptime and outages", drawer().slice(0, 400));
+  // A manager limited to Delta BW (migration 33): company settings are read-only, everything she adds goes in her contracts.
+  E("DB.me.role = 'admin'; DB.me.contracts = ['dbw']; S.view = null; render()"); await go("settings");
+  check(/You look after Delta BW/.test(page()) && doc.querySelector("main fieldset").disabled && !!doc.querySelector('[data-form="contractRequest"]') && !doc.querySelector('[data-form="contractWord"]'),
+        "a manager with contracts sees company settings read-only, but can still ask for a contract change");
+  await go("team");
+  check([...doc.querySelectorAll('.inv-scopes input:checked')].map((i) => i.value).join() === "dbw", "her invites start with her contract ticked");
+  await submit('[data-form="invite"]', { email: "crew1@demoair.example", role: "supervisor" });
+  check(E("DB.invites[0].email") === "crew1@demoair.example" && E("DB.invites[0].contracts.join()") === "dbw", "invite a supervisor for Delta BW");
+  doc.querySelectorAll('.inv-scopes input').forEach((i) => { i.checked = false; });
+  await submit('[data-form="invite"]', { email: "crew2@demoair.example", role: "viewer" });
+  check(/Pick at least one contract/.test(doc.querySelector("#invErr").textContent), "someone who isn't an admin needs a contract");
+  E("openDrawer('eqForm')"); await sleep(20);
+  check(![...doc.querySelectorAll('.drawer select[name=contract] option')].some((o) => o.value === ""), "she can't add equipment to the whole company");
+  E("S.drawer = null; DB.me.role = 'owner'; DB.me.contracts = []; render()"); await sleep(20);
   check(errors.length === 0, "no script errors " + errors.join(";"));
   process.exit();
 })();

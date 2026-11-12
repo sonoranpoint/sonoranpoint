@@ -138,6 +138,51 @@ const api_set = async (id) => { E(`api.updateCustomer('${id}', { logo_dark_url: 
     f2.dispatchEvent(new dom.window.Event("submit", { bubbles: true, cancelable: true })); await sleep(30);
     check(E(`custOf('${sky}').pause_trial`) === true && /Pauses when the trial ends/.test(E(`DB.log[0].details`)), "turning it back on is saved and logged", E("JSON.stringify(DB.log[0])"));
   }
+  // Contracts and leads (migration 33): set up here, not by the customer.
+  {
+    const fill = async (sel, vals) => { const f = doc.querySelector(sel); for (const [k, v] of Object.entries(vals)) f.elements[k].value = v; await submit(sel); };
+    await go("customer/" + demoId); const ct = () => doc.querySelector("#contracts").textContent.replace(/\s+/g, " ");
+    check(/Contracts and leads/.test(ct()) && /Lead: Dana Brooks/.test(ct()) && /No lead yet/.test(ct()), "the customer page lists their contracts and who leads each");
+    await click('[data-act="ctAdd"][data-id=""]');
+    await fill('[data-form="contract"]', { name: "PHX" });
+    const phx = E("custOf('" + demoId + "').contracts.find(k => k.name === 'PHX')?.id");
+    check(!!phx && /PHX/.test(ct()) && E("DB.log[0].action") === "added contract", "add a top-level contract (logged)");
+    await click(`[data-act="ctAdd"][data-id="${phx}"]`);
+    await fill('[data-form="contract"]', { name: "Wheelchair" });
+    check(E(`custOf('${demoId}').contracts.find(k => k.name === 'Wheelchair').parent_id`) === phx, "add one under it");
+    await click(`[data-act="ctAdd"][data-id="${phx}"]`); await fill('[data-form="contract"]', { name: "wheelchair" });
+    check(/already one with that name/.test(ct()), "no two with the same name in one place");
+    await click('[data-act="ctCancel"]');
+    await click('[data-act="ctEdit"][data-id="dbw"]'); await click('[data-act="ctAskDel"][data-id="dbw"]'); await click('[data-act="ctDel"][data-id="dbw"]');
+    check(E(`!!custOf('${demoId}').contracts.find(k => k.id === 'dbw')`) && /Move what's in it first: 1 station/.test(ct()), "a contract with stations in it can't be removed");
+    await click('[data-act="ctCancel"]');
+    const wc = E(`custOf('${demoId}').contracts.find(k => k.name === 'Wheelchair').id`);
+    // Invite Walter as the Wheelchair lead
+    const inv = doc.querySelector('[data-form="invite"]'); inv.elements.role.value = "admin"; inv.elements.role.dispatchEvent(new dom.window.Event("change", { bubbles: true })); await sleep(10);
+    check(!doc.querySelector(".invcts").hidden, "picking Manager shows the contract list");
+    await fill('[data-form="invite"]', { email: "walter@demoair.example" });
+    check(/Pick at least one/.test(doc.querySelector("#invErr").textContent), "a manager needs a contract");
+    doc.querySelector(`.invcts input[value="${wc}"]`).checked = true;
+    await fill('[data-form="invite"]', { email: "walter@demoair.example" });
+    check(E(`custOf('${demoId}').invites[0].contracts.join()`) === wc && /invited: walter@demoair.example/.test(ct()) && /Manager invite sent for Wheelchair/.test(doc.querySelector("#team").textContent),
+          "invite Walter as the Wheelchair lead");
+    // Give Dana a second contract, then take Kelly off the team
+    await click('[data-act="mEdit"][data-id="dana@demoair.example"]');
+    doc.querySelector(`[data-form="member"] input[value="${phx}"]`).checked = true;
+    await submit('[data-form="member"]');
+    check(E(`custOf('${demoId}').members.find(m => m.email === 'dana@demoair.example').contracts.join()`) === `bw,${phx}`, "a lead can cover more than one contract");
+    await click('[data-act="mEdit"][data-id="dana@demoair.example"]');
+    doc.querySelectorAll('[data-form="member"] input[name=contracts]').forEach((i) => { i.checked = false; });
+    await submit('[data-form="member"]');
+    check(/Pick at least one/.test(doc.querySelector("#team").textContent), "someone who isn't an admin can't be left with none");
+    await click('[data-act="mCancel"]');
+    await click('[data-act="mEdit"][data-id="kelly@demoair.example"]'); await click('[data-act="mAskRemove"][data-id="kelly@demoair.example"]'); await click('[data-act="mRemove"][data-id="kelly@demoair.example"]');
+    check(!E(`custOf('${demoId}').members.some(m => m.email === 'kelly@demoair.example')`), "take someone off their team");
+    const sh = doc.querySelector('[data-form="ctshare"]'); sh.elements.share.checked = true; await submit('[data-form="ctshare"]');
+    check(E(`custOf('${demoId}').share_contracts`) === true, "turn on sharing between their top-level contracts");
+    await click(`[data-act="ctEdit"][data-id="${wc}"]`); await click(`[data-act="ctAskDel"][data-id="${wc}"]`); await click(`[data-act="ctDel"][data-id="${wc}"]`);
+    check(!E(`custOf('${demoId}').contracts.some(k => k.id === '${wc}')`), "an empty contract can be removed");
+  }
   // team
   await go("team");
   check(/Jordan Ellis/.test(page()) && /\(you\)/.test(page()) && /Invited as Operator/.test(page()) && /Invite someone/.test(page()), "team page (demo)");

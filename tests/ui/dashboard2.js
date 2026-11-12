@@ -55,6 +55,7 @@ const drawer = () => doc.querySelector(".drawer")?.textContent.replace(/\s+/g, "
   await go("team");
   await submit('[data-form="invite"]', { email: "nope", role: "viewer" });
   check(/full email/.test(doc.querySelector("#invErr").textContent), "invite: bad email caught");
+  doc.querySelector('.inv-scopes input[value="bw"]').checked = true;
   await submit('[data-form="invite"]', { email: "Payroll@DemoAir.example", role: "viewer" });
   check(/payroll@demoair.example/.test(doc.body.textContent) && /Waiting to accept \(2\)/.test(doc.body.textContent), "invite a view-only person -> waiting to accept");
   const sel = doc.querySelector('[data-member="u1"]'); sel.value = "admin"; sel.dispatchEvent(new dom.window.Event("change", { bubbles: true })); await sleep(15);
