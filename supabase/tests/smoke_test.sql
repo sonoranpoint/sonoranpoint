@@ -1510,6 +1510,24 @@ reset role;
 update equipment set contract_id = null where nfc_uid in ('04DE000101', '04DE000201');
 delete from equipment_categories where name = 'Tow bars';
 
+\echo '--- Admin optional (migration 36)'
+set role authenticated;
+select set_config('request.jwt.claim.sub', '99999999-0000-0000-0000-000000000009', false) \g /dev/null
+select platform_create_customer('{"name":"Per Contract Co","slug":"percontract","stations":["Room A"]}') as pc \gset
+select pg_temp.ok((:'pc'::jsonb->>'ok')::boolean and :'pc'::jsonb->'owner_invite' = 'null'::jsonb, 'a customer can be made without an admin');
+select pg_temp.ok(platform_create_customer('{"name":"Bad","slug":"badmail","owner_email":"nope","stations":["A"]}')->>'error' = 'bad_email', 'an admin email given must look right');
+select invite_member((:'pc'::jsonb->>'org_id')::uuid, 'only-admin@example.com', 'owner') as oa \gset
+reset role;
+insert into auth.users (id, email) values ('0a0a0a0a-0000-0000-0000-000000000036', 'only-admin@example.com');
+insert into org_members (org_id, user_id, role) values ((:'pc'::jsonb->>'org_id')::uuid, '0a0a0a0a-0000-0000-0000-000000000036', 'owner');
+set role authenticated;
+select set_config('request.jwt.claim.sub', '0a0a0a0a-0000-0000-0000-000000000036', false) \g /dev/null
+select pg_temp.ok(remove_member((:'pc'::jsonb->>'org_id')::uuid, '0a0a0a0a-0000-0000-0000-000000000036')->>'error' = 'last_owner', 'a customer can''t remove their own last admin');
+select set_config('request.jwt.claim.sub', '99999999-0000-0000-0000-000000000009', false) \g /dev/null
+select pg_temp.ok((remove_member((:'pc'::jsonb->>'org_id')::uuid, '0a0a0a0a-0000-0000-0000-000000000036')->>'ok')::boolean, 'but we can, from the console');
+reset role;
+delete from organizations where slug = 'percontract';
+
 \echo '--- Locations in the tree (migration 35)'
 set role authenticated;
 select set_config('request.jwt.claim.sub', '99999999-0000-0000-0000-000000000009', false) \g /dev/null

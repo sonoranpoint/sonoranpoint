@@ -2101,7 +2101,7 @@ function vSettings() {
   const o = DB.org;
   const ro = !canCompany();
   return head("Settings", "Changes reach every station within a minute.") + (ro ? `<div class="readonly-note">${can("admin")
-    ? `You look after ${esc((DB.me.contracts || []).map(contractName).filter(Boolean).join(", ") || `your ${CTERM().many.toLowerCase()}`)}. Company-wide settings are changed by your company's admins.`
+    ? `You look after ${esc((DB.me.contracts || []).map(contractName).filter(Boolean).join(", ") || `your ${CTERM().many.toLowerCase()}`)}. Company-wide settings are changed by your company's admin, or by us if you don't have one: use “Ask us for a change” below.`
     : `You have ${esc(ROLE_NAME[DB.me.role])} access. Ask a manager or admin to change settings.`}</div>` : "") + `<fieldset ${ro ? "disabled" : ""} style="border:0;padding:0;margin:0;display:flex;flex-direction:column;gap:22px;min-width:0">
     <section class="panel"><div class="panel-h"><h2>Company</h2></div><form class="panel-b form-grid" data-form="company">
       <label for="sName">Company name</label><input class="field" id="sName" name="name" value="${esc(o.name)}" maxlength="80">

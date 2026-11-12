@@ -790,6 +790,8 @@ const CT_ERR = { name_required: "Enter a name.", name_too_long: "Keep it under 6
 const MEMBER_ROLE = { owner: "Admin", admin: "Manager", supervisor: "Supervisor", viewer: "View Only" };
 const ctWord = (c) => ({ one: c.terms?.contract || "Contract", many: c.terms?.contract_plural || "Contracts" });
 const isLoc = (k) => k?.kind === "location";
+// Nobody from the customer has signed in yet. An Admin is optional (migration 36): some companies only have a lead per contract.
+const nobodyIn = (c) => !(c.member_count ?? c.members.length);
 const ctInBranch = (c, id, top) => { let x = (c.contracts || []).find((k) => k.id === id), n = 0; while (x && n++ < 50) { if (x.id === top) return true; x = (c.contracts || []).find((k) => k.id === x.parent_id); } return false; };
 function ctCheck(c, id, name, parent) {   // same checks as save_contract
   if (!name) return "name_required"; if (name.length > 60) return "name_too_long";
@@ -840,7 +842,7 @@ const api = {
     if (!/^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$/.test(slug)) return { ok: false, error: "Short ID: letters, numbers and dashes only.", field: "slug" };
     if (DB.customers.some((c) => c.slug === slug)) return { ok: false, error: `The short ID "${slug}" is already used.`, field: "slug" };
     if (!hex(d.primary) || !hex(d.accent)) return { ok: false, error: "Colors must look like #1F4E79.", field: "primary" };
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return { ok: false, error: "Enter their admin's email address.", field: "owner_email" };
+    if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return { ok: false, error: "That admin email doesn't look right.", field: "owner_email" };
     const stations = (d.stations || []).map((s) => s.trim()).filter(Boolean);
     if (!stations.length) return { ok: false, error: "Add at least one station to ship.", field: "stations" };
     const now = Date.now();
@@ -849,13 +851,13 @@ const api = {
       trial_ends: d.status === "trial" ? now + Number(d.trial_days || 30) * DAY : null, contact_name: (d.contact_name || "").trim(), contact_email: email,
       contact_phone: (d.contact_phone || "").trim(), notes: (d.notes || "").trim(), created: now, usage: { employees: 0, equipment: 0, taps7d: 0, last_tap: null },
       members: [], invites: [], stations: [] };
-    const token = newToken();
-    c.invites.push({ id: uid("inv"), email, role: "owner", expires: now + 14 * DAY, token });
+    const token = email ? newToken() : null;
+    if (email) c.invites.push({ id: uid("inv"), email, role: "owner", expires: now + 14 * DAY, token });
     for (const n of stations) c.stations.push({ id: uid("st"), name: n, location: "", activated_at: null, last_seen: null, version: null, admin_claimed_at: null,
       code: newCode(), code_expires: now + 7 * DAY, revoked: false, created: now });
     DB.customers.push(c);
-    log(c, "created customer", `${stations.length} station${stations.length === 1 ? "" : "s"}, admin invite to ${email}`);
-    return { ok: true, id: c.id, invite: { email, token }, stations: c.stations.map((s) => ({ id: s.id, name: s.name, code: s.code, expires: s.code_expires })) };
+    log(c, "created customer", `${stations.length} station${stations.length === 1 ? "" : "s"}${email ? `, admin invite to ${email}` : ", no admin"}`);
+    return { ok: true, id: c.id, invite: email ? { email, token } : null, stations: c.stations.map((s) => ({ id: s.id, name: s.name, code: s.code, expires: s.code_expires })) };
   },
   /* rpc platform_update_customer(org, jsonb) — only the keys sent are changed */
   updateCustomer(id, patch, what = "updated customer") {
@@ -1217,7 +1219,7 @@ const live = {
       return { ...p, id: c.id, name: c.name, slug: c.slug, status: c.status, plan: c.plan, primary: c.primary_color, accent: c.accent_color,
         logo_url: c.logo_url || "", modules: c.enabled_modules || [], station_limit: c.station_limit, trial_ends: ms(c.trial_ends_at),
         pause_trial: c.pause_at_trial_end !== false, paused_reason: c.paused_reason || null,
-        contact_name: c.contact_name || "", contact_email: c.contact_email || "", created: ms(c.created_at), has_owner: c.has_owner,
+        contact_name: c.contact_name || "", contact_email: c.contact_email || "", created: ms(c.created_at), has_owner: c.has_owner, member_count: c.members,
         usage: { employees: c.employees, equipment: c.equipment, taps7d: c.taps_7d, last_tap: ms(c.last_tap_at) },
         terms: p.terms || { ...DEFAULT_TERMS }, timezone: p.timezone || "America/Phoenix", contact_phone: p.contact_phone || "", notes: p.notes || "",
         members: p.members || [], invites: p.invites || [],
@@ -1235,7 +1237,7 @@ const live = {
       members: r.members.map((m) => ({ id: m.user_id || m.email, user_id: m.user_id, email: m.email, name: m.name || "", role: m.role, last_sign_in: ms(m.last_sign_in_at), contracts: m.contracts || [] })),
       invites: r.invites.map((i) => ({ id: i.id, email: i.email, role: i.role, expires: ms(i.expires_at), contracts: i.contracts || [] })),
       share_contracts: !!o.settings?.share_contracts, move_on_return: !!o.settings?.move_on_return });
-    if (c.members.length) c.has_owner = c.members.some((m) => m.role === "owner");
+    c.member_count = c.members.length; if (c.members.length) c.has_owner = c.members.some((m) => m.role === "owner");
   },
   async reqDetail(id) {
     const r = await rpc("platform_request", { p_id: Number(id) }); if (!r.ok) return;
@@ -1265,14 +1267,14 @@ const liveApi = {
     if (!check.ok) return check;
     const p = { name: d.name.trim(), slug: d.slug.trim().toLowerCase(), timezone: d.timezone, primary_color: d.primary.toUpperCase(), accent_color: d.accent.toUpperCase(),
       logo_url: (d.logo_url || "").trim(), terminology: d.terms, modules: d.modules || [], status: d.status, plan: d.plan, trial_days: Number(d.trial_days || 30),
-      station_limit: d.station_limit === "" || d.station_limit == null ? null : Number(d.station_limit), owner_email: d.owner_email.trim().toLowerCase(),
-      contact_name: d.contact_name || "", contact_email: d.owner_email.trim().toLowerCase(), contact_phone: d.contact_phone || "", notes: d.notes || "",
+      station_limit: d.station_limit === "" || d.station_limit == null ? null : Number(d.station_limit), owner_email: (d.owner_email || "").trim().toLowerCase() || null,
+      contact_name: d.contact_name || "", contact_email: (d.owner_email || "").trim().toLowerCase(), contact_phone: d.contact_phone || "", notes: d.notes || "",
       stations: (d.stations || []).map((s) => s.trim()).filter(Boolean) };
     let r; try { r = await rpc("platform_create_customer", { p }); } catch (e) { return { ok: false, error: nice(e) }; }
     if (!r.ok) { const [error, field] = ERR[r.error] || [r.error, null]; return { ok: false, error, field }; }
-    const mailErr = await sendInviteEmail(r.owner_invite.email, r.owner_invite.token, (d.contact_name || "").trim());
+    const mailErr = r.owner_invite ? await sendInviteEmail(r.owner_invite.email, r.owner_invite.token, (d.contact_name || "").trim()) : null;
     await live.refresh(r.org_id).catch(() => {});
-    return { ok: true, id: r.org_id, invite: { email: r.owner_invite.email, token: r.owner_invite.token, mailErr },
+    return { ok: true, id: r.org_id, invite: r.owner_invite ? { email: r.owner_invite.email, token: r.owner_invite.token, mailErr } : null,
       stations: r.stations.map((s) => ({ id: s.station_id, name: s.name, code: s.activation_code, expires: ms(s.expires_at) })) };
   },
   async updateCustomer(id, patch) {
@@ -1650,7 +1652,8 @@ function attention() {
       if (st.key === "expired") out.push({ kind: "expired", tone: "bad", c, text: `${s.name}: activation code expired`, sub: "Make a new code from the customer page and send it to them." });
       if (st.key === "waiting" && now - s.created > 3 * DAY) out.push({ kind: "waiting", tone: "warn", c, text: `${s.name} not set up after ${ago(s.created, true)}`, sub: `Code expires ${fmtDate(s.code_expires)}. Check it arrived.` });
     }
-    if (!(c.has_owner ?? c.members.some((m) => m.role === "owner")) && c.status !== "paused") out.push({ kind: "owner", tone: "info", c, text: "Admin hasn't signed in yet", sub: c.invites.length ? `Invite sent to ${c.invites[0].email}` : c.detail || !LIVE ? "No invite sent. Invite an admin." : "Open the customer to see or resend the invite." });
+    if (nobodyIn(c) && c.status !== "paused" && c.status !== "cancelled") out.push({ kind: "owner", tone: "info", c, text: "Nobody has signed in yet",
+      sub: c.invites.length ? `Invite sent to ${c.invites[0].email}` : c.detail || !LIVE ? "No invite sent. Invite their admin, or a lead for each contract." : "Open the customer to see or resend the invite." });
   }
   return out.sort((a, b) => ({ bad: 0, warn: 1, info: 2 }[a.tone] - { bad: 0, warn: 1, info: 2 }[b.tone]));
 }
@@ -1705,7 +1708,7 @@ function vCustomers() {
   const active = all.filter((c) => c.status === "active"), trials = all.filter((c) => c.status === "trial");
   const ending = trials.filter((c) => c.trial_ends && c.trial_ends - now < 14 * DAY);
   const newMonth = all.filter((c) => c.created && now - c.created < 30 * DAY).length;
-  const noOwner = all.filter((c) => !(c.has_owner ?? c.members.some((m) => m.role === "owner")) && c.status !== "paused" && c.status !== "cancelled");
+  const noOwner = all.filter((c) => nobodyIn(c) && c.status !== "paused" && c.status !== "cancelled");
   const att = attention();
   const q = S.f.q.trim().toLowerCase();
   const hay = (c) => [c.name, c.slug, c.contact_name, c.contact_email, ...c.stations.map((s) => s.name),
@@ -1736,7 +1739,7 @@ function vCustomers() {
       <a class="stat" href="#fleet"><span class="ic green">${ic("station")}</span><div><span>Stations online</span><b>${online}<em> / ${set.length}</em></b><small>${offline ? `${offline} offline` : set.length ? `${pct(online, set.length)}% online` : "None set up yet"}</small></div></a>
       <a class="stat" href="#customers" data-seg="status:trial"><span class="ic orange">${ic("clock")}</span><div><span>Trials ending soon</span><b>${ending.length}</b><small>In the next 14 days</small></div></a>
       <a class="stat" href="#customers"><span class="ic red">${ic("alert")}</span><div><span>Needs attention</span><b>${att.filter((x) => x.tone !== "info").length}</b><small>Stations or accounts</small></div></a>
-      <a class="stat" href="#customers"><span class="ic purple">${ic("userPlus")}</span><div><span>Admin invites</span><b>${noOwner.length}</b><small>Admin hasn't signed in yet</small></div></a>
+      <a class="stat" href="#customers"><span class="ic purple">${ic("userPlus")}</span><div><span>Not signed in yet</span><b>${noOwner.length}</b><small>Nobody from them has signed in</small></div></a>
     </div>
     <div class="ov">
       <div class="stack">
@@ -1818,7 +1821,7 @@ function vPreview() {
     <section class="panel"><div class="panel-h"><h2>Company</h2></div><div class="panel-b"><dl class="kv">
       <dt>Contact</dt><dd>${esc(c.contact_name || "—")}</dd><dt>Email</dt><dd>${c.contact_email ? `<a href="mailto:${esc(c.contact_email)}" style="color:var(--t-blue)">${esc(c.contact_email)}</a>` : "—"}</dd>
       <dt>Phone</dt><dd>${esc(c.contact_phone || "—")}</dd><dt>Short ID</dt><dd class="mono">${esc(c.slug)}</dd><dt>Customer since</dt><dd>${esc(fmtDate(c.created))}</dd>
-      <dt>Admin</dt><dd>${owner ? "Signed in" : c.invites.length ? `Invite sent to ${esc(c.invites[0].email)}` : "Not invited yet"}</dd></dl></div></section>
+      <dt>Admin</dt><dd>${owner ? "Signed in" : !nobodyIn(c) ? `<span class="muted">None: run by ${esc(ctWord(c).one.toLowerCase())} leads</span>` : c.invites.length ? `Invite sent to ${esc(c.invites[0].email)}` : "Not invited yet"}</dd></dl></div></section>
     <section class="panel"><div class="panel-h"><h2>Plan and status</h2></div><div class="panel-b"><dl class="kv">
       <dt>Plan</dt><dd>${planChip(c.plan)}</dd><dt>Status</dt><dd>${statusDot(c.status)}</dd>
       ${trialPaused(c) ? `<dt>Paused</dt><dd style="color:var(--bad)">Trial ended${c.trial_ends ? ` ${esc(fmtDate(c.trial_ends))}` : ""}</dd>` : ""}
@@ -1958,7 +1961,7 @@ function teamPanel(c) {
         <button class="btn sm" data-act="mEdit" data-id="${esc(m.id)}" aria-label="Change ${esc(m.name || m.email)}">Change</button></div>`).join("")}
       ${c.invites.map((i) => `<div class="row"><span class="dot info"></span><span>${esc(i.email)}<span class="sub">${i.role === "owner" ? "Admin invite sent" : `${MEMBER_ROLE[i.role]} invite sent${(i.contracts || []).length ? " for " + esc(i.contracts.map((id) => c.contracts.find((k) => k.id === id)?.name).filter(Boolean).join(", ")) : ""}`} · expires ${esc(fmtDate(i.expires))}</span></span>
         <span class="acts"><button class="btn sm" data-act="resend" data-email="${esc(i.email)}" data-id="${esc(i.id)}">Resend</button><button class="btn sm" data-act="invCancel" data-id="${esc(i.id)}">Cancel</button></span></div>`).join("")}
-      ${!c.members.length && !c.invites.length ? `<div class="empty">Nobody yet. Invite their admin.</div>` : ""}</div>
+      ${!c.members.length && !c.invites.length ? `<div class="empty">Nobody yet. Invite their admin, or a lead for each ${esc(ctWord(c).one.toLowerCase())} if they're run separately.</div>` : ""}</div>
     ${S.lastInvite ? `<div class="panel-b" style="border-top:1px solid var(--line);display:flex;flex-direction:column;gap:8px"><b>Invite for ${esc(S.lastInvite.email)}</b>
       <p class="muted" style="margin:0;font-size:13.5px">The live site emails this link. It works once, for 14 days, and only for that email address.</p>
       <div class="inline-form"><span class="linkbox">${esc(inviteLink(S.lastInvite.token))}</span><button class="btn" data-copy="${esc(inviteLink(S.lastInvite.token))}">Copy link</button></div></div>` : ""}
@@ -1966,7 +1969,7 @@ function teamPanel(c) {
       <label>Email<input class="field" name="email" type="email" placeholder="${defRole === "owner" ? "admin@theircompany.com" : "lead@theircompany.com"}" aria-label="Email" required></label>
       <label>Role${roleSel(defRole)}</label>
       ${tree.length ? `<div class="full invcts" ${defRole === "owner" ? "hidden" : ""}>${ctChecks(c, S.invCts || [])}</div>` : ""}
-      <p class="full muted" style="margin:0;font-size:13px">Admins see the whole company. A Manager is the lead for the ${esc(ctWord(c).many.toLowerCase())} you tick and sees only those.</p>
+      <p class="full muted" style="margin:0;font-size:13px">Admins see the whole company. A Manager is the lead for the ${esc(ctWord(c).many.toLowerCase())} you tick and sees only those. An admin is optional: a company run and billed ${esc(ctWord(c).one.toLowerCase())} by ${esc(ctWord(c).one.toLowerCase())} can have just leads.</p>
       <div class="err full" id="invErr" role="alert"></div>
       <div class="actions full"><button class="btn">${defRole === "owner" ? (owners.length ? "Invite another admin" : "Invite admin") : "Send invite"}</button></div></form>
   </section>`;
@@ -2107,7 +2110,7 @@ function vNew() {
         <label>Plan<select class="field" name="plan" data-new="plan">${PLANS.map((p) => `<option value="${p.id}" ${f.plan === p.id ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select></label>
         <label>Station limit<small>Blank = no limit</small><input class="field" type="number" min="0" max="500" name="station_limit" value="${esc(f.station_limit)}" data-new="station_limit"></label>
         <div class="full">${MODULES.map((m) => `<div class="modrow"><span><b>${esc(m.name)}</b><small>${esc(m.desc)}</small></span><span class="switch"><input type="checkbox" data-newmod="${m.id}" ${f.modules.includes(m.id) ? "checked" : ""} aria-label="${esc(m.name)}"><span></span></span></div>`).join("")}</div>`)}
-      ${sec(4, "Their admin", `<label class="full">Admin's email<small>They get an invite to the dashboard and can add the rest of their team.</small><input class="field" type="email" name="owner_email" value="${esc(f.owner_email)}" placeholder="manager@theircompany.com" data-new="owner_email"></label>
+      ${sec(4, "Their admin", `<label class="full">Admin's email <small>Optional. They get an invite to the dashboard and can add the rest of their team. Leave it blank if each contract is run and billed on its own: add locations, contracts and a lead for each on the customer page after.</small><input class="field" type="email" name="owner_email" value="${esc(f.owner_email)}" placeholder="manager@theircompany.com" data-new="owner_email"></label>
         <label>Contact name<input class="field" name="contact_name" maxlength="60" value="${esc(f.contact_name)}" data-new="contact_name"></label>
         <label>Contact phone<input class="field" name="contact_phone" maxlength="30" value="${esc(f.contact_phone)}" data-new="contact_phone"></label>
         <label class="full">Your notes<small>Only you see these</small><textarea class="field" name="notes" maxlength="2000" data-new="notes">${esc(f.notes)}</textarea></label>`)}
@@ -2130,11 +2133,11 @@ function vMade() {
   return `<div class="noprint"><a class="back" href="#customer/${c.id}">‹ ${esc(c.name)}</a></div>
     <div class="head"><div><h1>${esc(c.name)} is set up</h1><p>Pack one box per station. Codes work once and expire ${esc(fmtDate(m.stations[0].expires))}.</p></div>
       <div class="actions noprint"><button class="btn" data-act="print">Print setup sheets</button><a class="btn primary" href="#customer/${c.id}">Open customer</a></div></div>
-    <section class="panel noprint"><div class="panel-h"><h2>Admin invite</h2></div><div class="panel-b" style="display:flex;flex-direction:column;gap:8px">
+${m.invite ? `    <section class="panel noprint"><div class="panel-h"><h2>Admin invite</h2></div><div class="panel-b" style="display:flex;flex-direction:column;gap:8px">
       <span>${!LIVE ? `Sent to <b>${esc(m.invite.email)}</b>. On the live site this is emailed for you; here's the link if you want to send it yourself.`
         : m.invite.mailErr ? `<b>The email to ${esc(m.invite.email)} didn't send</b> (${esc(m.invite.mailErr)}). Send them this link yourself:`
         : `Emailed to <b>${esc(m.invite.email)}</b>. Here's the same link if you want to send it yourself.`}</span>
-      <div class="inline-form"><span class="linkbox">${esc(inviteLink(m.invite.token))}</span><button class="btn" data-copy="${esc(inviteLink(m.invite.token))}">Copy link</button></div></div></section>
+      <div class="inline-form"><span class="linkbox">${esc(inviteLink(m.invite.token))}</span><button class="btn" data-copy="${esc(inviteLink(m.invite.token))}">Copy link</button></div></div></section>` : `<section class="panel noprint"><div class="panel-h"><h2>No admin yet</h2></div><div class="panel-b">Add their locations, contracts and a lead for each on the <a href="#customer/${c.id}">customer page</a>.</div></section>`}
     <div class="ship">${m.stations.map((s) => `<div class="shipcard"><span class="muted" style="font-size:12.5px;letter-spacing:.08em;text-transform:uppercase;font-weight:700">${esc(c.name)}</span>
       <h3>${esc(s.name)}</h3><div class="codebox">${esc(s.code)}</div>
       ${DB.hw ? shipUnit(c, s) : ""}

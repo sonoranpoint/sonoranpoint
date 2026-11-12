@@ -19,7 +19,7 @@ const api_set = async (id) => { E(`api.updateCustomer('${id}', { logo_dark_url: 
   await sleep(100);
   check(/Customers/.test(page()) && /Demo Air Services/.test(page()) && /Copper State Cargo/.test(page()), "customer list");
   check(/Needs attention/.test(page()) && /Bag Room offline/.test(page()) && /Trial 5 days left/.test(page()) && /Commissary: activation code expired/.test(page()), "needs attention: offline station, trial ending, expired code");
-  check(/Stations online/.test(page()) && /Trials ending soon/.test(page()) && /Admin invites/.test(page()) && /System health/.test(page()) && /New customers/.test(page()), "overview cards, health and charts");
+  check(/Stations online/.test(page()) && /Trials ending soon/.test(page()) && /Not signed in yet/.test(page()) && /System health/.test(page()) && /New customers/.test(page()), "overview cards, health and charts");
   await click("tr[data-preview]"); check(/Quick actions/.test(doc.querySelector("#layer").textContent) && /Open customer/.test(doc.querySelector("#layer").textContent), "clicking a customer opens its preview");
   await click('[data-act="pvAskPause"]'); await click('[data-act="pvPause"]'); const pcust = E("S.preview");
   check(E(`custOf('${pcust}').status`) === "paused" && /Resume account/.test(doc.querySelector("#layer").textContent), "pause from the preview");
@@ -46,8 +46,8 @@ const api_set = async (id) => { E(`api.updateCustomer('${id}', { logo_dark_url: 
   check(/#225533/i.test(doc.querySelector(".pv-top").getAttribute("style")), "preview takes the color");
   await type('[data-new="t_equipment"]', "Radio");
   check(/Radio/.test(doc.querySelector(".pv-steps").textContent), "preview uses their word");
-  await submit('[data-form="new"]');
-  check(/admin's email/.test(page()), "needs owner email");
+  await type('[data-new="owner_email"]', "nope"); await submit('[data-form="new"]');
+  check(/admin email doesn't look right/.test(page()), "an admin email has to look right (it's optional)");
   await type('[data-new="slug"]', "demo"); await type('[data-new="owner_email"]', "Boss@CactusAir.example");
   await submit('[data-form="new"]');
   check(/already used/.test(page()), "short ID taken");
@@ -58,6 +58,11 @@ const api_set = async (id) => { E(`api.updateCustomer('${id}', { logo_dark_url: 
   const codes = [...doc.querySelectorAll(".shipcard .codebox")].map((x) => x.textContent);
   check(codes.every((c) => /^[A-Z2-9]{4}-[A-Z2-9]{4}$/.test(c)) && codes[0] !== codes[1], "each station has its own code " + codes.join(" "));
   check(/boss@cactusair.example/.test(page()) && /app\.sonoranpoint\.com\/\?invite=[0-9a-f]{48}/.test(page()), "owner invite link shown, in the form the dashboard reads (?invite=)");
+  {
+    const r = E("api.createCustomer({ name: 'Per Contract Co', slug: 'percontract', primary: '#123456', accent: '#654321', status: 'active', plan: 'standard', timezone: 'America/Phoenix', terms: {}, modules: [], stations: ['Room A'], owner_email: '' })");
+    check(r.ok && r.invite === null && E(`custOf('${r.id}').invites.length`) === 0, "a customer can be made with no admin (run contract by contract)");
+    E(`DB.customers = DB.customers.filter(c => c.slug !== 'percontract')`);
+  }
   check(/Blank admin tag/.test(page()) && /Quick-start card/.test(page()), "packing checklist");
   await click('[data-act="print"]'); check(dom.window.__printed, "print setup sheets");
   const id = E("DB.customers.find(c => c.slug === 'cactusair').id");
