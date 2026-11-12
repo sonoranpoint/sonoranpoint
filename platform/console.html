@@ -80,6 +80,11 @@ h1, h2, h3 { text-wrap: balance; }
 .feed .sub.msg { margin-top: 4px; color: var(--ink); background: var(--surface-2); border-radius: 8px; padding: 8px 10px; display: block; }
 tr.unread td:first-child b::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--t-blue); margin-right: 8px; vertical-align: middle; }
 .infobox { background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--t-blue); border-radius: 10px; padding: 12px 14px; font-size: 14px; }
+.radios { border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; margin: 0; display: grid; gap: 8px; }
+.radios legend { font-weight: 700; font-size: 13.5px; padding: 0 4px; }
+.fgrid .radios label { display: flex; flex-direction: row; gap: 8px; align-items: center; flex-wrap: wrap; font-weight: 600; font-size: 14px; }
+.radios input[type=radio] { width: auto; margin: 0; flex: none; }
+.fgrid .radios small { color: var(--muted); width: 100%; padding-left: 24px; margin-top: -4px; }
 .cols { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr); gap: 20px; align-items: start; }
 .stack { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
 @media (max-width: 1080px) { .cols { grid-template-columns: minmax(0, 1fr); } }
@@ -743,12 +748,12 @@ function changeText(d) {
     modules: (v) => `Modules: ${(v || []).map((m) => MODULES.find((x) => x.id === m)?.name || m).join(", ") || "none"}`,
     contact_name: (v) => `Contact: ${v}`, contact_email: (v) => `Contact email: ${v}`, contact_phone: (v) => `Contact phone: ${v}`,
     timezone: (v) => `Time zone: ${v}`, notes: () => "Notes changed",
-    unit: (v) => v, kind: (v) => HW_KIND[v] || v, customer: (v) => v ? `Customer: ${v}` : "No customer", station: (v) => v ? `Station: ${v}` : "No station",
+    unit: (v) => v, from_customer: (v) => `From ${v}`, from_station: (v) => `station ${v}`, kind: (v) => HW_KIND[v] || v, customer: (v) => v ? `Customer: ${v}` : "No customer", station: (v) => v ? `Station: ${v}` : "No station",
     pi_serial: (v) => v ? `Pi serial ${v}` : "Pi serial cleared", software: (v) => `Software ${v || "cleared"}`, built_at: (v) => v ? `Built ${fmtDay(v)}` : "Build date cleared",
     shipped_at: (v) => v ? `Shipped ${fmtDay(v)}` : "Ship date cleared", carrier: (v) => v ? `Carrier: ${v}` : "Carrier cleared", tracking: (v) => v ? `Tracking ${v}` : "Tracking cleared",
     ship_to: (v) => v ? `Ship to: ${v}` : "Ship-to cleared", parts: () => "Parts changed", text: (v) => v, reason: (v) => v === "station activated" ? "Station was activated" : v, role: (v) => `as ${ROLES[v]?.[0] || v}`, email: (v) => v, station: (v) => v,
   };
-  const order = ["unit", "text", "reason", "email", "role", "customer", "station", "status", "plan", "trial_ends_at", "trial_ends", "station_limit", "name"];
+  const order = ["unit", "text", "reason", "email", "role", "from_customer", "from_station", "customer", "station", "status", "plan", "trial_ends_at", "trial_ends", "station_limit", "name"];
   const keys = Object.keys(d).filter((k) => !k.startsWith("_")).sort((a, b) => ((order.indexOf(a) + 1) || 99) - ((order.indexOf(b) + 1) || 99));
   return keys.filter((k) => !(d[k] === "" || (d[k] == null && !["station_limit", "trial_ends_at", "trial_ends", "customer", "station"].includes(k))))
     .map((k) => F[k] ? F[k](d[k]) : (typeof d[k] === "object" ? k.replace(/_/g, " ") : `${k.replace(/_/g, " ")}: ${d[k]}`)).join(", ");
@@ -865,6 +870,28 @@ const api = {
     }
     if (nz(p.note)) ev("note", { text: nz(p.note) });
     return { ok: true, id: t.id, serial: t.serial };
+  },
+  /* rpc platform_move_hardware(unit, org, station?, new station name?, 'disconnect'|'remove') — to another customer in one go */
+  moveHardware(unitId, orgId, d) {
+    const u = DB.hw.find((x) => x.id === unitId), to = custOf(orgId); if (!u) return { ok: false, error: HW_ERR.unit_not_found };
+    if (!to) return { ok: false, error: HW_ERR.not_found }; if (u.org_id === orgId) return { ok: false, error: HW_ERR.same_customer };
+    let st = d.station ? to.stations.find((x) => x.id === d.station && !x.removed) : null;
+    if (d.station && !st) return { ok: false, error: HW_ERR.station_mismatch };
+    if (st && DB.hw.some((x) => x.station_id === st.id && x !== u && x.status !== "retired")) return { ok: false, error: HW_ERR.station_has_unit };
+    const nm = (d.newStation || "").trim().replace(/\s+/g, " ");
+    if (!st && nm && to.stations.some((x) => !x.revoked && x.name.toLowerCase() === nm.toLowerCase())) return { ok: false, error: STATION_ERR.duplicate_name };
+    const from = custOf(u.org_id), old = from?.stations.find((x) => x.id === u.station_id);
+    if (old) { u.station_id = null;
+      if (d.old === "remove") { stEvent(from, old.id, "removed"); from.stations = from.stations.filter((x) => x !== old); log(from, "removed station", old.name); }
+      else { old.revoked = true; old.code = null; stEvent(from, old.id, "disconnected"); log(from, "disconnected station", old.name); } }
+    let code = null;
+    if (!st && nm) { st = api.addStation(to.id, nm).station; code = st.code; }
+    else if (st) code = api.stationCode(to.id, st.id).code;
+    Object.assign(u, { org_id: to.id, station_id: st?.id || null, status: "ready", shipped_at: null, carrier: null, tracking: null, ship_to: null });
+    u.events?.unshift({ at: Date.now(), by: OPERATOR.name, action: "moved", details: { from_customer: from?.name || null, from_station: old?.name || null, customer: to.name, station: st?.name || null } });
+    if (from) log(from, "hardware moved out", changeText({ unit: u.serial, customer: to.name }));
+    log(to, "hardware moved in", changeText({ unit: u.serial, ...(st ? { station: st.name } : {}) }));
+    return { ok: true, unit: u.serial, station: st?.name || null, code };
   },
   /* rpc platform_delete_hardware(id) — owners only */
   deleteHardware(id) {
@@ -1199,6 +1226,12 @@ const liveApi = {
     if (!r.ok) return { ok: false, error: HW_ERR[r.error] || r.error };
     await live.load().catch(() => {}); await live.hwDetail(r.id).catch(() => {}); return r;
   },
+  async moveHardware(unitId, orgId, d) {
+    let r; try { r = await rpc("platform_move_hardware", { p_unit: unitId, p_org: orgId, p_station: d.station || null, p_new_station: d.station ? null : (d.newStation || "").trim() || null, p_old: d.old || "disconnect" }); }
+    catch (e) { return { ok: false, error: nice(e) }; }
+    if (!r.ok) return { ok: false, error: HW_ERR[r.error] || STATION_ERR[r.error] || r.error };
+    await live.load().catch(() => {}); await live.hwDetail(unitId).catch(() => {}); return { ok: true, unit: r.unit, station: r.station, code: r.activation_code };
+  },
   async deleteHardware(id) {
     let r; try { r = await rpc("platform_delete_hardware", { p_id: id }); } catch (e) { return { ok: false, error: nice(e) }; }
     if (!r.ok) return { ok: false, error: HW_ERR[r.error] || r.error };
@@ -1252,7 +1285,8 @@ const liveApi = {
     await live.refresh().catch(() => {}); return { ok: true };
   },
 };
-const HW_ERR = { serial_taken: "That unit ID is already used.", serial_required: "Give it a unit ID.", station_mismatch: "That station belongs to a different customer.",
+const HW_ERR = { same_customer: "It's already at that customer.", station_has_unit: "That station already has a unit. Pick another, or make a new one.", retired: "Retired units can't be moved.",
+  serial_taken: "That unit ID is already used.", serial_required: "Give it a unit ID.", station_mismatch: "That station belongs to a different customer.",
   not_found: "That unit or customer no longer exists.", bad_status: "Pick a status.", bad_kind: "Pick a type.",
   unit_not_in_stock: "That unit isn't free to send. Pick one that's ready or returned.", unit_not_found: "That unit no longer exists.", same_unit: "That unit is already on this station.",
   removed: "That station was removed." };
@@ -2044,12 +2078,19 @@ function vUnit() {
   const canShip = ["building", "ready", "repair", "returned"].includes(u.status);
   return `<div><a class="back" href="#hardware">‹ All hardware</a></div>
     <div class="head"><div><h1 class="mono" style="font-family:var(--display)">${esc(u.serial)}</h1><p>${hwChip(u.status)} · ${esc(HW_KIND[u.kind])}${c ? ` · <a href="#customer/${c.id}" style="color:var(--brand-text)">${esc(c.name)}</a>` : ""}${st ? ` · ${esc(st.name)}` : ""}</p></div>
-      <div class="actions">${NEXT[u.status].map(([to, l]) => `<button class="btn ${to === "retired" ? "danger" : ""}" data-act="hwStatus" data-status="${to}">${l}</button>`).join("")}</div></div>
+      <div class="actions">${NEXT[u.status].map(([to, l]) => `<button class="btn ${to === "retired" ? "danger" : ""}" data-act="hwStatus" data-status="${to}">${l}</button>`).join("")}
+        ${c && u.status !== "retired" && cf !== "move" ? `<button class="btn" data-act="askMove">${ic("arrowRight")}Move to another customer</button>` : ""}</div></div>
     <div class="cols"><div class="stack">
+      ${S.moved?.id === u.id ? `<section class="panel"><div class="panel-h"><h2>Moved to ${esc(S.moved.customer)}</h2></div><div class="panel-b" style="display:flex;flex-direction:column;gap:10px">
+        ${S.moved.code ? `<b>Activation code for ${esc(S.moved.station)}</b><div class="codebox" aria-label="Activation code">${esc(S.moved.code)}</div>
+          <p style="margin:0">The box has already stopped working for its old customer. When it's plugged in at ${esc(S.moved.customer)}, it asks for an activation code: type this one. It works once, for 7 days.</p>` 
+          : `<p style="margin:0">It isn't on a station yet. Add one on ${esc(S.moved.customer)}'s page, or move it onto one there, to get its activation code.</p>`}
+        <div class="actions">${S.moved.code ? `<button class="btn" data-copy="${esc(S.moved.code)}">Copy code</button>` : ""}<button class="btn" data-act="hideMoved">Done</button></div></div></section>` : ""}
+      ${cf === "move" ? moveForm(u, c) : ""}
       ${canShip ? `<section class="panel"><div class="panel-h"><h2>Ship it</h2>${u.kind === "station" ? `<span class="muted" style="font-size:13px">Pick the station so it turns Installed when they activate it</span>` : ""}</div>
         <form class="panel-b fgrid" data-form="hwship">
           <label>Customer<select class="field" name="org_id" data-hwcust>${custOptions(A.org, "Pick a customer")}</select></label>
-          <label>Station<select class="field" name="station_id">${stationOptions(A.org, null)}</select></label>
+          <label>Station<select class="field" name="station_id">${stationOptions(A.org, A.org === (u.org_id || "") ? u.station_id : null)}</select></label>
           <label>Carrier<select class="field" name="carrier">${carrierOptions("UPS")}</select></label>
           <label>Tracking number<input class="field mono" name="tracking" maxlength="60" autocomplete="off"></label>
           <label>Ship date<input class="field" type="date" name="shipped_at" value="${today()}"></label>
@@ -2094,7 +2135,26 @@ function vUnit() {
         : `<button class="btn sm" data-act="askHwDelete" style="color:var(--muted)">Added by mistake? Delete</button>`}</div>` : ""}
     </div></div>`;
 }
-const hwAction = (a) => a === "added" ? "added this unit" : a === "updated" ? "updated details" : a === "note" ? "added a note" : a.startsWith("status: ") ? `marked it ${HW_STATUS[a.slice(8)]?.[0].toLowerCase() || a.slice(8)}` : a;
+// Moving a unit to another customer: where it goes, and what happens to the station it leaves.
+function moveForm(u, c) {
+  const M = S.move || (S.move = { org: "", mode: "new" }), to = custOf(M.org), old = hwStation(u), e = S.formErr?.form === "hwmove" ? S.formErr.text : "";
+  const free = to ? to.stations.filter((s) => !s.revoked && !(DB.hw || []).some((x) => x.station_id === s.id && x.status !== "retired")) : [];
+  return `<section class="panel"><div class="panel-h"><h2>Move ${esc(u.serial)} to another customer</h2></div>
+    <form class="panel-b fgrid" data-form="hwmove" style="grid-template-columns:1fr">
+      <label>New customer<select class="field" name="org_id" data-movecust required><option value="">Pick a customer</option>${[...DB.customers].filter((x) => x.id !== c.id && x.status !== "cancelled").sort((a, b) => a.name.localeCompare(b.name))
+        .map((x) => `<option value="${esc(x.id)}" ${M.org === x.id ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select></label>
+      ${to ? `<fieldset class="radios"><legend>Station there</legend>
+        <label><input type="radio" name="mode" value="new" data-movemode ${M.mode === "new" ? "checked" : ""}> A new station named <input class="field" name="newStation" maxlength="60" value="${esc(M.name ?? old?.name ?? "Equipment Room 01")}" style="max-width:240px"></label>
+        ${free.length ? `<label><input type="radio" name="mode" value="existing" data-movemode ${M.mode === "existing" ? "checked" : ""}> One of theirs without hardware: <select class="field" name="station" style="max-width:240px">${free.map((s) => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join("")}</select></label>` : ""}
+        <label><input type="radio" name="mode" value="none" data-movemode ${M.mode === "none" ? "checked" : ""}> No station yet</label></fieldset>` : ""}
+      ${old ? `<fieldset class="radios"><legend>${esc(old.name)} at ${esc(c.name)}</legend>
+        <label><input type="radio" name="old" value="disconnect" checked> Disconnect it <small>Its history stays; they can put another unit on it later</small></label>
+        <label><input type="radio" name="old" value="remove"> Remove it <small>For good, from their list (history stays)</small></label></fieldset>
+        <p class="muted" style="margin:0;font-size:13.5px">Either way this box stops working for ${esc(c.name)} right away. Taps it saved while offline and hasn't sent yet are lost, so let it sync first if you can.</p>` : ""}
+      <div class="err" role="alert">${esc(e)}</div>
+      <div class="actions"><button class="btn primary">Move it</button><button type="button" class="btn" data-act="noConfirm">Cancel</button></div></form></section>`;
+}
+const hwAction = (a) => a === "moved" ? "moved it" : a === "added" ? "added this unit" : a === "updated" ? "updated details" : a === "note" ? "added a note" : a.startsWith("status: ") ? `marked it ${HW_STATUS[a.slice(8)]?.[0].toLowerCase() || a.slice(8)}` : a;
 
 /* ---- Requests: leads and support from the contact form, and ones you add yourself ---- */
 const reqChip = (st) => `<span class="chip ${REQ_STATUS[st][1]}">${REQ_STATUS[st][0]}</span>`;
@@ -2299,6 +2359,8 @@ document.addEventListener("change", async (e) => {
     const mr = await api.updateCustomer(c.id, { modules: [...mods], _note: `${MODULES.find((m) => m.id === t.dataset.mod).name} ${t.checked ? "on" : "off"}` }); if (mr && !mr.ok) { toast(mr.error); return render(); } toast(`${MODULES.find((m) => m.id === t.dataset.mod).name} ${t.checked ? "on" : "off"}`); return render(); }
   if (t.dataset.shipunit && t.value) { const c = custOf(S.made?.id); const r = await api.saveHardware({ id: t.value, org_id: c.id, station_id: t.dataset.shipunit });
     toast(r.ok ? `${r.serial} goes in this box` : r.error); return render(); }
+  if (t.matches("[data-movecust]")) { S.move.org = t.value; S.move.name = t.form.elements.newStation?.value ?? S.move.name; return render(); }
+  if (t.matches("[data-movemode]")) { S.move.mode = t.value; return; }
   if (t.matches("[data-hwcust]")) { if (S.hwAssign) S.hwAssign.org = t.value; const sel = t.form.elements.station_id; sel.innerHTML = stationOptions(t.value, null);
     if (t.form.dataset.form === "hwship" && t.form.elements.ship_to) { const c = custOf(t.value); t.form.elements.ship_to.value = c ? [c.contact_name, c.name].filter(Boolean).join(", ") : ""; } return; }
   if (t.dataset.req) { const v = t.value; const r = await api.updateRequest(S.id, { [t.dataset.req]: v || null });
@@ -2379,6 +2441,8 @@ document.addEventListener("click", async (e) => {
     Object.assign(nf, { name: r.company || r.name, slug: slugify(r.company || r.name), owner_email: r.email || "", contact_name: r.name, contact_phone: r.phone || "",
       notes: [r.topic, r.message].filter(Boolean).join(": ").slice(0, 2000) });
     S.made = null; S.formErr = null; location.hash = "new"; S.newForm = nf; S.fromRequest = r.id; return; }
+  if (a === "askMove") { S.confirm = "move"; S.move = null; S.formErr = null; return render(); }
+  if (a === "hideMoved") { S.moved = null; return render(); }
   if (a === "askHwDelete") { S.confirm = "hwdel"; return render(); }
   if (a === "hwDelete") { const r = await api.deleteHardware(S.id); S.confirm = null; if (!r.ok) { toast(r.error); return render(); } toast("Deleted"); location.hash = "hardware"; return; }
   if (a === "askRmOp") { S.confirm = "rmop:" + t.dataset.id; return render(); }
@@ -2427,6 +2491,14 @@ async function onSubmit(f, kind, fd, d) {
     const r = await api.saveHardware({ id: S.id, status: "shipped", org_id: d.org_id, station_id: d.station_id || null, carrier: d.carrier, tracking: d.tracking, shipped_at: d.shipped_at, ship_to: d.ship_to });
     if (!r.ok) { S.formErr = { form: "hwship", text: r.error }; return render(); }
     S.formErr = null; S.hwAssign = null; toast(`${r.serial} shipped`); return render();
+  }
+  if (kind === "hwmove") {
+    if (!d.org_id) { S.formErr = { form: "hwmove", text: "Pick the customer it's going to." }; return render(); }
+    const mode = d.mode || "new"; if (mode === "new" && !(d.newStation || "").trim()) { S.formErr = { form: "hwmove", text: "Name the new station, or pick another option." }; return render(); }
+    const r = await api.moveHardware(S.id, d.org_id, { station: mode === "existing" ? d.station : null, newStation: mode === "new" ? d.newStation : null, old: d.old || "disconnect" });
+    if (!r.ok) { S.formErr = { form: "hwmove", text: r.error }; return render(); }
+    S.formErr = null; S.confirm = null; S.hwAssign = null; S.moved = { id: S.id, customer: custOf(d.org_id)?.name, station: r.station, code: r.code }; S.move = null;
+    toast(`${r.unit} moved to ${custOf(d.org_id)?.name}`); render(); window.scrollTo(0, 0); return;
   }
   if (kind === "hwedit") {
     const r = await api.saveHardware({ id: S.id, serial: d.serial, kind: d.kind, status: d.status, pi_serial: d.pi_serial, software: d.software, built_at: d.built_at,

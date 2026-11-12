@@ -164,6 +164,16 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   check(await P.until(() => /SP-0001/.test(P.text())), "customer page shows the unit");
   P.dom.window.location.hash = "log"; await sleep(150);
   check(/hardware shipped/.test(P.text()) && /SP-0001/.test(P.text()), "shipping shows in activity");
+  // Move SP-0001 from Cactus Air to Demo Air Services, on a new station (live)
+  { const unitId = b.psql("select id from private.hardware_units where serial = 'SP-0001'"), demoOrg = b.psql("select id from organizations where slug = 'demo'");
+    P.dom.window.location.hash = "unit/" + unitId; await P.until(() => P.doc.querySelector('[data-act="askMove"]'));
+    await P.click('[data-act="askMove"]'); await P.until(() => P.doc.querySelector("[data-movecust]"));
+    const sel = P.doc.querySelector("[data-movecust]"); sel.value = demoOrg; sel.dispatchEvent(new P.dom.window.Event("change", { bubbles: true }));
+    await P.until(() => P.doc.querySelector('[data-form="hwmove"] [name=newStation]'));
+    P.doc.querySelector('[data-form="hwmove"] [name=newStation]').value = "Moved Room"; await P.submit('[data-form="hwmove"]');
+    check(await P.until(() => b.psql(`select o.slug || '|' || s.name || '|' || u.status from private.hardware_units u join organizations o on o.id = u.org_id join stations s on s.id = u.station_id where u.id = '${unitId}'`) === "demo|Moved Room|ready"
+      && /Activation code for Moved Room/.test(P.text())), "move a unit to another customer (live)", P.text().slice(0, 500));
+    check(b.psql(`select count(*) from stations s where s.name like 'Bag Room%' and s.org_id = '${org}' and s.revoked_at is not null`) !== "0", "the station it left at Cactus Air is disconnected (live)"); }
   // Requests: a website message shows up, gets picked up, answered and noted
   b.psql(`set role anon; select submit_contact('Priya Shah', 'priya@cactusfreight.example', 'We lose track of 40 scanners.', 'Cactus Freight', null, 'Pricing'); reset role;`);
   P.dom.window.location.hash = "requests";

@@ -24,7 +24,7 @@ See README.md for the full product description.
 - Push to `main` → GitHub Actions runs `tests/run.sh db` + `ui`, then deploys app + console to Cloudflare Pages
   (projects `sonoranpoint-app`, `sonoranpoint-console`, `sonoranpoint-site`).
 - Database changes are NOT automatic. Add a new migration file (never edit one already run on the live
-  project), then tell Dez to run it in the Supabase SQL editor. Migrations 1–30 have been run (checked 2026-11-11;
+  project), then tell Dez to run it in the Supabase SQL editor. Migrations 1–30 have been run, 31 (move hardware) not yet (checked 2026-11-11;
   ask if unsure). Alert emails are live (Resend key in Vault, first send
   confirmed 2026-10-20).
 - Station changes reach the Pis by themselves: every deploy publishes `app.sonoranpoint.com/station-release/latest.json` + a zip
@@ -86,6 +86,12 @@ See README.md for the full product description.
   `is_platform_operator()` and `require_platform_owner()` need it; `am_platform_operator()` uses `is_platform_member()` so the console
   can ask for the code. Lost phone: remove the person's MFA factor in the Supabase dashboard (Authentication -> Users).
 - Test auth mock (`tests/ui/backend.js`) does /factors enroll/challenge/verify/unenroll with real TOTP (`b.totp(secret)`).
+
+## Moving hardware between customers (migration 31)
+- `platform_move_hardware(unit, org, station?, new_station?, old 'disconnect'|'remove')`: the station it leaves is disconnected (key gone,
+  so the box stops working there; it shows the setup screen on its next contact) or removed; the unit goes to the new customer as 'ready'
+  (shipping fields cleared) on one of their free stations or a new one; that station gets a fresh code (returned once). Hardware event
+  'moved', logs 'hardware moved out' / 'moved in'. Console: "Move to another customer" on the unit page (`moveForm`, `S.moved`).
 
 ## Closing out a customer (migration 25)
 - `platform_close_customer(org)`: status cancelled, stations revoked (not removed), invites deleted, units ready/shipped/installed ->

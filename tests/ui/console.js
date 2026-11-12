@@ -290,6 +290,29 @@ const api_set = async (id) => { E(`api.updateCustomer('${id}', { logo_dark_url: 
   check(E("S.route") === "request" && /Sam from the trade show/.test(mainText()) && doc.querySelector('[data-form="reqreply"] button').disabled, "add a request by hand; with no email, reply is off");
   doc.getElementById("gsearch").value = "cactus"; doc.getElementById("gsearch").dispatchEvent(new dom.window.Event("input", { bubbles: true })); await sleep(10);
   check(/Requests/.test(doc.getElementById("gsResults").textContent) && /Priya Shah/.test(doc.getElementById("gsResults").textContent), "search finds requests");
+  // Move a unit to another customer
+  {
+    const mt = () => doc.querySelector(".main > .wrap").textContent.replace(/\s+/g, " ");
+    const demo = E("DB.customers.find(c => c.name === 'Demo Air Services').id"), copper = E("DB.customers.find(c => c.name === 'Copper State Cargo').id");
+    const unit = E(`DB.hw.find(u => u.org_id === '${demo}' && u.station_id && u.status === 'installed').id`), oldSt = E(`DB.hw.find(u => u.id === '${unit}').station_id`);
+    const oldName = E(`custOf('${demo}').stations.find(s => s.id === '${oldSt}').name`);
+    await go("unit/" + unit); await click('[data-act="askMove"]');
+    check(/Move SP-\d+ to another customer/.test(mt()) && !doc.querySelector('[data-movecust] option[value="' + demo + '"]'), "Move opens a form; its current customer isn't a choice");
+    const sel = doc.querySelector("[data-movecust]"); sel.value = copper; sel.dispatchEvent(new dom.window.Event("change", { bubbles: true })); await sleep(20);
+    check(doc.querySelector('[data-form="hwmove"] [name=newStation]').value === oldName && /Disconnect it/.test(mt()), "picking the customer offers a new station (same name) and what to do with the old one");
+    doc.querySelector('[data-form="hwmove"] [name=newStation]').value = "Tug Shop 2"; await submit('[data-form="hwmove"]'); await sleep(30);
+    const u = E(`JSON.stringify((() => { const u = DB.hw.find(x => x.id === '${unit}'); return [u.org_id === '${copper}', u.status, custOf('${copper}').stations.find(s => s.id === u.station_id)?.name, !!u.tracking]; })())`);
+    check(u === JSON.stringify([true, "ready", "Tug Shop 2", false]), "the unit is Copper State's, on the new station, ready to ship " + u);
+    check(E(`custOf('${demo}').stations.find(s => s.id === '${oldSt}').revoked`) === true && /Moved to Copper State Cargo/.test(mt()) && /Activation code for Tug Shop 2/.test(mt()) && /[A-Z0-9]{4}-[A-Z0-9]{4}/.test(doc.querySelector(".codebox").textContent),
+          "the old station is disconnected; the new code is shown");
+    check(/moved it/.test(mt()) && /From Demo Air Services, station /.test(mt()), "the unit's history says where it came from");
+    check(E(`DB.log.some(l => l.org === '${demo}' && l.action === 'hardware moved out')`) && E(`DB.log.some(l => l.org === '${copper}' && l.action === 'hardware moved in')`), "both customers' activity shows it");
+    await click('[data-act="askMove"]'); const s2 = doc.querySelector("[data-movecust]"); s2.value = demo; s2.dispatchEvent(new dom.window.Event("change", { bubbles: true })); await sleep(20);
+    doc.querySelector('[data-form="hwmove"] input[name=old][value=remove]').checked = true; doc.querySelector('[data-form="hwmove"] input[name=mode][value=none]').checked = true;
+    await submit('[data-form="hwmove"]'); await sleep(30);
+    check(E(`!custOf('${copper}').stations.some(s => s.name === 'Tug Shop 2')`) && E(`DB.hw.find(x => x.id === '${unit}').station_id`) === null && /isn't on a station yet/.test(mt()),
+          "move back with Remove and no station: the station it left is gone; no code yet");
+  }
   check(errors.length === 0, "no script errors " + errors.join(";"));
   process.exit();
 })();

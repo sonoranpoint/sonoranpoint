@@ -1255,6 +1255,40 @@ select pg_temp.ok(exists (select 1 from station_events e join stations s on s.id
                   and (select action from private.platform_log where org_id = :'dg' order by id desc limit 1) = 'closed out customer', 'it shows in their station history and your log');
 select pg_temp.ok(exists (select 1 from org_members where org_id = :'dg'), 'their team stays (they can still sign in to see their history)');
 
+\echo '--- Moving a unit to another customer (migration 31)'
+set role authenticated;
+select set_config('request.jwt.claim.sub', '99999999-0000-0000-0000-000000000009', false) \g /dev/null
+select (platform_add_station('00000000-0000-0000-0000-00000000d3e0', 'Move Test Room')->>'station_id') as mvst \gset
+reset role;
+insert into private.hardware_units (serial, kind, status, org_id, station_id) values ('SP-MOVE', 'station', 'installed', '00000000-0000-0000-0000-00000000d3e0', :'mvst');
+select id as mvu from private.hardware_units where serial = 'SP-MOVE' \gset
+update private.station_keys set device_key_hash = private.sha256_hex('mv-key'), activation_code_hash = null where station_id = :'mvst';
+update stations set activated_at = now() where id = :'mvst';
+set role authenticated;
+select pg_temp.ok(platform_move_hardware(:'mvu', '00000000-0000-0000-0000-00000000d3e0')->>'error' = 'same_customer', 'moving to the customer it''s already at is refused');
+select platform_move_hardware(:'mvu', :'dg', null, 'Ramp Office 2') as mv \gset
+reset role;
+select pg_temp.ok((:'mv'::jsonb->>'ok')::boolean and length(:'mv'::jsonb->>'activation_code') = 9, 'move it to Desert Ground on a new station: a fresh code comes back');
+select pg_temp.ok((select status = 'ready' and org_id = :'dg' and station_id = (:'mv'::jsonb->>'station_id')::uuid and shipped_at is null from private.hardware_units where id = :'mvu'),
+                  'the unit is theirs now, on the new station, ready to ship');
+select pg_temp.ok((select revoked_at is not null and removed_at is null from stations where id = :'mvst')
+                  and (select device_key_hash is null from private.station_keys where station_id = :'mvst'), 'the old customer''s station is disconnected (the box''s key stops working there)');
+select pg_temp.ok(station_sync_cache('mv-key')->>'ok' = 'false', 'so the box can''t keep working for the old customer');
+select pg_temp.ok((select details->>'from_station' = 'Move Test Room' and details->>'station' = 'Ramp Office 2' from private.hardware_events where unit_id = :'mvu' and action = 'moved'),
+                  'the unit''s history says where it moved from and to');
+select pg_temp.ok(exists (select 1 from private.platform_log where org_id = '00000000-0000-0000-0000-00000000d3e0' and action = 'hardware moved out')
+                  and exists (select 1 from private.platform_log where org_id = :'dg' and action = 'hardware moved in'), 'both customers'' logs show it');
+set role authenticated;
+select set_config('request.jwt.claim.sub', '99999999-0000-0000-0000-000000000009', false) \g /dev/null
+select platform_move_hardware(:'mvu', '00000000-0000-0000-0000-00000000d3e0', null, 'Move Back Room', 'remove') as mv2 \gset
+reset role;
+select pg_temp.ok((select removed_at is not null from stations where id = (:'mv'::jsonb->>'station_id')::uuid), 'moving it back with "remove" removes the station it left');
+select pg_temp.ok((select org_id = '00000000-0000-0000-0000-00000000d3e0' from private.hardware_units where id = :'mvu'), 'and it''s back at the first customer');
+set role authenticated;
+select set_config('request.jwt.claim.sub', 'aaaaaaaa-0000-0000-0000-000000000001', false) \g /dev/null
+select pg_temp.ok(pg_temp.raises($$select platform_move_hardware('$$ || :'mvu' || $$', '$$ || :'dg' || $$')$$), 'customers can''t move hardware');
+reset role;
+
 \echo '--- Station uptime history'
 select id as ups from stations where name = 'Equipment Room 02' and org_id = '00000000-0000-0000-0000-00000000d3e0' \gset
 update stations set last_seen_at = now() - interval '2 hours' where id = :'ups';
