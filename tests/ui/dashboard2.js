@@ -63,8 +63,8 @@ const drawer = () => doc.querySelector(".drawer")?.textContent.replace(/\s+/g, "
   check(/Your roles/.test(doc.body.textContent) && /Ramp lead/.test(doc.body.textContent), "roles section lists the company's roles");
   await click('[data-act="roleNew"]');
   { const f = doc.querySelector('[data-form="role:"]'), tpl = f.querySelector("[data-roletpl]"); tpl.value = "supervisor"; tpl.dispatchEvent(new dom.window.Event("change", { bubbles: true })); await sleep(10);
-    check([...f.querySelectorAll("input[name=perm]:checked")].map((c) => c.value).join() === "people,status,alerts,visitors", "start from Supervisor ticks its boxes");
-    f.querySelector('input[name=perm][value="alerts"]').checked = false; f.querySelector('input[name=perm][value="equipment"]').checked = true; }
+    check([...f.querySelectorAll("input[name=perm]:checked")].map((c) => c.value).join() === "people,status,reports,visitors", "start from Supervisor ticks its boxes");
+    f.querySelector('input[name=perm][value="reports"]').checked = false; f.querySelector('input[name=perm][value="equipment"]').checked = true; }
   await submit('[data-form="role:"]', { name: "Supervisor" });
   check(/built-in role/.test(doc.querySelector("#roleErr").textContent), "a role can't take a built-in name");
   await submit('[data-form="role:"]', { name: "Gear lead" });
@@ -94,6 +94,15 @@ const drawer = () => doc.querySelector(".drawer")?.textContent.replace(/\s+/g, "
   await go("alerts"); check(!doc.querySelector('[data-act="ackStart"]'), "View only: can't mark alerts seen");
   va.value = "supervisor"; doc.querySelector("#viewAs").value = "supervisor"; doc.querySelector("#viewAs").dispatchEvent(new dom.window.Event("change", { bubbles: true })); await sleep(20);
   await go("employees"); check(!!doc.querySelector('[data-act="newEmp"]'), "Supervisor: can add employees");
+  E(`openDrawer('employee', DB.employees.find(e => e.active).id)`); await sleep(20);
+  check(/Edit details/.test(drawer()) && !/Deactivate/.test(drawer()), "Supervisor: can edit someone but not deactivate them"); E("S.drawer = null; renderLayer()");
+  { const v = doc.querySelector("#viewAs"); v.value = "admin"; v.dispatchEvent(new dom.window.Event("change", { bubbles: true })); await sleep(20); }
+  E(`openDrawer('employee', DB.employees.find(e => e.active).id)`); await sleep(20);
+  check(/Deactivate/.test(drawer()), "Manager: can deactivate"); E("S.drawer = null; renderLayer()");
+  await go("stations"); check(!doc.querySelector('[data-act="addStation"]'), "Manager: stations are for Admins");
+  await go("team"); check(![...doc.querySelectorAll('[data-form="invite"] [name=role] option')].some((o) => o.value === "admin" || o.value === "owner"), "Manager: can only add View Only and Supervisor (and roles under them)");
+  { const v = doc.querySelector("#viewAs"); v.value = "supervisor"; v.dispatchEvent(new dom.window.Event("change", { bubbles: true })); await sleep(20); }
+  await go("employees");
   await go("equipment"); check(!doc.querySelector('[data-act="newEq"]'), "Supervisor: can't add equipment");
   await click('[data-open^="equipment:"]'); check(/Mark lost/.test(drawer()) && !/Limits for this item/.test(drawer()), "Supervisor: can mark lost, can't change limits");
   check(errors.length === 0, "no script errors " + errors.join(";"));

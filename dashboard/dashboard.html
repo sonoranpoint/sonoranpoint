@@ -860,12 +860,18 @@ const RANK = { viewer: 0, supervisor: 1, admin: 2, owner: 3 };
 const ROLE_NAME = { viewer: "View Only", supervisor: "Supervisor", admin: "Manager", owner: "Admin" };
 const can = (need) => RANK[DB.me.role] >= RANK[need];
 /* Permissions (migration 40). Admins have all; built-in roles have a fixed set; a custom role has its own boxes. */
-const PERMS = [["people", "People", "Add and edit employees, badges and who's on which shift"], ["status", "Equipment status", "Mark items lost or in maintenance, report and clear problems, lend items"],
-  ["alerts", "Alerts and reports", "Mark alerts seen, sign off shift reports"], ["visitors", "Visitors", "Let people from other contracts use your stations"],
-  ["equipment", "Equipment", "Add and edit equipment, categories, time limits, import, labels"], ["stations", "Stations", "Add, rename and remove stations, setup codes"],
-  ["fobs", "Station fobs", "Give manager or admin fobs and set PINs"], ["shifts", "Shifts", "Create shifts and change their times"], ["team", "Team", "Invite and manage dashboard users"]];
+const PERMS = [["people", "People", "Add and edit employees, issue and replace badges, put people on shifts"],
+  ["remove_people", "Deactivate people", "Deactivate and reactivate employees"],
+  ["status", "Equipment status", "Mark items lost or in maintenance, report and clear problems, lend items"],
+  ["reports", "Shift reports", "Sign off shift reports"], ["alerts", "Alerts", "Mark alerts seen"],
+  ["visitors", "Visitors", "Let people from other contracts use your stations"],
+  ["equipment", "Equipment", "Add, edit and remove equipment, categories, time limits, import, labels"],
+  ["stations", "Stations", "Add, rename and remove stations, setup codes"], ["fobs", "Station fobs", "Give manager or admin fobs and set PINs"],
+  ["shifts", "Shifts", "Create shifts and change their times"], ["team", "Team", "Invite and manage dashboard users below them"]];
 const ALL_PERMS = PERMS.map(([k]) => k);
-const ROLE_PERMS = { viewer: [], supervisor: ["people", "status", "alerts", "visitors"], admin: ALL_PERMS, owner: ALL_PERMS };
+// Built-in roles (migration 41): Supervisor < Manager < Admin.
+const ROLE_PERMS = { viewer: [], supervisor: ["people", "status", "reports", "visitors"],
+  admin: ["people", "remove_people", "status", "reports", "alerts", "visitors", "equipment", "shifts", "team"], owner: ALL_PERMS };
 const permsOf = (m) => m.role === "owner" ? ALL_PERMS : m.custom ? (DB.roles || []).find((r) => r.id === m.custom)?.perms || [] : ROLE_PERMS[m.role] || [];
 const has = (perm) => permsOf(DB.me).includes(perm);
 const roleLabel = (m) => m.custom ? (DB.roles || []).find((r) => r.id === m.custom)?.name || m.role_name || "Custom role" : ROLE_NAME[m.role];
@@ -875,11 +881,10 @@ const roleLabel = (m) => m.custom ? (DB.roles || []).find((r) => r.id === m.cust
 const myScopeIds = () => !(DB.contracts || []).length || (DB.me.role === "owner" && !(DB.me.contracts || []).length) ? null : DB.me.contracts || [];
 // Company-wide settings (name, logo, categories, checkout rules) are for people who see the whole company.
 const canCompany = () => can("admin") && !myScopeIds();
-// Who you can give a role to (same rules as the database): Admins anything; built-in Managers anything but Admin; someone with
-// the Team box only roles whose boxes they have themselves.
+// Who you can give a role to (same rules as the database): Admins anything; anyone else with the Team box only View Only,
+// Supervisor and custom roles whose boxes they have themselves (never Manager or Admin).
 const coversPerms = (perms) => (perms || []).every((p) => has(p));
-const canManageRole = (role) => DB.me.role === "owner" || (DB.me.role === "admin" && !DB.me.custom && role !== "owner")
-  || (has("team") && RANK[role] < RANK.admin && coversPerms(ROLE_PERMS[role]));
+const canManageRole = (role) => DB.me.role === "owner" || (has("team") && RANK[role] < RANK.admin && coversPerms(ROLE_PERMS[role]));
 const roleOf = (id) => (DB.roles || []).find((r) => r.id === id);
 const canGiveRole = (r) => !!r && (DB.me.role === "owner" || (has("team") && coversPerms(r.perms)));
 const canManageMember = (m) => canManageRole(m.role) && (!m.custom || canGiveRole(roleOf(m.custom)));
@@ -1051,7 +1056,7 @@ const api = {
   /* rpc reset_station_activation */
   newCode(id) { const s = DB.stations.find((x) => x.id === id); stEvent(id, "new_code"); s.revoked = false; s.pending = true; s.code = api.createStation._code(); s.expires = Date.now() + 7 * 86400000; return s.code; },
   /* employees.active */
-  setActive(id, active) { const e = empOf(id); e.active = active; DB.audit.push({ at: Date.now(), actor: DB.me.name, text: `${active ? "reactivated" : "deactivated"} ${e.name}` }); },
+  setActive(id, active) { if (!has("remove_people")) return { ok: false, error: "Ask a manager to deactivate people." }; const e = empOf(id); e.active = active; DB.audit.push({ at: Date.now(), actor: DB.me.name, text: `${active ? "reactivated" : "deactivated"} ${e.name}` }); },
   /* organizations + equipment_categories */
   saveSettings(patch) { Object.assign(DB.org, patch); },
   saveCategory(id, patch) { Object.assign(catOf(id), patch); },
@@ -2254,7 +2259,7 @@ function vRoles() {
   const form = (r) => `<form class="panel-b roleform" data-form="role:${r?.id || ""}">
       <label class="full">Name<input class="field" name="name" maxlength="40" required value="${esc(r?.name || "")}" placeholder="Like: Ramp lead"></label>
       ${r ? "" : `<label>Start from<select class="field" data-roletpl><option value="">Nothing</option><option value="supervisor">Supervisor</option><option value="admin">Manager</option>${roles.map((x) => `<option value="role:${x.id}">${esc(x.name)}</option>`).join("")}</select></label>`}
-      <fieldset class="full scopes perm-boxes"><legend>What they can do</legend><span class="sub muted">Everyone can see their own ${DB.contracts?.length ? esc(CTERM().many.toLowerCase()) : "company"}'s equipment, activity, alerts and reports.</span>
+      <fieldset class="full scopes perm-boxes"><legend>What they can do</legend><span class="sub muted">Everyone can see the equipment, activity, alerts and reports ${DB.contracts?.length ? `for their own ${esc(CTERM().many.toLowerCase())}` : "for the company"}.</span>
         ${PERMS.map(([k, l, d]) => `<label><input type="checkbox" name="perm" value="${k}" ${(r?.perms || []).includes(k) ? "checked" : ""}> <span><b>${esc(l)}</b><span class="sub">${esc(d)}</span></span></label>`).join("")}</fieldset>
       <div class="full actions"><button class="btn primary">${r ? "Save role" : "Make role"}</button><button class="btn" type="button" data-act="roleCancel">Cancel</button><span class="err" id="roleErr" role="alert"></span></div></form>`;
   return `<section class="panel" id="roles"><div class="panel-h"><h2>Your roles</h2>${admin && R === undefined ? `<button class="btn sm" data-act="roleNew">Make a role</button>` : ""}</div>
@@ -2396,9 +2401,9 @@ function dEmployee(id) {
     <div class="sect"><dl class="kv"><dt>Badge</dt><dd class="mono">${realTag(e.badge) ? esc(fmtUid(e.badge)) : `<span class="muted" style="font-family:var(--body)">${e.barcode ? "No NFC badge (uses its barcode)" : "No badge yet"}</span>`}</dd>${e.barcode ? `<dt>Badge barcode</dt><dd class="mono">${esc(e.barcode)}</dd>` : ""}<dt>Late returns (7 days)</dt><dd>${lateCount}</dd>
       <dt>Last tap</dt><dd>${e.last ? esc(fmtWhen(e.last)) : "Never"}</dd></dl></div>
     ${has("people") ? `<div class="actions"><button class="btn" data-act="editEmp">Edit details</button></div>
-    <div class="sect"><h3>Access</h3>${c === "deactivate" ? `<div class="confirm">Deactivate ${esc(e.name)}? Their badge stops working right away. Their history stays.
+    ${has("remove_people") ? `<div class="sect"><h3>Access</h3>${c === "deactivate" ? `<div class="confirm">Deactivate ${esc(e.name)}? Their badge stops working right away. Their history stays.
         <button class="btn sm danger" data-act="doActive" data-v="0">Deactivate</button><button class="btn sm" data-act="noConfirm">Cancel</button></div>`
-      : e.active ? `<button class="btn danger" data-act="askDeactivate">Deactivate</button>` : `<button class="btn primary" data-act="doActive" data-v="1">Reactivate</button>`}</div>` : ""}
+      : e.active ? `<button class="btn danger" data-act="askDeactivate">Deactivate</button>` : `<button class="btn primary" data-act="doActive" data-v="1">Reactivate</button>`}</div>` : ""}` : ""}
     <div class="sect"><h3>History</h3>${hist.length ? `<div class="hist">${hist.map((a) => `<div class="${a.action === "checkin" ? "in" : ""} ${a.forOther ? "flag" : ""}">
       <time>${esc(fmtWhen(a.at))}</time>${a.byId === id ? `${esc(a.description)} <b>${esc(a.equipment)}</b>` : `<b>${esc(a.by)}</b> returned <b>${esc(a.equipment)}</b> for them`}</div>`).join("")}</div>` : `<p class="muted">No activity yet.</p>`}</div>
   </div>`;
@@ -2413,7 +2418,7 @@ function dReport(key) {
       : `<p class="muted" style="margin:0">Everything the ${esc(r.shift.name)} crew took was back on time.</p>`}</div>
     ${r.inProgress ? `<div class="notice">This shift is still going. The report is saved 15 minutes after it ends.</div>`
       : r.ack ? `<div class="notice">Signed off by ${esc(r.ack.by)} ${esc(fmtWhen(r.ack.at))}${r.ack.note ? `: “${esc(r.ack.note)}”` : ""}</div>`
-      : !has("alerts") ? `<div class="readonly-note">Not signed off yet. A supervisor or manager can sign it off.</div>`
+      : !has("reports") ? `<div class="readonly-note">Not signed off yet. A supervisor or manager can sign it off.</div>`
       : `<div class="sect"><h3>Sign off</h3><form class="inline-form" data-form="report:${esc(r.key)}"><input class="field" name="note" aria-label="Note" placeholder="Note, like: PDA 02 found in van 4" maxlength="200">
         <button class="btn primary">Sign off</button></form></div>`}
   </div>`;
@@ -2610,7 +2615,7 @@ document.addEventListener("click", async (e) => {
   if (a === "askRevoke") { S.confirm = "revoke"; return renderLayer(); }
   if (a === "noConfirm") { S.confirm = null; return renderLayer(); }
   if (a === "doStatus") { api.setStatus(D.id, t.dataset.s); S.confirm = null; toast({ lost: "Marked lost", maintenance: "Sent to maintenance", available: "Back in service" }[t.dataset.s]); return render(); }
-  if (a === "doActive") { api.setActive(D.id, t.dataset.v === "1"); S.confirm = null; toast(t.dataset.v === "1" ? "Reactivated" : "Deactivated. Their badge no longer works."); return render(); }
+  if (a === "doActive") { const ar = api.setActive(D.id, t.dataset.v === "1"); S.confirm = null; if (ar && ar.ok === false) { toast(ar.error); return render(); } toast(t.dataset.v === "1" ? "Reactivated" : "Deactivated. Their badge no longer works."); return render(); }
   if (a === "doRevoke") { api.revokeStation(D.id); S.confirm = null; toast("Station disconnected"); return render(); }
   if (a === "askRemoveStation") { S.confirm = "remove"; return renderLayer(); }
   if (a === "doRemoveStation") { const nm = DB.stations.find((x) => x.id === D.id)?.name || "Station"; api.removeStation(D.id); S.confirm = null; S.drawer = null; toast(nm + " removed"); return render(); }

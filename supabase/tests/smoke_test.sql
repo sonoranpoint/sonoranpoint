@@ -1717,7 +1717,33 @@ select pg_temp.ok(delete_custom_role((:'rl'::jsonb->>'id')::uuid)->>'error' = 'i
 select set_config('request.jwt.claim.sub', 'aaaaaaaa-0000-0000-0000-000000000001', false) \g /dev/null
 select pg_temp.ok(private.has_perm('00000000-0000-0000-0000-00000000d3e0', 'team') and private.has_perm('00000000-0000-0000-0000-00000000d3e0', 'fobs'), 'Admins have every permission');
 reset role;
-select pg_temp.ok(private.role_perms('supervisor') = array['people','status','alerts','visitors'] and private.role_perms('viewer') = '{}', 'built-in Supervisor and View Only are unchanged');
+select pg_temp.ok(private.role_perms('viewer') = '{}', 'View Only has no boxes');
+
+\echo '--- Built-in roles as Dez set them (migration 41)'
+select pg_temp.ok(private.role_perms('supervisor') = array['people','status','reports','visitors'], 'Supervisor: people (not deactivating), status, shift reports, visitors');
+select pg_temp.ok(private.role_perms('admin') @> array['remove_people','equipment','alerts','shifts','team'] and not private.role_perms('admin') && array['stations','fobs'],
+                  'Manager: that + deactivating, equipment, alerts, shifts, team; not stations or fobs');
+insert into auth.users (id, email) values ('41410000-0000-0000-0000-000000000041', 'sup41@example.com'), ('41410000-0000-0000-0000-000000000042', 'mgr41@example.com');
+insert into org_members (org_id, user_id, role) values ('00000000-0000-0000-0000-00000000d3e0', '41410000-0000-0000-0000-000000000041', 'supervisor'),
+  ('00000000-0000-0000-0000-00000000d3e0', '41410000-0000-0000-0000-000000000042', 'admin');
+insert into member_contracts (org_id, user_id, contract_id) select '00000000-0000-0000-0000-00000000d3e0', u, :'dbw' from unnest(array['41410000-0000-0000-0000-000000000041','41410000-0000-0000-0000-000000000042']::uuid[]) u;
+insert into employees (org_id, first_name, last_name, employee_number, contract_id) values ('00000000-0000-0000-0000-00000000d3e0', 'Test', 'Fortyone', 'E4141', :'dbw');
+set role authenticated;
+select set_config('request.jwt.claim.sub', '41410000-0000-0000-0000-000000000041', false) \g /dev/null
+update employees set last_name = 'Edited' where employee_number = 'E4141';
+select pg_temp.ok(exists (select 1 from employees where employee_number = 'E4141' and last_name = 'Edited'), 'a Supervisor edits an employee');
+select pg_temp.ok(pg_temp.raises($$update employees set active = false where employee_number = 'E4141'$$), 'but can''t deactivate them');
+select pg_temp.ok(pg_temp.raises($$select create_station('00000000-0000-0000-0000-00000000d3e0', 'Nope')$$), 'or add stations');
+select set_config('request.jwt.claim.sub', '41410000-0000-0000-0000-000000000042', false) \g /dev/null
+update employees set active = false where employee_number = 'E4141';
+select pg_temp.ok(exists (select 1 from employees where employee_number = 'E4141' and not active), 'a Manager can deactivate');
+select pg_temp.ok(pg_temp.raises($$select create_station('00000000-0000-0000-0000-00000000d3e0', 'Nope')$$), 'a Manager can''t add stations (Admins do)');
+select pg_temp.ok(pg_temp.raises($$select invite_member('00000000-0000-0000-0000-00000000d3e0', 'm2@x.example', 'admin', array['$$ || :'dbw' || $$'::uuid])$$), 'a Manager can''t make Managers');
+select pg_temp.ok((invite_member('00000000-0000-0000-0000-00000000d3e0', 's2@x.example', 'supervisor', array[:'dbw'::uuid])->>'ok')::boolean, 'but can add Supervisors');
+reset role;
+delete from org_invites where email = 's2@x.example';
+delete from employees where employee_number = 'E4141';
+delete from org_members where user_id in ('41410000-0000-0000-0000-000000000041', '41410000-0000-0000-0000-000000000042');
 delete from org_invites where custom_role_id is not null or email in ('viewer2@x.example');
 delete from org_members where user_id = '40400000-0000-0000-0000-000000000040';
 delete from equipment where name = 'Lead radio';

@@ -24,7 +24,7 @@ See README.md for the full product description.
 - Push to `main` → GitHub Actions runs `tests/run.sh db`, `ui` and `live` (PostgREST downloaded in CI), then deploys app + console to Cloudflare Pages
   (projects `sonoranpoint-app`, `sonoranpoint-console`, `sonoranpoint-site`).
 - Database changes are NOT automatic. Add a new migration file (never edit one already run on the live
-  project), then tell Dez to run it in the Supabase SQL editor. Migrations 1–31 have been run, 32–40 not yet (checked 2026-11-12;
+  project), then tell Dez to run it in the Supabase SQL editor. Migrations 1–31 have been run, 32–41 not yet (checked 2026-11-12;
   ask if unsure). Alert emails are live (Resend key in Vault, first send
   confirmed 2026-10-20).
 - Station changes reach the Pis by themselves: every deploy publishes `app.sonoranpoint.com/station-release/latest.json` + a zip
@@ -84,6 +84,10 @@ See README.md for the full product description.
   contract and are only seen in it), `list_custom_roles`. A member with a custom role is stored as `role = 'viewer'` +
   `org_members.custom_role_id`; invites carry `custom_role_id`. `set_member_role(..., p_custom_role)`, `invite_member(..., p_custom_role)`.
   No escalation: `can_give_custom` / `can_manage_role` / `can_manage_member` only allow roles whose boxes you have.
+- Migration 41 (Dez's split): eleven boxes — people, remove_people (deactivate/reactivate; trigger `guard_employee_active` on dashboard
+  requests), status, reports (sign off shift reports), alerts (mark seen), visitors, equipment, stations, fobs, shifts, team.
+  Supervisor = people, status, reports, visitors. Manager = that + remove_people, equipment, alerts, shifts, team (limited: only roles
+  below Manager whose boxes they have). Admin = everything (stations and fobs are Admin-only among built-ins).
 - Dashboard: `PERMS`, `ROLE_PERMS`, `has(perm)`, `roleLabel`, `roleOptions` ("role:<id>" values), Team page "Your roles" (`vRoles`).
   Console team panel lists the customer's roles in its role picker (`roleName`, `splitRole`).
 
