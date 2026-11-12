@@ -24,7 +24,7 @@ See README.md for the full product description.
 - Push to `main` → GitHub Actions runs `tests/run.sh db` + `ui`, then deploys app + console to Cloudflare Pages
   (projects `sonoranpoint-app`, `sonoranpoint-console`, `sonoranpoint-site`).
 - Database changes are NOT automatic. Add a new migration file (never edit one already run on the live
-  project), then tell Dez to run it in the Supabase SQL editor. Migrations 1–30 have been run, 31 (move hardware) not yet (checked 2026-11-11;
+  project), then tell Dez to run it in the Supabase SQL editor. Migrations 1–31 have been run (checked 2026-11-11;
   ask if unsure). Alert emails are live (Resend key in Vault, first send
   confirmed 2026-10-20).
 - Station changes reach the Pis by themselves: every deploy publishes `app.sonoranpoint.com/station-release/latest.json` + a zip
