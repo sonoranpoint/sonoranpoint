@@ -95,7 +95,7 @@ const change = async (el, v) => { if (typeof v === "boolean") el.checked = v; el
   doc.querySelector('.drawer input[name=c][value="ubw"]').checked = true;
   doc.querySelector('.drawer form').dispatchEvent(new dom.window.Event("submit", { bubbles: true, cancelable: true })); await sleep(20);
   check(JSON.stringify(E("DB.members.find(m => m.id === 'u4').contracts")) === '["ubw"]', "saved: Ops Office now covers United BW");
-  check(!E("api.setMemberContracts('u1', ['dbw']).ok"), "owners always see everything");
+  check(!E("api.setMemberContracts('u4', []).ok"), "someone who isn't an Admin needs at least one");
   // Shift belongs to a contract
   E(`openDrawer('shiftForm', DB.shifts.find(x => x.name === 'Overnight').id)`); await sleep(20);
   await submit('[data-form^="shift:"]', { contract: "daw" });
@@ -203,6 +203,16 @@ const change = async (el, v) => { if (typeof v === "boolean") el.checked = v; el
   check(/Pick at least one contract/.test(doc.querySelector("#invErr").textContent), "someone who isn't an admin needs a contract");
   E("openDrawer('eqForm')"); await sleep(20);
   check(![...doc.querySelectorAll('.drawer select[name=contract] option')].some((o) => o.value === ""), "she can't add equipment to the whole company");
+  // Admin of just Delta BW (migration 37): same limits, and the Admins she adds are for Delta BW too.
+  E("S.drawer = null; DB.me.role = 'owner'; DB.me.contracts = ['dbw']; render()"); await go("settings");
+  check(E("JSON.stringify(myScopeIds())") === '["dbw"]' && doc.querySelector("main fieldset").disabled, "an Admin of one contract sees only it, and not company settings");
+  await go("team");
+  doc.querySelectorAll('.inv-scopes input').forEach((i) => { i.checked = false; });
+  await submit('[data-form="invite"]', { email: "admin2@demoair.example", role: "owner" });
+  check(/Pick at least one/.test(doc.querySelector("#invErr").textContent), "she can't add a whole-company Admin");
+  doc.querySelector('.inv-scopes input[value="dbw"]').checked = true;
+  await submit('[data-form="invite"]', { email: "admin2@demoair.example", role: "owner" });
+  check(E("DB.invites[0].email") === "admin2@demoair.example" && E("DB.invites[0].contracts.join()") === "dbw", "she adds another Delta BW Admin");
   E("S.drawer = null; DB.me.role = 'owner'; DB.me.contracts = []; render()"); await sleep(20);
   check(errors.length === 0, "no script errors " + errors.join(";"));
   process.exit();

@@ -1060,7 +1060,7 @@ select id as erm02 from stations where name = 'Equipment Room 02' \gset
 select id as uawroom from stations where name = 'United AW room' \gset
 set role authenticated;
 select set_config('request.jwt.claim.sub', 'aaaaaaaa-0000-0000-0000-000000000001', false) \g /dev/null
-select pg_temp.ok(set_member_contracts('00000000-0000-0000-0000-00000000d3e0', 'aaaaaaaa-0000-0000-0000-000000000001', array[:'dbw'::uuid])->>'error' = 'owner_sees_all', 'owners always see everything');
+select pg_temp.ok((set_member_contracts('00000000-0000-0000-0000-00000000d3e0', 'aaaaaaaa-0000-0000-0000-000000000001', '{}')->>'ok')::boolean, 'an Admin with no contracts runs the whole company');
 select pg_temp.ok((set_member_contracts('00000000-0000-0000-0000-00000000d3e0', 'cccccccc-0000-0000-0000-000000000003', array[:'dbw'::uuid])->>'ok')::boolean, 'admin makes Kelly a Delta BW supervisor');
 select set_config('request.jwt.claim.sub', 'cccccccc-0000-0000-0000-000000000003', false) \g /dev/null
 select pg_temp.ok((select count(*) from equipment where contract_id = :'ubw') = 0 and (select count(*) from equipment where contract_id = :'dbw') > 0
@@ -1509,6 +1509,43 @@ select pg_temp.ok((:'smc'::jsonb->>'ok')::boolean
 reset role;
 update equipment set contract_id = null where nfc_uid in ('04DE000101', '04DE000201');
 delete from equipment_categories where name = 'Tow bars';
+
+\echo '--- Admins per contract (migration 37)'
+reset role;
+select id as dbw from contracts where name = 'Delta BW' \gset
+select id as ubw from contracts where name = 'United BW' \gset
+select id as bw from contracts where name = 'BW' and parent_id is null \gset
+update equipment set contract_id = :'dbw' where nfc_uid = '04DE000101';
+update equipment set contract_id = :'ubw' where nfc_uid = '04DE000201';
+-- Sierra becomes the Delta BW Admin
+set role authenticated;
+select set_config('request.jwt.claim.sub', '99999999-0000-0000-0000-000000000009', false) \g /dev/null
+select set_member_contracts('00000000-0000-0000-0000-00000000d3e0', '51e77a00-0000-0000-0000-000000000051', array[:'dbw'::uuid]) \g /dev/null
+select pg_temp.ok((set_member_role('00000000-0000-0000-0000-00000000d3e0', '51e77a00-0000-0000-0000-000000000051', 'owner')->>'ok')::boolean, 'we make Sierra an Admin');
+reset role;
+select pg_temp.ok((select array_agg(contract_id) from member_contracts where user_id = '51e77a00-0000-0000-0000-000000000051') = array[:'dbw'::uuid], 'she stays on Delta BW (Admin of just that)');
+set role authenticated;
+select set_config('request.jwt.claim.sub', '51e77a00-0000-0000-0000-000000000051', false) \g /dev/null
+select pg_temp.ok(exists (select 1 from equipment where nfc_uid = '04DE000101') and not exists (select 1 from equipment where nfc_uid = '04DE000201'), 'a Delta BW Admin sees Delta BW only');
+select pg_temp.ok(invite_member('00000000-0000-0000-0000-00000000d3e0', 'co-admin@example.com', 'owner', array[:'ubw'::uuid])->>'error' = 'outside_scope', 'she can''t make Admins for other contracts');
+select invite_member('00000000-0000-0000-0000-00000000d3e0', 'co-admin@example.com', 'owner') as ci \gset
+reset role;
+select pg_temp.ok((:'ci'::jsonb->>'ok')::boolean and (select contracts from org_invites where email = 'co-admin@example.com' and accepted_at is null) = array[:'dbw'::uuid],
+                  'an Admin she invites is an Admin of Delta BW, not the whole company');
+set role authenticated;
+select pg_temp.ok(set_member_contracts('00000000-0000-0000-0000-00000000d3e0', '51e77a00-0000-0000-0000-000000000051', '{}')->>'error' = 'pick_contract', 'she can''t make herself whole-company');
+update org_members set role = 'owner' where user_id = '51e77a00-0000-0000-0000-000000000052';
+select pg_temp.ok(not exists (select 1 from org_members where user_id = '51e77a00-0000-0000-0000-000000000052' and role = 'owner'), 'or change the members table directly');
+update organizations set name = 'Hacked' where id = '00000000-0000-0000-0000-00000000d3e0';
+select pg_temp.ok((select name from organizations where id = '00000000-0000-0000-0000-00000000d3e0') <> 'Hacked', 'company-wide settings stay with whole-company Admins');
+-- Given Delta AW too, she runs both
+select set_config('request.jwt.claim.sub', '99999999-0000-0000-0000-000000000009', false) \g /dev/null
+select set_member_contracts('00000000-0000-0000-0000-00000000d3e0', '51e77a00-0000-0000-0000-000000000051', array[:'dbw'::uuid, :'ubw'::uuid]) \g /dev/null
+select set_config('request.jwt.claim.sub', '51e77a00-0000-0000-0000-000000000051', false) \g /dev/null
+select pg_temp.ok(exists (select 1 from equipment where nfc_uid = '04DE000101') and exists (select 1 from equipment where nfc_uid = '04DE000201'), 'given two contracts, she sees both');
+reset role;
+delete from org_invites where email = 'co-admin@example.com';
+update equipment set contract_id = null where nfc_uid in ('04DE000101', '04DE000201');
 
 \echo '--- Admin optional (migration 36)'
 set role authenticated;

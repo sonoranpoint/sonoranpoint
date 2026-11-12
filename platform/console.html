@@ -784,7 +784,7 @@ const log = (c, action, details = "") => DB.log.unshift({ id: uid("lg"), at: Dat
 /* Contracts and who leads them (migration 33). Only Sonoran Point changes the tree; customers send a request. */
 const CT_ERR = { name_required: "Enter a name.", name_too_long: "Keep it under 60 characters.", duplicate_name: "There's already one with that name there.",
   parent_inside_itself: "It can't go inside itself.", bad_kind: "Pick location or contract.", unknown_parent: "Pick where it goes.", unknown_contract: "Pick from their list.",
-  pick_contract: "Pick at least one for them. Someone who isn't an admin only sees what they're given.", owner_sees_all: "Admins see everything, so they don't get a list.",
+  pick_contract: "Pick at least one for them. Only an Admin can be left with none (then they run the whole company).", owner_sees_all: "Admins see everything, so they don't get a list.",
   outside_scope: "That's outside their branch.", already_member: "That person is already on their team.", bad_email: "Enter a full email address.",
   last_owner: "They need at least one admin. Make someone else an admin first.", not_member: "They're no longer on the team.", not_a_member: "They're no longer on the team.", not_found: "That's gone. Refresh the page." };
 const MEMBER_ROLE = { owner: "Admin", admin: "Manager", supervisor: "Supervisor", viewer: "View Only" };
@@ -806,10 +806,9 @@ function ctInUse(c, id, counts) {
     .filter(([k]) => +n[k] > 0).map(([k, w]) => `${n[k]} ${+n[k] === 1 ? w.replace(/s$/, "") : w}`);
   return parts.length ? `Move what's in it first: ${parts.join(", ")}.` : null;
 }
-function memberCheck(c, role, contracts) {   // same checks as contracts_problem
-  if (role === "owner") return contracts.length ? "owner_sees_all" : null;
+function memberCheck(c, role, contracts) {   // same checks as contracts_problem (an Admin may have contracts: migration 37)
   if (!(c.contracts || []).length) return contracts.length ? "unknown_contract" : null;
-  if (!contracts.length) return "pick_contract";
+  if (!contracts.length) return role === "owner" ? null : "pick_contract";
   if (contracts.some((id) => !c.contracts.some((k) => k.id === id))) return "unknown_contract";
   return null;
 }
@@ -922,10 +921,10 @@ const api = {
   setMember(orgId, memberId, role, contracts = []) {
     const c = custOf(orgId), m = c.members.find((x) => x.id === memberId); if (!m) return { ok: false, error: CT_ERR.not_member };
     if (m.role === "owner" && role !== "owner" && c.members.filter((x) => x.role === "owner").length === 1) return { ok: false, error: CT_ERR.last_owner };
-    const err = memberCheck(c, role, role === "owner" ? [] : contracts); if (err) return { ok: false, error: CT_ERR[err] };
+    const err = memberCheck(c, role, contracts); if (err) return { ok: false, error: CT_ERR[err] };
     if (m.role !== role) log(c, "changed team role", changeText({ email: m.email, role: MEMBER_ROLE[role] }));
-    const next = role === "owner" ? [] : contracts;
-    if (role !== "owner" && JSON.stringify([...(m.contracts || [])].sort()) !== JSON.stringify([...next].sort()))
+    const next = c.contracts.length ? contracts : [];
+    if (c.contracts.length && JSON.stringify([...(m.contracts || [])].sort()) !== JSON.stringify([...next].sort()))
       log(c, "changed contracts", changeText({ email: m.email, text: next.map((id) => c.contracts.find((k) => k.id === id)?.name).join(", ") }));
     Object.assign(m, { role, contracts: next }); return { ok: true };
   },
@@ -1329,10 +1328,10 @@ const liveApi = {
   },
   async setMember(orgId, memberId, role, contracts = []) {
     const c = custOf(orgId), m = c.members.find((x) => x.id === memberId); if (!m) return { ok: false, error: CT_ERR.not_member };
-    const err = memberCheck(c, role, role === "owner" ? [] : contracts); if (err) return { ok: false, error: CT_ERR[err] };
+    const err = memberCheck(c, role, contracts); if (err) return { ok: false, error: CT_ERR[err] };
     try {
       if (m.role !== role) { const r = await rpc("set_member_role", { p_org: orgId, p_user: m.user_id, p_role: role }); if (!r.ok) return { ok: false, error: CT_ERR[r.error] || r.error }; }
-      if (role !== "owner" && c.contracts.length) { const r = await rpc("set_member_contracts", { p_org: orgId, p_user: m.user_id, p_contracts: contracts }); if (!r.ok) return { ok: false, error: CT_ERR[r.error] || r.error }; }
+      if (c.contracts.length) { const r = await rpc("set_member_contracts", { p_org: orgId, p_user: m.user_id, p_contracts: contracts }); if (!r.ok) return { ok: false, error: CT_ERR[r.error] || r.error }; }
     } catch (e) { return { ok: false, error: nice(e) }; }
     await live.refresh(orgId).catch(() => {}); return { ok: true };
   },
@@ -1904,12 +1903,13 @@ function contractsPanel(c, edit) {
   }
   const counts = (k) => { const st = k.stations ?? c.stations.filter((s) => s.contract_id === k.id && !s.revoked).length;
     return [[st, "station"], [k.employees, "person", "people"], [k.equipment, "item"]].filter(([n]) => n).map(([n, one, many]) => `${n} ${n === 1 ? one : many || one + "s"}`).join(", "); };
-  const leadLine = (k) => { const ls = leadsOf(c, k.id), mg = ls.filter((m) => m.role === "admin"), others = ls.length - mg.length, inv = c.invites.filter((i) => (i.contracts || []).includes(k.id));
-    return [mg.length ? "Lead: " + mg.map((m) => m.name || m.email).join(", ") : "No lead yet", others ? `${others} other ${others === 1 ? "person" : "people"}` : "",
+  const leadLine = (k) => { const ls = leadsOf(c, k.id), ad = ls.filter((m) => m.role === "owner"), mg = ls.filter((m) => m.role === "admin"), others = ls.length - mg.length - ad.length,
+      inv = c.invites.filter((i) => (i.contracts || []).includes(k.id));
+    return [ad.length ? "Admin: " + ad.map((m) => m.name || m.email).join(", ") : "", mg.length ? "Lead: " + mg.map((m) => m.name || m.email).join(", ") : ad.length ? "" : "No lead yet", others ? `${others} other ${others === 1 ? "person" : "people"}` : "",
       inv.length ? "invited: " + inv.map((i) => i.email).join(", ") : ""].filter(Boolean).join(" · "); };
   const add = S.ct?.mode === "add" ? S.ct.parent : undefined;
   const row = (k) => S.ct?.mode === "edit" && S.ct.id === k.id ? `<div class="ctedit" style="margin-left:${k.depth * 24}px">${ctForm(c, k)}</div>`
-    : `<div class="row ctrow" style="padding-left:${18 + k.depth * 24}px"><span class="dot ${leadsOf(c, k.id).length ? "ok" : ""}"></span>
+    : `<div class="row ctrow" style="padding-left:${18 + k.depth * 24}px"><span class="dot ${leadsOf(c, k.id).some((m) => m.role === "owner" || m.role === "admin") ? "ok" : ""}"></span>
         <span><b>${esc(k.name)}</b> <span class="chip ${isLoc(k) ? "info" : "quiet"} kindchip">${isLoc(k) ? "Location" : esc(w.one)}</span><span class="sub">${esc(leadLine(k))}</span>${counts(k) || shareText(k) ? `<span class="sub">${esc([counts(k), shareText(k)].filter(Boolean).join(" · "))}</span>` : ""}</span>
         <span class="acts"><button class="btn sm" data-act="ctEdit" data-id="${k.id}" aria-label="Change ${esc(k.name)}">Change</button><button class="btn sm" data-act="ctAdd" data-id="${k.id}">Add under it</button></span></div>
       ${add === k.id ? `<div class="ctedit" style="margin-left:${(k.depth + 1) * 24}px">${ctForm(c, null, k.id)}</div>` : ""}`;
@@ -1922,7 +1922,8 @@ function contractsPanel(c, edit) {
     : add === "" ? "" : `<div class="empty" style="text-align:left">Nothing here yet: everyone on their team sees the whole company. Add locations (like PHX, then T3 under it) and the ${esc(w.many.toLowerCase())} at each (like Delta BW), then give each its own lead.</div>`}
   </section>`;
 }
-const leadsOf = (c, id) => c.members.filter((m) => m.role !== "owner" && (m.contracts || []).includes(id)).sort((a, b) => (b.role === "admin") - (a.role === "admin"));
+const leadsOf = (c, id) => c.members.filter((m) => (m.contracts || []).includes(id)).sort((a, b) => RANKS[b.role] - RANKS[a.role]);
+const RANKS = { viewer: 0, supervisor: 1, admin: 2, owner: 3 };
 function ctForm(c, k, parent) {   // k = contract being changed, or null to add one under parent ("" = top level)
   const w = ctWord(c), tree = contractTreeOf(c), at = k ? k.parent_id || "" : parent;
   const kind = k ? (isLoc(k) ? "location" : "contract") : at ? "contract" : "location";   // new: top level is usually a site
@@ -1943,15 +1944,16 @@ function ctForm(c, k, parent) {   // k = contract being changed, or null to add 
 function ctChecks(c, sel = []) {
   return `<fieldset class="ctchecks"><legend>${esc(ctWord(c).many)} they cover</legend>${contractTreeOf(c).map((k) => `<label style="padding-left:${k.depth * 20}px"><input type="checkbox" name="contracts" value="${k.id}" ${sel.includes(k.id) ? "checked" : ""}> ${esc(k.name)}</label>`).join("")}</fieldset>`;
 }
-const memberScope = (c, m) => m.role === "owner" || !(c.contracts || []).length ? "sees everything"
-  : (m.contracts || []).length ? m.contracts.map((id) => c.contracts.find((k) => k.id === id)?.name).filter(Boolean).join(", ") : `no ${ctWord(c).many.toLowerCase()} yet, so they see nothing`;
+const memberScope = (c, m) => !(c.contracts || []).length ? "sees everything"
+  : (m.contracts || []).length ? m.contracts.map((id) => c.contracts.find((k) => k.id === id)?.name).filter(Boolean).join(", ")
+  : m.role === "owner" ? "whole company" : `no ${ctWord(c).many.toLowerCase()} yet, so they see nothing`;
 function teamPanel(c) {
   const owners = c.members.filter((m) => m.role === "owner"), tree = contractTreeOf(c);
   const roleSel = (sel) => `<select class="field" name="role" aria-label="Role">${["owner", "admin", "supervisor", "viewer"].map((r) => `<option value="${r}" ${sel === r ? "selected" : ""}>${MEMBER_ROLE[r]}</option>`).join("")}</select>`;
   const defRole = S.invRole || (owners.length && tree.length ? "admin" : "owner");
   return `<section class="panel" id="team"><div class="panel-h"><h2>Their team</h2><span class="muted" style="font-size:13px">Leads add their own crew</span></div>
     <div class="list">${c.members.map((m) => S.mEdit === m.id ? `<form class="panel-b fgrid member-edit" data-form="member" data-id="${esc(m.id)}"><b class="full">${esc(m.name || m.email)}</b>
-        <label>Role${roleSel(m.role)}</label>${tree.length ? `<div class="full mcts" ${m.role === "owner" ? "hidden" : ""}>${ctChecks(c, m.contracts || [])}</div>` : ""}
+        <label>Role${roleSel(m.role)}</label>${tree.length ? `<div class="full mcts">${ctChecks(c, m.contracts || [])}</div>` : ""}
         <div class="err full" role="alert">${S.formErr?.form === "member" ? esc(S.formErr.text) : ""}</div>
         <div class="actions full"><button class="btn primary">Save</button><button class="btn" type="button" data-act="mCancel">Cancel</button>
           ${S.confirm === "mrm:" + m.id ? `<span class="confirm">Take ${esc(m.name || m.email)} off their team? <button class="btn sm danger" type="button" data-act="mRemove" data-id="${esc(m.id)}">Remove</button><button class="btn sm" type="button" data-act="noConfirm">No</button></span>`
@@ -1959,7 +1961,7 @@ function teamPanel(c) {
       : `<div class="row"><span class="dot ${m.role === "owner" ? "ok" : ""}"></span><span>${m.name ? `<b>${esc(m.name)}</b><span class="sub">${esc(m.email)}</span>` : esc(m.email)}
         <span class="sub ${memberScope(c, m).startsWith("no ") ? "badtext" : ""}">${MEMBER_ROLE[m.role]} · ${esc(memberScope(c, m))}${m.last_sign_in ? ` · signed in ${esc(ago(m.last_sign_in))}` : ""}</span></span>
         <button class="btn sm" data-act="mEdit" data-id="${esc(m.id)}" aria-label="Change ${esc(m.name || m.email)}">Change</button></div>`).join("")}
-      ${c.invites.map((i) => `<div class="row"><span class="dot info"></span><span>${esc(i.email)}<span class="sub">${i.role === "owner" ? "Admin invite sent" : `${MEMBER_ROLE[i.role]} invite sent${(i.contracts || []).length ? " for " + esc(i.contracts.map((id) => c.contracts.find((k) => k.id === id)?.name).filter(Boolean).join(", ")) : ""}`} · expires ${esc(fmtDate(i.expires))}</span></span>
+      ${c.invites.map((i) => `<div class="row"><span class="dot info"></span><span>${esc(i.email)}<span class="sub">${i.role === "owner" && !(i.contracts || []).length ? "Admin invite sent" : `${MEMBER_ROLE[i.role]} invite sent${(i.contracts || []).length ? " for " + esc(i.contracts.map((id) => c.contracts.find((k) => k.id === id)?.name).filter(Boolean).join(", ")) : ""}`} · expires ${esc(fmtDate(i.expires))}</span></span>
         <span class="acts"><button class="btn sm" data-act="resend" data-email="${esc(i.email)}" data-id="${esc(i.id)}">Resend</button><button class="btn sm" data-act="invCancel" data-id="${esc(i.id)}">Cancel</button></span></div>`).join("")}
       ${!c.members.length && !c.invites.length ? `<div class="empty">Nobody yet. Invite their admin, or a lead for each ${esc(ctWord(c).one.toLowerCase())} if they're run separately.</div>` : ""}</div>
     ${S.lastInvite ? `<div class="panel-b" style="border-top:1px solid var(--line);display:flex;flex-direction:column;gap:8px"><b>Invite for ${esc(S.lastInvite.email)}</b>
@@ -1968,8 +1970,8 @@ function teamPanel(c) {
     <form class="panel-b fgrid" data-form="invite" style="border-top:1px solid var(--line)">
       <label>Email<input class="field" name="email" type="email" placeholder="${defRole === "owner" ? "admin@theircompany.com" : "lead@theircompany.com"}" aria-label="Email" required></label>
       <label>Role${roleSel(defRole)}</label>
-      ${tree.length ? `<div class="full invcts" ${defRole === "owner" ? "hidden" : ""}>${ctChecks(c, S.invCts || [])}</div>` : ""}
-      <p class="full muted" style="margin:0;font-size:13px">Admins see the whole company. A Manager is the lead for the ${esc(ctWord(c).many.toLowerCase())} you tick and sees only those. An admin is optional: a company run and billed ${esc(ctWord(c).one.toLowerCase())} by ${esc(ctWord(c).one.toLowerCase())} can have just leads.</p>
+      ${tree.length ? `<div class="full invcts">${ctChecks(c, S.invCts || [])}</div>` : ""}
+      <p class="full muted" style="margin:0;font-size:13px">${tree.length ? `Tick what they run: they see only those and everything under them. An Admin with nothing ticked runs the whole company. ` : ""}Admins can add other Admins; Managers can't. An admin is optional: a company run and billed ${esc(ctWord(c).one.toLowerCase())} by ${esc(ctWord(c).one.toLowerCase())} can have just leads.</p>
       <div class="err full" id="invErr" role="alert"></div>
       <div class="actions full"><button class="btn">${defRole === "owner" ? (owners.length ? "Invite another admin" : "Invite admin") : "Send invite"}</button></div></form>
   </section>`;
@@ -2585,9 +2587,8 @@ document.addEventListener("change", async (e) => {
   if (t.id === "logoFile" && t.files?.[0]) { const cc = custOf(S.id), file = t.files[0]; S.logoBusy = true; render();
     try { const url = await uploadLogo(cc.id, file); const r = await api.updateCustomer(cc.id, { logo_url: url }, "updated look"); toast(r.ok ? "Logo saved. Their stations show it within a minute." : r.error); }
     catch (err) { toast(err.message); } S.logoBusy = false; return render(); }
-  if (t.form?.dataset.form === "invite" && t.name === "role") { S.invRole = t.value; const box = t.form.querySelector(".invcts"); if (box) box.hidden = t.value === "owner";
+  if (t.form?.dataset.form === "invite" && t.name === "role") { S.invRole = t.value;
     t.form.querySelector(".actions .btn").textContent = t.value === "owner" ? "Invite admin" : "Send invite"; }
-  if (t.form?.dataset.form === "member" && t.name === "role") { const box = t.form.querySelector(".mcts"); if (box) box.hidden = t.value === "owner"; }
   if (t.form?.dataset.form === "account" && t.name === "status") { const tr = $("#trialEnds"); if (tr) tr.hidden = t.value !== "trial"; const tp = $("#trialPause"); if (tp) tp.hidden = t.value !== "trial"; }
   if (t.dataset.mod) { const c = custOf(S.id); const mods = new Set(c.modules); t.checked ? mods.add(t.dataset.mod) : mods.delete(t.dataset.mod);
     const mr = await api.updateCustomer(c.id, { modules: [...mods], _note: `${MODULES.find((m) => m.id === t.dataset.mod).name} ${t.checked ? "on" : "off"}` }); if (mr && !mr.ok) { toast(mr.error); return render(); } toast(`${MODULES.find((m) => m.id === t.dataset.mod).name} ${t.checked ? "on" : "off"}`); return render(); }
@@ -2663,7 +2664,7 @@ document.addEventListener("click", async (e) => {
     if (!r.ok) { toast(r.error || "Couldn't replace it"); return render(); } S.lastCode = { name: stName, code: r.code, unit: r.unit, replaced: true }; toast("Replacement ready"); return render(); }
   if (a === "doRemove") { const stName = c.stations.find((s) => s.id === t.dataset.id)?.name || "Station"; const r = await api.removeStation(c.id, t.dataset.id); S.confirm = null; toast(r.ok ? stName + " removed" : r.error); return render(); }
   if (a === "resend") { const inv = c.invites.find((i) => i.id === t.dataset.id);
-    const r = inv && inv.role !== "owner" ? await api.inviteMember(c.id, inv.email, inv.role, inv.contracts || []) : await api.inviteOwner(c.id, t.dataset.email);
+    const r = inv && (inv.role !== "owner" || (inv.contracts || []).length) ? await api.inviteMember(c.id, inv.email, inv.role, inv.contracts || []) : await api.inviteOwner(c.id, t.dataset.email);
     if (!r.ok) { toast(r.error); return render(); } S.lastInvite = r; toast(r.mailErr ? "Invite made, but the email didn't send. Copy the link below." : "Invite sent again"); return render(); }
   if (a === "invCancel") { const r = await api.cancelInvite(c.id, t.dataset.id); toast(r.ok ? "Invite cancelled" : r.error); return render(); }
   if (a === "ctAdd") { S.ct = { mode: "add", parent: t.dataset.id }; S.confirm = null; S.formErr = null; render(); $('[data-form="contract"] [name=name]')?.focus(); return; }
@@ -2716,7 +2717,7 @@ async function onSubmit(f, kind, fd, d) {
   if (kind === "addStation") { const r = await api.addStation(c.id, d.name); if (!r.ok) return toast(r.error); S.lastCode = { name: r.station.name, code: r.station.code }; toast(`Added ${r.station.name}`); return render(); }
   if (kind === "invite") {
     const role = d.role || "owner", cts = fd.getAll("contracts");
-    const r = role === "owner" ? await api.inviteOwner(c.id, d.email) : await api.inviteMember(c.id, d.email, role, cts);
+    const r = role === "owner" && !cts.length ? await api.inviteOwner(c.id, d.email) : await api.inviteMember(c.id, d.email, role, cts);
     if (!r.ok) { $("#invErr").textContent = r.error; return; } S.lastInvite = r; S.invRole = null; S.invCts = null;
     toast(r.mailErr ? "Invite made, but the email didn't send. Copy the link below." : `Invite sent to ${r.email}`); return render(); }
   if (kind === "contract") {
@@ -2725,7 +2726,7 @@ async function onSubmit(f, kind, fd, d) {
     S.ct = null; S.formErr = null; toast(id ? "Saved" : `Added ${d.name.trim()}`); return render(); }
   if (kind === "ctshare") { const r = await api.contractSettings(c.id, !!d.share, !!d.move); toast(r.ok ? "Sharing saved" : r.error); return render(); }
   if (kind === "member") {
-    const r = await api.setMember(c.id, f.dataset.id, d.role, d.role === "owner" ? [] : fd.getAll("contracts"));
+    const r = await api.setMember(c.id, f.dataset.id, d.role, fd.getAll("contracts"));
     if (!r.ok) { S.formErr = { form: "member", text: r.error }; return render(); }
     S.mEdit = null; S.formErr = null; toast("Saved"); return render(); }
   if (kind === "account") {

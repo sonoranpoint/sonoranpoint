@@ -855,7 +855,8 @@ const ROLE_NAME = { viewer: "View Only", supervisor: "Supervisor", admin: "Manag
 const can = (need) => RANK[DB.me.role] >= RANK[need];
 // Contracts the signed-in person covers (null = all: Admins, and everyone when there are no contracts). The database
 // applies the same limit (migration 33): someone else sees only their contracts and what's under them.
-const myScopeIds = () => DB.me.role === "owner" || !(DB.contracts || []).length ? null : DB.me.contracts || [];
+// An Admin with no contracts runs the whole company; an Admin given contracts runs only those (migration 37).
+const myScopeIds = () => !(DB.contracts || []).length || (DB.me.role === "owner" && !(DB.me.contracts || []).length) ? null : DB.me.contracts || [];
 // Company-wide settings (name, logo, categories, checkout rules) are for people who see the whole company.
 const canCompany = () => can("admin") && !myScopeIds();
 const canManageRole = (role) => DB.me.role === "owner" || (DB.me.role === "admin" && role !== "owner");
@@ -1123,9 +1124,9 @@ const api = {
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return { ok: false, error: "Enter a full email address." };
     if (!canManageRole(role)) return { ok: false, error: "Only an admin can add admins." };
     if (DB.members.some((m) => m.email === email)) return { ok: false, error: "That person is already on the team." };
-    if (role !== "owner" && DB.contracts?.length && !contracts.length) return { ok: false, error: `Pick at least one ${CTERM().one.toLowerCase()} for them.` };
+    if (DB.contracts?.length && !contracts.length && (role !== "owner" || myScopeIds())) return { ok: false, error: `Pick at least one ${CTERM().one.toLowerCase()} for them.` };
     DB.invites = DB.invites.filter((i) => i.email !== email);
-    DB.invites.unshift({ id: "i" + Date.now(), email, role, contracts: role === "owner" ? [] : contracts, created: Date.now(), expires: Date.now() + 14 * 86400000 });
+    DB.invites.unshift({ id: "i" + Date.now(), email, role, contracts, created: Date.now(), expires: Date.now() + 14 * 86400000 });
     return { ok: true };
   },
   /* Visitor passes (migration 34): rpc list_visitor_passes / find_visitors / create_visitor_pass / end_visitor_pass */
@@ -1170,8 +1171,7 @@ const api = {
   /* rpc set_member_contracts (admins and managers, inside their own branch): which contracts someone covers */
   setMemberContracts(id, ids) {
     const m = DB.members.find((x) => x.id === id);
-    if (m.role === "owner" && ids.length) return { ok: false, error: "Admins always see everything." };
-    if (m.role !== "owner" && !ids.length) return { ok: false, error: `Pick at least one. Someone who isn't an admin only sees the ${CTERM().many.toLowerCase()} they're given.` };
+    if (!ids.length && (m.role !== "owner" || myScopeIds())) return { ok: false, error: `Pick at least one. Only an Admin can be left with none, and then they run the whole company.` };
     m.contracts = ids; if (id === DB.me.id) DB.me.contracts = ids; return { ok: true };
   },
   /* rpc lend_equipment / end_equipment_loan (supervisors) */
@@ -2174,7 +2174,7 @@ function vContracts() {
   const hasLoc = tree.some((c) => c.kind === "location");
   return `<section class="panel" id="contracts"><div class="panel-h"><h2>${hasLoc ? `Locations and ${esc(T.many.toLowerCase())}` : esc(T.many)}</h2></div>
     <div class="panel-b muted" style="font-size:13.5px;padding-bottom:0">${tree.length
-      ? `Your stations, people and equipment are split into ${hasLoc ? `locations and ${esc(T.many.toLowerCase())}` : esc(T.many.toLowerCase())}. A station only serves its own ${esc(T.one.toLowerCase())} unless the group they're in shares. Each person on this dashboard sees only the ${esc(T.many.toLowerCase())} they're given; admins see everything.`
+      ? `Your stations, people and equipment are split into ${hasLoc ? `locations and ${esc(T.many.toLowerCase())}` : esc(T.many.toLowerCase())}. A station only serves its own ${esc(T.one.toLowerCase())} unless the group they're in shares. Each person on this dashboard sees only the ${esc(T.many.toLowerCase())} they're given; Admins of the whole company see everything.`
       : `Split your stations, people and equipment by site, airline or operation, like ${window.SP_DEMO ? "Shipping and Maintenance" : "PHX Delta BW and PDX Delta BW"}, each with its own lead who only sees their own. Ask us below and we'll set it up.`}</div>
     ${tree.length ? `<div class="panel-b ctree">
       ${!myScopeIds() && (tree.length > 1 || tree.some((c) => c.hasKids)) ? `<div class="crow top"><span><b>Whole company</b><span class="sub">${o.settings?.share_contracts ? `Top-level ${esc(T.many.toLowerCase())} share badges and equipment` : `Top-level ${esc(T.many.toLowerCase())} don't share`}${o.settings?.move_on_return ? " · Items move to where they're returned" : ""}</span></span><span></span><span></span></div>` : ""}
@@ -2217,13 +2217,13 @@ function vTeam() {
         <select class="field" name="role" aria-label="Role" style="max-width:180px">${["viewer", "supervisor", "admin", "owner"].filter(canManageRole).map((r) => `<option value="${r}">${ROLE_NAME[r]}</option>`).join("")}</select>
         <button class="btn primary">Send invite</button><span class="err" id="invErr" role="alert"></span>
         ${DB.contracts?.length ? `<fieldset class="scopes inv-scopes"><legend>${esc(CTERM().many)} they'll see</legend>${contractTree().map((c) => `<label style="padding-left:${c.depth * 22}px"><input type="checkbox" name="c" value="${c.id}" ${(myScopeIds() || []).length === 1 && myScopeIds()[0] === c.id ? "checked" : ""}> ${esc(c.name)}</label>`).join("")}
-          <span class="sub muted">Not needed for an Admin: admins see everything.</span></fieldset>` : ""}
+          <span class="sub muted">${myScopeIds() ? "They'll only see what you tick." : "Leave all unticked for an Admin over the whole company."}</span></fieldset>` : ""}
       </form>
       <div class="panel-b muted" style="border-top:1px solid var(--line);font-size:13.5px">They get an email with a link that works for 14 days, only when signed in with that address.</div></section>
     <section class="panel"><div class="panel-h"><h2>People (${members.length})</h2></div><div class="tablewrap"><table>
       <thead><tr><th>Name</th><th>Role</th>${DB.contracts?.length ? `<th>Sees</th>` : ""}<th>Last signed in</th><th></th></tr></thead>
       <tbody>${members.map((m) => `<tr><td><b>${esc(m.name)}</b>${m.id === DB.me.id ? ` <span class="chip quiet">You</span>` : ""}<span class="sub">${esc(m.email)}</span></td>
-        <td>${roleSel(m)}</td>${DB.contracts?.length ? `<td>${m.role === "owner" ? `<span class="muted">Everything</span>`
+        <td>${roleSel(m)}</td>${DB.contracts?.length ? `<td>${m.role === "owner" && !(m.contracts || []).length ? (canManageRole(m.role) && m.id !== DB.me.id && !myScopeIds() ? `<button class="link" data-open="memberScope:${m.id}">Everything</button>` : `<span class="muted">Everything</span>`)
           : (() => { const names = (m.contracts || []).map(contractName).filter(Boolean).join(", ");
               return canManageRole(m.role) && m.id !== DB.me.id ? `<button class="link ${names ? "" : "late"}" data-open="memberScope:${m.id}">${esc(names || "Nothing yet: pick some")}</button>` : `<span class="${names ? "" : "late"}">${esc(names || "Nothing yet")}</span>`; })()}</td>` : ""}<td class="num">${esc(ago(m.last))}</td>
         <td>${S.confirm === "rm:" + m.id ? `<span class="confirm" style="padding:4px 8px">Remove ${esc(m.name.split(" ")[0])}? <button class="btn sm danger" data-act="rmMember" data-id="${m.id}">Remove</button><button class="btn sm" data-act="noConfirm">Cancel</button></span>`
@@ -2236,8 +2236,8 @@ function vTeam() {
       <tbody>${[["See equipment, activity, alerts, reports", 0], ["Add and edit employees, deactivate badges", 1], ["Mark items lost or in maintenance", 1], ["Mark alerts seen, sign off shift reports", 1],
         ["Add and edit equipment and categories, time limits", 2], ["Stations, company settings, checkout rules", 2], ["Station fob roles and PINs", 2], ["Invite and manage the team (except admins)", 2], ["Manage admins", 3]]
         .map(([t, n]) => `<tr><td>${t}</td>${[0, 1, 2, 3].map((i) => `<td aria-label="${i >= n ? "Yes" : "No"}">${i >= n ? "✓" : "<span class='muted'>–</span>"}</td>`).join("")}</tr>`).join("")}</tbody></table></div>
-      ${DB.contracts?.length ? `<div class="panel-b muted" style="border-top:1px solid var(--line);font-size:13.5px">Your company is split into ${esc(CTERM().many.toLowerCase())}: everyone but Admins sees only the ${esc(CTERM().many.toLowerCase())} they're given.
-        Managers look after their own ${esc(CTERM().many.toLowerCase())} and their people; company-wide settings stay with Admins.</div>` : ""}</section>`;
+      ${DB.contracts?.length ? `<div class="panel-b muted" style="border-top:1px solid var(--line);font-size:13.5px">Your company is split into ${esc(CTERM().many.toLowerCase())}: everyone sees only the ${esc(CTERM().many.toLowerCase())} they're given, except Admins with none, who run the whole company.
+        An Admin of a ${esc(CTERM().one.toLowerCase())} runs it fully, including its other Admins; company-wide settings stay with whole-company Admins.</div>` : ""}</section>`;
 }
 const VIEWS = { overview: vOverview, equipment: vEquipment, employees: vEmployees, activity: vActivity, alerts: vAlerts, shifts: vShifts, stations: vStations, settings: vSettings, team: vTeam, "import-equipment": () => vImport("equipment"), "import-employees": () => vImport("employees"), labels: vLabels };
 
@@ -2426,7 +2426,7 @@ function dMemberScope(id) {
   const T = CTERM(), on = new Set(m.contracts || []);
   return drawerHead(`What ${esc(firstName(m.name))} sees`, esc(m.email)) + `<div class="drawer-b">
     <p class="muted" style="margin:0 0 12px">Pick the ${esc(T.many.toLowerCase())} ${esc(firstName(m.name))} covers. They'll see those and everything under them, nothing else,
-      on every page and in their alert emails. To let someone see the whole company, make them an Admin.</p>
+      on every page and in their alert emails. ${m.role === "owner" ? `Leave all unticked to make ${esc(firstName(m.name))} Admin of the whole company.` : "To let someone see the whole company, make them an Admin with nothing ticked."}</p>
     <form data-form="memberScope:${m.id}"><div class="scopes">${contractTree().map((c) => `<label style="padding-left:${c.depth * 22}px"><input type="checkbox" name="c" value="${c.id}" ${on.has(c.id) ? "checked" : ""}> ${esc(c.name)}</label>`).join("")}</div>
       <div class="err" role="alert">${esc(S.formErr || "")}</div>
       <div class="actions" style="margin-top:14px"><button class="btn primary">Save</button><button class="btn" type="button" data-act="close">Cancel</button></div></form></div>`;
@@ -2704,7 +2704,7 @@ document.addEventListener("submit", async (e) => {
     toast("Category added"); return render();
   }
   if (kind === "invite") {
-    const r = api.invite(data.email, data.role, (data.name || "").trim(), data.role === "owner" ? [] : new FormData(f).getAll("c"));
+    const r = api.invite(data.email, data.role, (data.name || "").trim(), new FormData(f).getAll("c"));
     if (!r.ok) { $("#invErr").textContent = r.error; return; }
     toast(`Invite sent to ${data.email.trim().toLowerCase()}`); return render();
   }

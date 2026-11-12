@@ -182,6 +182,15 @@ const api_set = async (id) => { E(`api.updateCustomer('${id}', { logo_dark_url: 
     await submit('[data-form="member"]');
     check(/Pick at least one/.test(doc.querySelector("#team").textContent), "someone who isn't an admin can't be left with none");
     await click('[data-act="mCancel"]');
+    // An Admin of just some contracts (migration 37)
+    await click('[data-act="mEdit"][data-id="dana@demoair.example"]');
+    { const f = doc.querySelector('[data-form="member"]'); f.elements.role.value = "owner"; f.querySelectorAll("input[name=contracts]").forEach((i) => { i.checked = i.value === "bw"; }); }
+    await submit('[data-form="member"]');
+    check(E(`custOf('${demoId}').members.find(m => m.email === 'dana@demoair.example').role`) === "owner" && /Admin: Dana Brooks/.test(ct()) && /Admin · BW/.test(doc.querySelector("#team").textContent),
+          "make Dana the Admin of BW only");
+    await click('[data-act="mEdit"][data-id="dana@demoair.example"]');
+    doc.querySelectorAll('[data-form="member"] input[name=contracts]').forEach((i) => { i.checked = false; }); await submit('[data-form="member"]');
+    check(/Admin · whole company/.test(doc.querySelector("#team").textContent), "an Admin with nothing ticked runs the whole company");
     await click('[data-act="mEdit"][data-id="kelly@demoair.example"]'); await click('[data-act="mAskRemove"][data-id="kelly@demoair.example"]'); await click('[data-act="mRemove"][data-id="kelly@demoair.example"]');
     check(!E(`custOf('${demoId}').members.some(m => m.email === 'kelly@demoair.example')`), "take someone off their team");
     const sh = doc.querySelector('[data-form="ctshare"]'); sh.elements.share.checked = true; await submit('[data-form="ctshare"]');

@@ -24,7 +24,7 @@ See README.md for the full product description.
 - Push to `main` → GitHub Actions runs `tests/run.sh db` + `ui`, then deploys app + console to Cloudflare Pages
   (projects `sonoranpoint-app`, `sonoranpoint-console`, `sonoranpoint-site`).
 - Database changes are NOT automatic. Add a new migration file (never edit one already run on the live
-  project), then tell Dez to run it in the Supabase SQL editor. Migrations 1–31 have been run, 32–36 not yet (checked 2026-11-12;
+  project), then tell Dez to run it in the Supabase SQL editor. Migrations 1–31 have been run, 32–37 not yet (checked 2026-11-12;
   ask if unsure). Alert emails are live (Resend key in Vault, first send
   confirmed 2026-10-20).
 - Station changes reach the Pis by themselves: every deploy publishes `app.sonoranpoint.com/station-release/latest.json` + a zip
@@ -43,7 +43,7 @@ See README.md for the full product description.
   is inside the other or the group they meet in has `share_children` (top level: `settings.share_contracts`).
   `station_tap` enforces it; the sync cache carries `reach` so stations enforce it offline too.
 - Loans (`equipment_loans`, migration 16): an item lent to another contract is usable there until tapped back at an owner station.
-- Who sees what (migration 33, replacing 17's rules): in a company with contracts, everyone but its Admins (role owner) sees only
+- Who sees what (migration 33, replacing 17's rules): in a company with contracts, everyone but its whole-company Admins (role owner, no contracts) sees only
   their `member_contracts` and everything under them — not the groups above, not things with no contract; no contracts = nothing.
   Companies without contracts: everyone sees all. Enforced in RLS (`private.scope_of`/`sees`/`can_see`, `can_see_txn`, `can_see_tap`) and
   in every dashboard function; alert emails follow it. The dashboard's "Show" switcher (`S.view`, `wrapViews`) filters further on screen only.
@@ -59,6 +59,10 @@ See README.md for the full product description.
 - Admin optional (migration 36): some companies are run and billed contract by contract with only leads. `platform_create_customer`
   takes no `owner_email` (console New customer: optional); operators may change/remove a company's last Admin (customers can't).
   Console says "Nobody has signed in yet" (`nobodyIn`, from `member_count`) instead of chasing an admin.
+- Admins per contract (migration 37): an Admin (role owner) given contracts runs only those (scope like anyone else's) with full
+  admin powers there, including other Admins in their branch; given several, all of them. An Admin with no contracts = whole company.
+  Only a whole-company person or an operator can make a whole-company Admin (`contracts_problem`). Promoting keeps contracts.
+  `members_write` RLS now needs a whole-company Admin. Dashboard `myScopeIds()` treats an Admin with contracts as limited.
 - Visitors (migration 34): `public.visitor_passes` (functions only, no RLS policies) let someone into another contract's stations.
   Station: their badge is refused -> `S.visit` screen ("Manager: tap your fob") -> a manager from that station (+PIN) ->
   `station_visitor_pass` (until midnight, `private.end_of_today`); sync cache `visitors` {employee id: ends_at} so it works offline
