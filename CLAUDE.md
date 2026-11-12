@@ -64,6 +64,13 @@ See README.md for the full product description.
   (same checks as the Add forms plus duplicates within the file; bad rows left out with the reason) -> `api.importEquipment/importEmployees`
   (REMOTE: bulk inserts in chunks of 200; unknown categories are created with no time limit; employees' shifts via shift_assignments).
 
+## Labels (no migration)
+- Dashboard `#labels` (`vLabels`, `S.lab`; from "Print labels" on Equipment/Employees, supervisors+): Code 128 set B (`code128Bits`,
+  checked against python-barcode) or QR (qrcode-generator@1.4.4 from jsdelivr, loaded on first use; tests inject it from tests/ui/node_modules).
+  Sheets in `SHEETS` (Avery 5160, 5163, 2.25x1.25 label printer), start-at position. `labelCodes` gives things without a barcode their
+  asset tag / employee # if usable and free, else EQ-/EMP- + 6 chars; `printLabels` saves them first (`api.setBarcodes`; equipment needs
+  managers+) then prints `#printRoot` with an @page size.
+
 ## Requests (migration 28)
 - Console "Requests" (`vRequests`/`vRequest`): every contact form message (`private.contact_requests`) plus ones added by hand
   (`platform_add_request`, email optional). kind lead/support ("Help with my account" = support; sender matched to a customer -> `org_id`).

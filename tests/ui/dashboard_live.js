@@ -278,6 +278,15 @@ const ORG = "00000000-0000-0000-0000-00000000d3e0";
   check(await P.until(() => one(`select count(*) from employees where org_id='${ORG}' and employee_number in ('3001','3002')`) === "2"
     && one(`select s.name from shift_assignments a join shifts s on s.id = a.shift_id join employees e on e.id = a.employee_id where e.employee_number = '3001'`) === "AM"),
     "import employees saves to the database, with their shift");
+  // Labels (live): printing gives an item without a barcode one, saved to the database
+  const bare = one(`select name from equipment where org_id='${ORG}' and barcode is null and asset_tag is not null and status <> 'retired' order by name limit 1`);
+  P.go("equipment"); await P.until(() => P.doc.querySelector('[data-act="labOpen"]')); P.click('[data-act="labOpen"][data-k="equipment"]');
+  await P.until(() => P.doc.getElementById("labQ"));
+  P.doc.getElementById("labQ").value = bare; P.doc.getElementById("labQ").dispatchEvent(new P.dom.window.Event("input", { bubbles: true }));
+  await P.until(() => P.E("S.labPrint.picked.length") === 1);
+  P.E("window.print = () => {}"); P.click('[data-act="labPrint"]'); await P.settled();
+  check(await P.until(() => one(`select barcode is not null and barcode = upper(asset_tag) from equipment where org_id='${ORG}' and name='${bare}'`) === "t"),
+        "print labels saves the new barcode to the database (live)", bare);
   const K = open(); await K.signIn("kelly@demoair.example");
   check(await K.until(() => /Recent activity/.test(K.text())), "second user signs in");
   check(await K.until(() => K.E("DB.equipment.length") > 0) && !K.E("DB.equipment.some(q => q.name === 'Radio 02')") && K.E("DB.me.contracts.length") === 1,

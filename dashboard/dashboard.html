@@ -307,6 +307,36 @@ label.btn { cursor: pointer; } label.btn.disabled { opacity: .55; cursor: defaul
 .imp-table td.skip { color: var(--muted); opacity: .55; } .imp-table tr.bad td { background: color-mix(in srgb, var(--bad) 6%, transparent); }
 .imp-table td .sub { display: block; color: var(--bad); font-size: 12.5px; margin-top: 2px; max-width: 320px; white-space: normal; }
 .imp-sum { display: grid; gap: 12px; } .imp-sum label { display: grid; gap: 6px; max-width: 320px; font-weight: 600; }
+.lab-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 1000px) { .lab-grid { grid-template-columns: 1fr; } }
+.lab-filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; } .lab-filters .field { max-width: 220px; }
+.lab-list { max-height: 460px; overflow: auto; border-top: 1px solid var(--line); }
+.lab-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 8px 16px; border-bottom: 1px solid var(--line); cursor: pointer; }
+.lab-row b { display: block; font-size: 14.5px; } .lab-row small { color: var(--muted); } .lab-row.off { opacity: .55; cursor: default; }
+.lab-row .mono { font-size: 13px; } .lab-row .new { color: var(--brand-text, var(--blue)); } .lab-row em { font-style: normal; font-size: 11px; font-weight: 700; text-transform: uppercase; margin-left: 4px; }
+.lab-check { display: flex !important; flex-direction: row !important; gap: 8px; align-items: center; font-weight: 600; }
+.lab-preview { overflow: auto; padding: 16px; background: var(--surface-2); border-radius: 0 0 14px 14px; }
+.lab-scale { width: max-content; zoom: .62; } .lab-scale.small { zoom: 1.6; }
+.sheet { position: relative; background: #fff; box-shadow: 0 2px 10px rgba(0,0,0,.18); color: #000; overflow: hidden; }
+.lab-preview .slot { outline: 1px dashed #c8cfd8; outline-offset: -1px; border-radius: .06in; }
+.slot { position: absolute; box-sizing: border-box; padding: .07in .1in; font-family: Arial, Helvetica, sans-serif; color: #000; }
+.lab { width: 100%; height: 100%; display: flex; flex-direction: column; overflow: hidden; }
+.bc-lab .top { display: flex; justify-content: space-between; gap: .06in; align-items: baseline; white-space: nowrap; }
+.lab b { font-size: 9.5pt; overflow: hidden; text-overflow: ellipsis; } .lab span { font-size: 7pt; }
+.bc-lab .bc { flex: 1; width: 100%; min-height: 0; margin: .03in 0; }
+.bc-lab .bot { display: flex; justify-content: space-between; gap: .06in; white-space: nowrap; } .lab .code { font-family: "Courier New", monospace; font-weight: 700; font-size: 7.5pt; }
+.lab .co { color: #333; overflow: hidden; text-overflow: ellipsis; }
+.qr-lab { flex-direction: row; gap: .08in; align-items: center; } .qr-lab .qr, .qr-lab .qr-wait { height: 100%; aspect-ratio: 1; flex: none; } .qr-lab .qr-wait { background: #eee; }
+.qr-lab .txt { display: flex; flex-direction: column; gap: .02in; min-width: 0; } .qr-lab .txt > * { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.slot.big { padding: .16in .2in; } .slot.big .lab b { font-size: 14pt; } .slot.big .lab span { font-size: 10pt; } .slot.big .lab .code { font-size: 11pt; }
+#printRoot { display: none; }
+@media print {
+  body.printing-labels > *:not(#printRoot) { display: none !important; }
+  body.printing-labels { background: #fff !important; margin: 0; }
+  body.printing-labels #printRoot { display: block; }
+  #printRoot .sheet { box-shadow: none; page-break-after: always; break-after: page; }
+  #printRoot .sheet:last-child { page-break-after: auto; break-after: auto; }
+}
 .readonly-note { background: var(--surface-2); border: 1px dashed var(--line); border-radius: 10px; padding: 9px 12px; color: var(--muted); font-size: 13.5px; }
 .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(22px + env(safe-area-inset-bottom, 0px)); background: var(--ink); color: var(--bg);
          padding: 10px 18px; border-radius: 10px; font-weight: 700; z-index: 40; box-shadow: var(--shadow); max-width: calc(100% - 32px); }
@@ -1064,6 +1094,15 @@ const api = {
     DB.audit.push({ at: Date.now(), actor: DB.me.name, text: `imported ${items.length} employee${items.length === 1 ? "" : "s"}` });
     return { ok: true, count: items.length };
   },
+  /* equipment / employees update barcode, many at once (labels printed for things that had none) */
+  setBarcodes(kind, pairs) {
+    if (kind === "equipment" ? !can("admin") : !can("supervisor")) return { ok: false, error: "Ask a manager or admin to give these a barcode." };
+    const list = kind === "equipment" ? DB.equipment : DB.employees, key = kind === "equipment" ? "tag" : "badge";
+    for (const [id, code] of pairs) { const x = list.find((y) => y.id === id); if (!x || x.barcode) continue;
+      if (list.some((y) => y.barcode === code)) return { ok: false, error: `The barcode ${code} is already used. Try again.` };
+      x[key] = withBarcode(x[key] || null, null, x[key] && !isBarcodeUid(x[key]) ? x[key] : "", code); x.barcode = code; }
+    return { ok: true, count: pairs.length };
+  },
   /* list_members / invite_member / set_member_role / remove_member / cancel_invite rpcs */
   members() { return { members: [...DB.members].sort((a, b) => RANK[b.role] - RANK[a.role] || a.name.localeCompare(b.name)), invites: DB.invites }; },
   invite(email, role) {
@@ -1220,7 +1259,7 @@ const OUTCOME = { not_returned: ["bad", "Still out"], returned_late: ["warn", "R
 /* =====================================================================
    App state + routing
    ===================================================================== */
-const ROUTES = ["overview", "equipment", "employees", "activity", "alerts", "shifts", "stations", "settings", "team", "import-equipment", "import-employees"];
+const ROUTES = ["overview", "equipment", "employees", "activity", "alerts", "shifts", "stations", "settings", "team", "import-equipment", "import-employees", "labels"];
 /* Links from alert emails open one thing: #equipment?open=equipment:<id>&org=<company>, #shifts?open=report:<id>, #alerts?org=…
    Kept for an hour so it still works after signing in (a sign-in link can open in a new tab). */
 function parseHash(h = location.hash) { const [r, qs = ""] = h.slice(1).split("?"); const p = new URLSearchParams(qs);
@@ -1280,12 +1319,15 @@ const ICON = {
   help: '<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01"/>',
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>',
   moon: '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>', monitor: '<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>', check: '<path d="M20 6 9 17l-5-5"/>', x: '<path d="M18 6 6 18M6 6l12 12"/>', wrench: '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>', mail: '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/>', download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>',
-  user: '<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>', upload: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5M12 3v12"/>', logout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>',
+  user: '<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>', upload: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5M12 3v12"/>',
+  tag: '<path d="M12.6 2.6A2 2 0 0 0 11.2 2H4a2 2 0 0 0-2 2v7.2a2 2 0 0 0 .6 1.4l8.7 8.7a2.4 2.4 0 0 0 3.4 0l6.6-6.6a2.4 2.4 0 0 0 0-3.4z"/><circle cx="7.5" cy="7.5" r="1.5"/>', logout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>',
 };
 const ic = (k, cls = "") => `<svg ${cls ? `class="${cls}" ` : ""}viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[k]}</svg>`;
 const initialsOf = (n) => String(n || "?").replace(/@.*/, "").split(/[\s._-]+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join("") || "?";
 const firstName = (n) => (String(n || "").includes("@") ? n.split("@")[0] : String(n || "")).split(" ")[0];
 
+// Which menu item a page belongs to (import and label pages sit under Equipment or Employees).
+const navKey = () => S.route === "labels" ? (S.lab?.kind || "equipment") : S.route.replace("import-", "");
 function render() {
   document.title = DB.org?.name && (!LIVE || S.ready) ? `${DB.org.name} · Sonoran Point` : "Sonoran Point";
   if (LIVE && !S.ready) return renderAuth();
@@ -1301,7 +1343,7 @@ function render() {
       <div class="company">${many ? `<button type="button" data-act="orgMenu" aria-haspopup="true" aria-expanded="${S.pop === "org"}" aria-label="${esc(DB.org.name)}: switch company">${companyMark()}${ic("chevUpDown", "chev")}</button>
           <div class="pop" role="menu" ${S.pop === "org" ? "" : "hidden"}><label>Company<select id="switchOrg" aria-label="Switch company">${L.companies.map((c) => `<option value="${c.org_id}" ${c.org_id === L.org ? "selected" : ""}>${esc(c.name)}</option>`).join("")}</select></label></div>`
           : `<a class="cbox" href="#overview" aria-label="${esc(DB.org.name)}, dashboard home">${companyMark()}</a>`}${LIVE ? "" : `<span class="demo-pill">Demo data</span>`}</div>
-      <nav class="snav" aria-label="Sections">${nav.map((n) => n === "-" ? "<hr>" : `<a href="#${n[0]}" class="${S.route.replace("import-", "") === n[0] ? "on" : ""}" ${S.route.replace("import-", "") === n[0] ? 'aria-current="page"' : ""}>${ic(n[2])}${n[1]}${n[3] ? `<span class="n" aria-label="${n[3]} need attention">${n[3]}</span>` : ""}</a>`).join("")}</nav>
+      <nav class="snav" aria-label="Sections">${nav.map((n) => n === "-" ? "<hr>" : `<a href="#${n[0]}" class="${navKey() === n[0] ? "on" : ""}" ${navKey() === n[0] ? 'aria-current="page"' : ""}>${ic(n[2])}${n[1]}${n[3] ? `<span class="n" aria-label="${n[3]} need attention">${n[3]}</span>` : ""}</a>`).join("")}</nav>
       <div class="sp-foot"><img class="on-dark" src="brand/logo-light.png" srcset="brand/logo-light.png 1x, brand/logo-light@2x.png 2x" alt="Sonoran Point Technologies"><img class="on-light" src="brand/logo.png" srcset="brand/logo.png 1x, brand/logo@2x.png 2x" alt="Sonoran Point Technologies"></div>
     </aside>
     ${S.navOpen ? `<div class="navscrim" data-act="navClose"></div>` : ""}
@@ -1486,7 +1528,7 @@ function vEquipment() {
     .sort((a, b) => (b.is_overdue - a.is_overdue) || (b.is_extended - a.is_extended) || a.name.localeCompare(b.name, undefined, { numeric: true }));
   const seg = [["all", "All"], ["out", "Out"], ["overdue", "Overdue"], ["extended", "Out too long"], ["available", "Available"], ["lost", "Lost"], ["maintenance", "Maintenance"], ["problem", "Problems"], ...((DB.loans || []).some((l) => !l.ended_at) ? [["loan", "On loan"]] : [])];
   S.eqRows = rows;
-  return head("Equipment", `${all.length} items · also addable at a station with a manager or admin fob`, `<span class="actions"><button class="btn" data-act="csvEquipment">${ic("download")}Download CSV</button>${can("admin") ? `<a class="btn" href="#import-equipment">${ic("upload")}Import</a><button class="btn primary" data-act="newEq">Add equipment</button>` : ""}</span>`) + `
+  return head("Equipment", `${all.length} items · also addable at a station with a manager or admin fob`, `<span class="actions"><button class="btn" data-act="csvEquipment">${ic("download")}Download CSV</button>${can("supervisor") ? `<button class="btn" data-act="labOpen" data-k="equipment">${ic("tag")}Print labels</button>` : ""}${can("admin") ? `<a class="btn" href="#import-equipment">${ic("upload")}Import</a><button class="btn primary" data-act="newEq">Add equipment</button>` : ""}</span>`) + `
     <div class="filters">
       <input class="field" id="eqSearch" type="search" aria-label="Search equipment" placeholder="Search name, asset tag, barcode or person" value="${esc(f.eqSearch)}" data-f="eqSearch">
       <select class="field" id="eqCat" aria-label="Category" data-f="eqCat"><option value="">All categories</option>${DB.categories.map((c) => `<option value="${c.id}" ${f.eqCat === c.id ? "selected" : ""}>${esc(c.name)}</option>`).join("")}</select>
@@ -1509,7 +1551,7 @@ function vEmployees() {
   const q = S.f.empSearch.trim().toLowerCase();
   const rows = api.employees().filter((e) => (!q || `${e.name} ${e.number} ${e.barcode || ""}`.toLowerCase().includes(q)) && (!S.f.empContract || inBranch(e.contract, S.f.empContract)))
     .sort((a, b) => (b.active - a.active) || (b.out - a.out) || a.name.localeCompare(b.name));
-  return head("Employees", `${rows.filter((e) => e.active).length} active · also addable at a station with a manager or admin fob`, can("supervisor") ? `<span class="actions"><a class="btn" href="#import-employees">${ic("upload")}Import</a><button class="btn primary" data-act="newEmp">Add employee</button></span>` : "") + `
+  return head("Employees", `${rows.filter((e) => e.active).length} active · also addable at a station with a manager or admin fob`, can("supervisor") ? `<span class="actions"><button class="btn" data-act="labOpen" data-k="employees">${ic("tag")}Print labels</button><a class="btn" href="#import-employees">${ic("upload")}Import</a><button class="btn primary" data-act="newEmp">Add employee</button></span>` : "") + `
     <div class="filters"><input class="field" type="search" id="empSearch" aria-label="Search employees" placeholder="Search name or employee #" value="${esc(S.f.empSearch)}" data-f="empSearch">${DB.contracts?.length ? `<select class="field" id="empContract" aria-label="${esc(CTERM().one)}" data-f="empContract">${contractOptions(S.f.empContract || "", `All ${CTERM().many.toLowerCase()}`)}</select>` : ""}</div>
     <section class="panel"><div class="tablewrap"><table class="cardify">
       <thead><tr><th>Name</th><th>Role</th><th>Shift</th><th>Badge</th><th>Has out</th><th>Last tap</th></tr></thead>
@@ -1679,6 +1721,129 @@ async function impFile(file) {
       const ws = wb.Sheets[wb.SheetNames[0]]; return impLoad(X.utils.sheet_to_json(ws, { header: 1, raw: false, defval: "" }).map((r) => r.map((c) => String(c).trim())).filter((r) => r.some(Boolean))); }
     impLoad(parseTable(await file.text()));
   } catch (err) { S.imp.err = err.message; render(); }
+}
+
+/* ---------------- Labels: print barcode or QR labels for equipment and badges ----------------
+   Things without a barcode get one when the labels are printed (their asset tag or employee # when that works,
+   else a short new code), saved first so the station can scan the label as soon as it's stuck on. */
+// Code 128 (set B: letters, digits and punctuation), the barcode every handheld scanner reads.
+const C128 = "212222 222122 222221 121223 121322 131222 122213 122312 132212 221213 221312 231212 112232 122132 122231 113222 123122 123221 223211 221132 221231 213212 223112 312131 311222 321122 321221 312212 322112 322211 212123 212321 232121 111323 131123 131321 112313 132113 132311 211313 231113 231311 112133 112331 132131 113123 113321 133121 313121 211331 231131 213113 213311 213131 311123 311321 331121 312113 312311 332111 314111 221411 431111 111224 111422 121124 121421 141122 141221 112214 112412 122114 122411 142112 142211 241211 221114 413111 241112 134111 111242 121142 121241 114212 124112 124211 411212 421112 421211 212141 214121 412121 111143 111341 131141 114113 114311 411113 411311 113141 114131 311141 411131 211412 211214 211232 2331112".split(" ");
+function code128Bits(text) {
+  const vals = [104, ...[...text].map((ch) => ch.charCodeAt(0) - 32)];
+  if (vals.slice(1).some((v) => v < 0 || v > 94)) throw new Error("Barcodes can only use letters, numbers and punctuation.");
+  vals.push(vals.reduce((t, v, i) => t + v * (i || 1), 0) % 103, 106);
+  return vals.map((v) => [...C128[v]].map((w, i) => (i % 2 ? "0" : "1").repeat(+w)).join("")).join("");
+}
+function code128Svg(text, h = 40) {
+  const bits = code128Bits(text), q = 10, w = bits.length + 2 * q; let d = "";
+  for (let i = 0; i < bits.length; ) { if (bits[i] !== "1") { i++; continue; } let j = i; while (bits[j] === "1") j++; d += `M${i + q} 0h${j - i}v${h}h-${j - i}z`; i = j; }
+  return `<svg class="bc" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" shape-rendering="crispEdges" aria-hidden="true"><path d="${d}" fill="#000"/></svg>`;
+}
+// QR codes (phone cameras and 2D scanners) use the qrcode-generator library, loaded the first time it's needed.
+function loadQr() {
+  if (window.qrcode) return Promise.resolve(window.qrcode);
+  return (window.__qrLoading ||= new Promise((ok, no) => { const s = document.createElement("script"); s.src = "https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js";
+    s.onload = () => ok(window.qrcode); s.onerror = () => { window.__qrLoading = null; no(new Error("Couldn't load QR codes just now. Try again, or use barcodes.")); }; document.head.appendChild(s); }));
+}
+function qrSvg(text) {
+  const qr = window.qrcode(0, "M"); qr.addData(text); qr.make(); const n = qr.getModuleCount(), q = 2; let d = "";
+  for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (qr.isDark(r, c)) d += `M${c + q} ${r + q}h1v1h-1z`;
+  return `<svg class="qr" viewBox="0 0 ${n + 2 * q} ${n + 2 * q}" shape-rendering="crispEdges" aria-hidden="true"><path d="${d}" fill="#000"/></svg>`;
+}
+// Sheets, in inches: page, label size, grid, where the first label starts and the distance between labels.
+const SHEETS = {
+  a5160: { name: "Avery 5160 / 8160 (30 per sheet, 1 × 2⅝ in)", page: [8.5, 11], size: [2.625, 1], cols: 3, rows: 10, start: [0.1875, 0.5], pitch: [2.75, 1] },
+  a5163: { name: "Avery 5163 / 8163 (10 per sheet, 2 × 4 in)", page: [8.5, 11], size: [4, 2], cols: 2, rows: 5, start: [0.15625, 0.5], pitch: [4.1875, 2] },
+  roll: { name: "Label printer (2¼ × 1¼ in, one per label)", page: [2.25, 1.25], size: [2.25, 1.25], cols: 1, rows: 1, start: [0, 0], pitch: [2.25, 1.25] },
+};
+const LAB_CHARS = "23456789ABCDEFGHJKMNPQRSTVWXYZ";
+// The code each one gets: its barcode, else its asset tag / employee # if usable and free, else a new short code.
+function labelCodes(kind, list) {
+  const all = kind === "equipment" ? DB.equipment : DB.employees, used = new Set(all.map((x) => x.barcode).filter(Boolean)), out = new Map();
+  const ok = (c) => c && c.length <= 20 && /^[A-Z0-9][A-Z0-9 .\-/]*$/.test(c) && !used.has(c);
+  for (const x of list) {
+    if (x.barcode) { out.set(x.id, { code: x.barcode, isNew: false }); continue; }
+    let c = normCode(kind === "equipment" ? x.asset : x.number);
+    if (!ok(c)) do { c = (kind === "equipment" ? "EQ-" : "EMP-") + Array.from(crypto.getRandomValues(new Uint8Array(6)), (b) => LAB_CHARS[b % LAB_CHARS.length]).join(""); } while (used.has(c));
+    used.add(c); out.set(x.id, { code: c, isNew: true });
+  }
+  return out;
+}
+function labelHtml(x, code, L) {
+  const lines = L.kind === "equipment" ? [x.name, L.showExtra && x.asset && x.asset !== code ? x.asset : ""] : [x.name, L.showExtra && x.number && x.number !== code ? "# " + x.number : ""];
+  const co = L.showCompany ? `<span class="co">${esc(DB.org.name)}</span>` : "";
+  if (L.type === "qr") return `<div class="lab qr-lab">${window.qrcode ? qrSvg(code) : `<span class="qr-wait"></span>`}<div class="txt"><b>${esc(lines[0])}</b>${lines[1] ? `<span>${esc(lines[1])}</span>` : ""}<span class="code">${esc(code)}</span>${co}</div></div>`;
+  return `<div class="lab bc-lab"><div class="top"><b>${esc(lines[0])}</b>${lines[1] ? `<span>${esc(lines[1])}</span>` : ""}</div>${code128Svg(code)}<div class="bot"><span class="code">${esc(code)}</span>${co}</div></div>`;
+}
+// Pages of labels, positioned in inches so they land on the sheet.
+function labelPages(items, codes, L) {
+  const sh = SHEETS[L.sheet], per = sh.cols * sh.rows, skip = Math.min(Math.max(0, (+L.startAt || 1) - 1), per - 1), slots = [...Array(skip).fill(null), ...items], pages = [];
+  for (let p = 0; p < slots.length; p += per) pages.push(slots.slice(p, p + per));
+  return pages.map((pg) => `<div class="sheet" style="width:${sh.page[0]}in;height:${sh.page[1]}in">${pg.map((x, i) => {
+    const c = i % sh.cols, r = Math.floor(i / sh.cols);
+    return `<div class="slot ${sh.size[1] >= 2 ? "big" : ""}" style="left:${sh.start[0] + c * sh.pitch[0]}in;top:${sh.start[1] + r * sh.pitch[1]}in;width:${sh.size[0]}in;height:${sh.size[1]}in">${x ? labelHtml(x, codes.get(x.id).code, L) : ""}</div>`; }).join("")}</div>`);
+}
+const labDefaults = (kind) => ({ kind, type: "barcode", sheet: "a5160", startAt: 1, showCompany: true, showExtra: true, cat: "", q: "", off: new Set() });
+function vLabels() {
+  const L = S.lab || (S.lab = labDefaults("equipment"));
+  const isEq = L.kind === "equipment", canEdit = isEq ? can("admin") : can("supervisor");
+  if (!can("supervisor")) return head("Print labels", "") + `<div class="readonly-note">You have ${esc(ROLE_NAME[DB.me.role])} access. Ask a supervisor or manager to print labels.</div>`;
+  const q = L.q.trim().toLowerCase();
+  const all = isEq ? api.equipment().filter((x) => x.status !== "retired") : api.employees().filter((e) => e.active);
+  const shown = all.filter((x) => (!isEq || !L.cat || x.cat === L.cat) && (!q || `${x.name} ${x.asset || ""} ${x.number || ""} ${x.barcode || ""}`.toLowerCase().includes(q)))
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+  const picked = shown.filter((x) => !L.off.has(x.id) && (x.barcode || canEdit));
+  const codes = labelCodes(L.kind, picked), fresh = picked.filter((x) => codes.get(x.id).isNew).length;
+  const pages = picked.length ? labelPages(picked, codes, L) : [];
+  S.labPrint = { picked, codes, pages };
+  if (L.type === "qr" && !window.qrcode) loadQr().then(() => { if (S.route === "labels") render(); }).catch((e) => { L.type = "barcode"; toast(e.message); render(); });
+  const sh = SHEETS[L.sheet];
+  return `<div><a class="back" href="#${L.kind}">‹ ${isEq ? "Equipment" : "Employees"}</a></div>` + head("Print labels", isEq
+      ? "Barcode or QR labels for your equipment. Stick one on and it can be scanned at the station."
+      : "Barcode or QR labels for badges, so people without an NFC badge can scan in.",
+      `<div class="seg" role="group" aria-label="Labels for">${[["equipment", "Equipment"], ["employees", "Employees"]].map(([k, l]) => `<button class="${L.kind === k ? "on" : ""}" data-act="labKind" data-k="${k}">${l}</button>`).join("")}</div>`) + `
+    <div class="lab-grid">
+      <section class="panel"><div class="panel-h"><h2>What to print</h2><span class="muted" style="font-size:13px">${picked.length} of ${shown.length} picked</span></div>
+        <div class="panel-b lab-filters">
+          ${isEq ? `<select class="field" data-act-change="labCat" aria-label="Category"><option value="">All categories</option>${DB.categories.map((c) => `<option value="${c.id}" ${L.cat === c.id ? "selected" : ""}>${esc(c.name)}</option>`).join("")}</select>` : ""}
+          <input class="field" type="search" id="labQ" placeholder="Search" aria-label="Search" value="${esc(L.q)}">
+          <span class="actions"><button class="btn sm" data-act="labAll">All</button><button class="btn sm" data-act="labNone">None</button>${isEq ? `<button class="btn sm" data-act="labNoCode">Only ones without a barcode</button>` : ""}</span></div>
+        <div class="lab-list">${shown.map((x) => { const c = codes.get(x.id), blocked = !x.barcode && !canEdit;
+          return `<label class="lab-row ${blocked ? "off" : ""}"><input type="checkbox" data-lab="${x.id}" ${!L.off.has(x.id) && !blocked ? "checked" : ""} ${blocked ? "disabled" : ""}>
+            <span><b>${esc(x.name)}</b><small>${esc(isEq ? x.category || "" : x.number ? "# " + x.number : "")}</small></span>
+            <span class="mono ${c?.isNew ? "new" : ""}">${blocked ? "No barcode" : c ? esc(c.code) + (c.isNew ? " <em>new</em>" : "") : x.barcode ? esc(x.barcode) : ""}</span></label>`; }).join("") || `<div class="empty">Nothing matches.</div>`}</div></section>
+      <div class="stack">
+        <section class="panel"><div class="panel-h"><h2>Labels</h2></div><div class="panel-b fgrid" style="grid-template-columns:1fr">
+          <label>Type<select class="field" data-act-change="labType"><option value="barcode" ${L.type === "barcode" ? "selected" : ""}>Barcode (any handheld scanner)</option><option value="qr" ${L.type === "qr" ? "selected" : ""}>QR code (2D scanners and phone cameras)</option></select></label>
+          <label>Label sheet<select class="field" data-act-change="labSheet">${Object.entries(SHEETS).map(([k, s]) => `<option value="${k}" ${L.sheet === k ? "selected" : ""}>${esc(s.name)}</option>`).join("")}</select></label>
+          ${sh.cols * sh.rows > 1 ? `<label>Start at label<small>Skip labels already used on a part-used sheet (1 is top left)</small><input class="field" type="number" min="1" max="${sh.cols * sh.rows}" data-act-change="labStart" value="${L.startAt}"></label>` : ""}
+          <label class="lab-check"><input type="checkbox" data-act-change="labCompany" ${L.showCompany ? "checked" : ""}> Company name on each label</label>
+          <label class="lab-check"><input type="checkbox" data-act-change="labExtra" ${L.showExtra ? "checked" : ""}> ${isEq ? "Asset tag" : "Employee #"} on each label</label>
+        </div></section>
+        <section class="panel"><div class="panel-b" style="display:grid;gap:10px">
+          <p style="margin:0"><b>${picked.length} label${picked.length === 1 ? "" : "s"}</b> · ${pages.length} ${sh.cols * sh.rows > 1 ? "sheet" : "label"}${pages.length === 1 ? "" : "s"}</p>
+          ${fresh ? `<p class="muted" style="margin:0;font-size:13.5px">${fresh} ${fresh === 1 ? (isEq ? "item doesn't" : "person doesn't") : isEq ? "items don't" : "people don't"} have a barcode yet. They get the code shown when you print, so the station can scan the label right away.</p>` : ""}
+          ${!canEdit && shown.some((x) => !x.barcode) ? `<p class="muted" style="margin:0;font-size:13.5px">Ones without a barcode need a ${isEq ? "manager" : "supervisor"} to print their first label.</p>` : ""}
+          <p class="muted" style="margin:0;font-size:13.5px">In the print window, set the scale to 100% (or "Actual size") and margins to none.</p>
+          <div class="actions"><button class="btn primary" data-act="labPrint" ${picked.length ? "" : "disabled"}>${ic("download")}Print ${picked.length} label${picked.length === 1 ? "" : "s"}</button></div></div></section>
+      </div>
+    </div>
+    ${pages.length ? `<section class="panel"><div class="panel-h"><h2>Preview</h2><span class="muted" style="font-size:13px">${pages.length > 1 ? `First of ${pages.length}` : sh.cols * sh.rows > 1 ? "Your sheet" : "First label"}</span></div>
+      <div class="lab-preview"><div class="lab-scale ${sh.page[0] < 4 ? "small" : ""}">${pages[0]}</div></div></section>` : ""}`;
+}
+async function printLabels() {
+  const L = S.lab, P = S.labPrint; if (!P?.picked.length) return;
+  if (L.type === "qr") { try { await loadQr(); } catch (e) { return toast(e.message); } }
+  const fresh = P.picked.filter((x) => P.codes.get(x.id).isNew).map((x) => [x.id, P.codes.get(x.id).code]);
+  if (fresh.length) { const r = api.setBarcodes(L.kind, fresh); if (!r.ok) return toast(r.error); }
+  const sh = SHEETS[L.sheet], pages = labelPages(P.picked, P.codes, L);
+  let root = $("#printRoot"); if (!root) { root = document.createElement("div"); root.id = "printRoot"; document.body.appendChild(root); }
+  root.innerHTML = `<style>@page { size: ${sh.page[0]}in ${sh.page[1]}in; margin: 0; }</style>` + pages.join("");
+  document.body.classList.add("printing-labels");
+  const done = () => { document.body.classList.remove("printing-labels"); root.innerHTML = ""; window.removeEventListener("afterprint", done); };
+  window.addEventListener("afterprint", done);
+  setTimeout(() => { window.print(); setTimeout(done, 1000); }, 50);
+  if (fresh.length) { toast(`${fresh.length} new barcode${fresh.length === 1 ? "" : "s"} saved`); render(); }
 }
 
 /* ---------------- Activity ---------------- */
@@ -1991,7 +2156,7 @@ function vTeam() {
         ["Add and edit equipment and categories, time limits", 2], ["Stations, company settings, checkout rules", 2], ["Station fob roles and PINs", 2], ["Invite and manage the team (except admins)", 2], ["Manage admins", 3]]
         .map(([t, n]) => `<tr><td>${t}</td>${[0, 1, 2, 3].map((i) => `<td aria-label="${i >= n ? "Yes" : "No"}">${i >= n ? "✓" : "<span class='muted'>–</span>"}</td>`).join("")}</tr>`).join("")}</tbody></table></div></section>`;
 }
-const VIEWS = { overview: vOverview, equipment: vEquipment, employees: vEmployees, activity: vActivity, alerts: vAlerts, shifts: vShifts, stations: vStations, settings: vSettings, team: vTeam, "import-equipment": () => vImport("equipment"), "import-employees": () => vImport("employees") };
+const VIEWS = { overview: vOverview, equipment: vEquipment, employees: vEmployees, activity: vActivity, alerts: vAlerts, shifts: vShifts, stations: vStations, settings: vSettings, team: vTeam, "import-equipment": () => vImport("equipment"), "import-employees": () => vImport("employees"), labels: vLabels };
 
 /* =====================================================================
    Detail panels
@@ -2253,6 +2418,12 @@ document.addEventListener("click", async (e) => {
   if (a === "csvActivity") return csvActivity();
   if (a === "csvEquipment") return csvEquipment();
   if (a === "impTemplate") return impTemplate(t.dataset.kind);
+  if (a === "labOpen") { S.lab = labDefaults(t.dataset.k); location.hash = "labels"; return; }
+  if (a === "labKind") { S.lab.kind = t.dataset.k; S.lab.off = new Set(); S.lab.q = ""; S.lab.cat = ""; return render(); }
+  if (a === "labAll") { S.lab.off = new Set(); return render(); }
+  if (a === "labNone") { S.lab.off = new Set((S.lab.kind === "equipment" ? DB.equipment : DB.employees).map((x) => x.id)); return render(); }
+  if (a === "labNoCode") { S.lab.off = new Set(DB.equipment.filter((x) => x.barcode).map((x) => x.id)); return render(); }
+  if (a === "labPrint") return printLabels();
   if (a === "impAgain") { S.imp = null; return render(); }
   if (a === "impGo") { const I = S.imp, res = impCheck(I.kind); if (!res.items.length) return;
     const r = I.kind === "equipment" ? api.importEquipment(res.items, res.newCats) : api.importEmployees(res.items);
@@ -2308,6 +2479,7 @@ document.addEventListener("input", (e) => {
   if (e.target.type === "color" && e.target.closest(".colorpick")) { e.target.nextElementSibling.textContent = e.target.value.toUpperCase(); return; }
   if (e.target.id === "gsearch") { S.gq = e.target.value; const r = $("#gsResults"); r.innerHTML = searchResults(S.gq); r.hidden = !S.gq.trim(); return; }
   if (e.target.id === "impText") { S.imp.text = e.target.value; return; }
+  if (e.target.id === "labQ") { S.lab.q = e.target.value; const pos = e.target.selectionStart; render(); const el = $("#labQ"); if (el) { el.focus(); try { el.setSelectionRange(pos, pos); } catch {} } return; }
   const k = e.target.dataset.f; if (!k) return;
   S.f[k] = e.target.value; const pos = e.target.selectionStart; render();
   const el = $(`[data-f="${k}"]`); if (el) { el.focus(); try { el.setSelectionRange(pos, pos); } catch {} }
@@ -2332,6 +2504,12 @@ document.addEventListener("change", (e) => {
   if (t.dataset.f === "eqCat") { S.f.eqCat = t.value; return render(); }
   if (t.id === "impFile" && t.files?.[0]) return impFile(t.files[0]);
   if (t.dataset.impcol != null) { const i = +t.dataset.impcol; if (t.value) S.imp.map = S.imp.map.map((f) => (f === t.value ? "" : f)); S.imp.map[i] = t.value; return render(); }
+  if (t.dataset.lab) { t.checked ? S.lab.off.delete(t.dataset.lab) : S.lab.off.add(t.dataset.lab); return render(); }
+  if (t.dataset.actChange && t.dataset.actChange.startsWith("lab")) {
+    const L = S.lab, k = t.dataset.actChange;
+    if (k === "labCat") L.cat = t.value; if (k === "labType") L.type = t.value; if (k === "labSheet") { L.sheet = t.value; L.startAt = 1; }
+    if (k === "labStart") L.startAt = Math.max(1, parseInt(t.value, 10) || 1); if (k === "labCompany") L.showCompany = t.checked; if (k === "labExtra") L.showExtra = t.checked;
+    return render(); }
   if (t.dataset.actChange === "impHead") { S.imp.hasHead = t.checked; return render(); }
   if (t.dataset.actChange === "impCat") { S.imp.defCat = t.value; return render(); }
   if (t.dataset.email) {
@@ -2667,6 +2845,10 @@ const REMOTE = {
     if (id) await upd("employees", id, row); else { eid = (await q(sb.from("employees").insert({ org_id: ORG(), ...row }).select("id").single())).id; L.idMap[r.id] = eid; e.id = eid; if (S.drawer?.id === r.id) S.drawer.id = eid; }
     await syncAssignments("employee_id", eid, e.shifts || [], "shift_id");
     if (can("admin")) await okRpc("set_employee_station_role", { p_employee: eid, p_role: e.role || "employee", p_pin: d.pin || null });
+  },
+  setBarcodes: async ([kind, pairs]) => {
+    const table = kind === "equipment" ? "equipment" : "employees";
+    for (let i = 0; i < pairs.length; i += 8) await Promise.all(pairs.slice(i, i + 8).map(([id, code]) => upd(table, id, { barcode: code })));
   },
   importEquipment: async ([items, newCats]) => {
     const have = await q(sb.from("equipment_categories").select("id, name").eq("org_id", ORG()));
