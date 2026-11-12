@@ -24,7 +24,7 @@ See README.md for the full product description.
 - Push to `main` → GitHub Actions runs `tests/run.sh db` + `ui`, then deploys app + console to Cloudflare Pages
   (projects `sonoranpoint-app`, `sonoranpoint-console`, `sonoranpoint-site`).
 - Database changes are NOT automatic. Add a new migration file (never edit one already run on the live
-  project), then tell Dez to run it in the Supabase SQL editor. Migrations 1–31 have been run, 32–34 not yet (checked 2026-11-12;
+  project), then tell Dez to run it in the Supabase SQL editor. Migrations 1–31 have been run, 32–35 not yet (checked 2026-11-12;
   ask if unsure). Alert emails are live (Resend key in Vault, first send
   confirmed 2026-10-20).
 - Station changes reach the Pis by themselves: every deploy publishes `app.sonoranpoint.com/station-release/latest.json` + a zip
@@ -54,6 +54,8 @@ See README.md for the full product description.
   A lead = a Manager limited to contracts (can be several). Leads (`private.my_scope` not null) only invite/change/remove people inside
   their branch (`private.in_my_branch`, `contracts_problem`), invites carry `org_invites.contracts`, and they can't change company-wide
   things (`private.unscoped`: org row, logo, renaming/deleting categories and locations). Dashboard: `myScopeIds()`, `canCompany()`.
+- Locations (migration 35): each tree entry has `contracts.kind` 'location' (a site or terminal, like PHX or T3) or 'contract'
+  (like Delta BW). Labels only; scope and sharing work the same. Set in the console form (`isLoc`).
 - Visitors (migration 34): `public.visitor_passes` (functions only, no RLS policies) let someone into another contract's stations.
   Station: their badge is refused -> `S.visit` screen ("Manager: tap your fob") -> a manager from that station (+PIN) ->
   `station_visitor_pass` (until midnight, `private.end_of_today`); sync cache `visitors` {employee id: ends_at} so it works offline

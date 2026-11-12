@@ -155,6 +155,7 @@ button.row:hover { background: var(--surface-2); }
 .ctchecks legend { font-weight: 700; font-size: 13.5px; padding: 0 4px; }
 .fgrid .ctchecks label { flex-direction: row; align-items: center; gap: 8px; font-weight: 500; font-size: 14px; }
 .badtext { color: var(--bad) !important; }
+.kindchip { font-size: 11.5px; padding: 1px 7px; vertical-align: 1px; }
 .fgrid label.check { flex-direction: row; gap: 10px; font-weight: 600; font-size: 14px; padding: 2px 0; }
 .fgrid label.check span { display: flex; flex-direction: column; gap: 2px; }
 .acct-why { margin: 0; padding: 10px 12px; border-radius: 8px; background: var(--bad-bg); color: var(--bad); font-size: 13.5px; line-height: 1.45; }
@@ -782,12 +783,13 @@ const log = (c, action, details = "") => DB.log.unshift({ id: uid("lg"), at: Dat
 
 /* Contracts and who leads them (migration 33). Only Sonoran Point changes the tree; customers send a request. */
 const CT_ERR = { name_required: "Enter a name.", name_too_long: "Keep it under 60 characters.", duplicate_name: "There's already one with that name there.",
-  parent_inside_itself: "It can't go inside itself.", unknown_parent: "Pick where it goes.", unknown_contract: "Pick from their list.",
+  parent_inside_itself: "It can't go inside itself.", bad_kind: "Pick location or contract.", unknown_parent: "Pick where it goes.", unknown_contract: "Pick from their list.",
   pick_contract: "Pick at least one for them. Someone who isn't an admin only sees what they're given.", owner_sees_all: "Admins see everything, so they don't get a list.",
   outside_scope: "That's outside their branch.", already_member: "That person is already on their team.", bad_email: "Enter a full email address.",
   last_owner: "They need at least one admin. Make someone else an admin first.", not_member: "They're no longer on the team.", not_a_member: "They're no longer on the team.", not_found: "That's gone. Refresh the page." };
 const MEMBER_ROLE = { owner: "Admin", admin: "Manager", supervisor: "Supervisor", viewer: "View Only" };
 const ctWord = (c) => ({ one: c.terms?.contract || "Contract", many: c.terms?.contract_plural || "Contracts" });
+const isLoc = (k) => k?.kind === "location";
 const ctInBranch = (c, id, top) => { let x = (c.contracts || []).find((k) => k.id === id), n = 0; while (x && n++ < 50) { if (x.id === top) return true; x = (c.contracts || []).find((k) => k.id === x.parent_id); } return false; };
 function ctCheck(c, id, name, parent) {   // same checks as save_contract
   if (!name) return "name_required"; if (name.length > 60) return "name_too_long";
@@ -885,10 +887,11 @@ const api = {
     const c = custOf(orgId), name = (d.name || "").trim(), parent = d.parent || null;
     const err = ctCheck(c, id, name, parent); if (err) return { ok: false, error: CT_ERR[err] };
     const pname = c.contracts.find((k) => k.id === parent)?.name;
-    if (id) { const k = c.contracts.find((x) => x.id === id); const from = k.name; Object.assign(k, { name, parent_id: parent, share: !!d.share, move: !!d.move });
-      log(c, "changed contract", changeText({ name, ...(from !== name ? { from } : {}) })); return { ok: true, id }; }
-    const nid = uid("ct"); c.contracts.push({ id: nid, parent_id: parent, name, share: !!d.share, move: !!d.move });
-    log(c, "added contract", changeText({ name, parent: pname })); return { ok: true, id: nid };
+    const kind = d.kind === "location" ? "location" : "contract";
+    if (id) { const k = c.contracts.find((x) => x.id === id); const from = k.name; Object.assign(k, { name, kind, parent_id: parent, share: !!d.share, move: !!d.move });
+      log(c, `changed ${kind}`, changeText({ name, ...(from !== name ? { from } : {}) })); return { ok: true, id }; }
+    const nid = uid("ct"); c.contracts.push({ id: nid, parent_id: parent, name, kind, share: !!d.share, move: !!d.move });
+    log(c, `added ${kind}`, changeText({ name, parent: pname })); return { ok: true, id: nid };
   },
   /* rpc delete_contract(id) — only an empty one */
   deleteContract(orgId, id) {
@@ -1297,7 +1300,7 @@ const liveApi = {
   async saveContract(orgId, id, d) {
     const c = custOf(orgId), name = (d.name || "").trim(), parent = d.parent || null;
     const err = ctCheck(c, id, name, parent); if (err) return { ok: false, error: CT_ERR[err] };
-    try { const r = await rpc("save_contract", { p_org: orgId, p: { id: id || null, name, parent_id: parent, share_children: !!d.share, move_on_return: !!d.move } });
+    try { const r = await rpc("save_contract", { p_org: orgId, p: { id: id || null, name, kind: d.kind === "location" ? "location" : "contract", parent_id: parent, share_children: !!d.share, move_on_return: !!d.move } });
       if (!r.ok) return { ok: false, error: CT_ERR[r.error] || r.error }; await live.refresh(orgId).catch(() => {}); return { ok: true, id: r.id }; }
     catch (e) { return { ok: false, error: nice(e) }; }
   },
@@ -1893,7 +1896,7 @@ function contractsPanel(c, edit) {
   if (!edit) {
     if (!tree.length) return "";
     return `<section class="panel"><div class="panel-h"><h2>${esc(w.many)}</h2></div>
-      <div class="list">${tree.map((k) => `<div class="row" style="padding-left:${18 + k.depth * 24}px"><b>${esc(k.name)}</b><span class="sub">${esc(shareText(k))}</span>
+      <div class="list">${tree.map((k) => `<div class="row" style="padding-left:${18 + k.depth * 24}px"><b>${esc(k.name)}${isLoc(k) ? ` <span class="muted" style="font-weight:400">(location)</span>` : ""}</b><span class="sub">${esc(shareText(k))}</span>
         <span class="muted">${esc(leadsOf(c, k.id).map((m) => m.name || m.email).join(", "))}</span></div>`).join("")}</div></section>`;
   }
   const counts = (k) => { const st = k.stations ?? c.stations.filter((s) => s.contract_id === k.id && !s.revoked).length;
@@ -1904,29 +1907,32 @@ function contractsPanel(c, edit) {
   const add = S.ct?.mode === "add" ? S.ct.parent : undefined;
   const row = (k) => S.ct?.mode === "edit" && S.ct.id === k.id ? `<div class="ctedit" style="margin-left:${k.depth * 24}px">${ctForm(c, k)}</div>`
     : `<div class="row ctrow" style="padding-left:${18 + k.depth * 24}px"><span class="dot ${leadsOf(c, k.id).length ? "ok" : ""}"></span>
-        <span><b>${esc(k.name)}</b><span class="sub">${esc(leadLine(k))}</span>${counts(k) || shareText(k) ? `<span class="sub">${esc([counts(k), shareText(k)].filter(Boolean).join(" · "))}</span>` : ""}</span>
+        <span><b>${esc(k.name)}</b> <span class="chip ${isLoc(k) ? "info" : "quiet"} kindchip">${isLoc(k) ? "Location" : esc(w.one)}</span><span class="sub">${esc(leadLine(k))}</span>${counts(k) || shareText(k) ? `<span class="sub">${esc([counts(k), shareText(k)].filter(Boolean).join(" · "))}</span>` : ""}</span>
         <span class="acts"><button class="btn sm" data-act="ctEdit" data-id="${k.id}" aria-label="Change ${esc(k.name)}">Change</button><button class="btn sm" data-act="ctAdd" data-id="${k.id}">Add under it</button></span></div>
       ${add === k.id ? `<div class="ctedit" style="margin-left:${(k.depth + 1) * 24}px">${ctForm(c, null, k.id)}</div>` : ""}`;
-  return `<section class="panel" id="contracts"><div class="panel-h"><h2>${esc(w.many)} and leads</h2>${add === "" ? "" : `<button class="btn sm" data-act="ctAdd" data-id="">Add ${esc(w.one.toLowerCase())}</button>`}</div>
+  return `<section class="panel" id="contracts"><div class="panel-h"><h2>Locations, ${esc(w.many.toLowerCase())} and leads</h2>${add === "" ? "" : `<button class="btn sm" data-act="ctAdd" data-id="">Add</button>`}</div>
     ${add === "" ? `<div class="ctedit">${ctForm(c, null, "")}</div>` : ""}
     ${tree.length ? `<div class="list">${tree.map(row).join("")}</div>
-      <form class="panel-b ctshare" data-form="ctshare"><label class="check"><input type="checkbox" name="share" ${c.share_contracts ? "checked" : ""}><span>Top-level ${esc(w.many.toLowerCase())} share badges and equipment</span></label>
+      <form class="panel-b ctshare" data-form="ctshare"><label class="check"><input type="checkbox" name="share" ${c.share_contracts ? "checked" : ""}><span>The top-level ones share badges and equipment with each other</span></label>
         <label class="check"><input type="checkbox" name="move" ${c.move_on_return ? "checked" : ""}><span>Items move to where they're returned</span></label><button class="btn sm">Save sharing</button></form>
-      <p class="panel-b muted ctnote">Each lead only sees their own ${esc(w.one.toLowerCase())} and what's under it. Their team can't change this list: they send you a request from their dashboard.</p>`
-    : add === "" ? "" : `<div class="empty" style="text-align:left">No ${esc(w.many.toLowerCase())}: everyone on their team sees the whole company. Add one to split it up by site, airline or operation, then give each its own lead.</div>`}
+      <p class="panel-b muted ctnote">Each lead only sees what they're given and everything under it (a lead for a location sees every ${esc(w.one.toLowerCase())} there). Their team can't change this list: they send you a request from their dashboard.</p>`
+    : add === "" ? "" : `<div class="empty" style="text-align:left">Nothing here yet: everyone on their team sees the whole company. Add locations (like PHX, then T3 under it) and the ${esc(w.many.toLowerCase())} at each (like Delta BW), then give each its own lead.</div>`}
   </section>`;
 }
 const leadsOf = (c, id) => c.members.filter((m) => m.role !== "owner" && (m.contracts || []).includes(id)).sort((a, b) => (b.role === "admin") - (a.role === "admin"));
 function ctForm(c, k, parent) {   // k = contract being changed, or null to add one under parent ("" = top level)
   const w = ctWord(c), tree = contractTreeOf(c), at = k ? k.parent_id || "" : parent;
+  const kind = k ? (isLoc(k) ? "location" : "contract") : at ? "contract" : "location";   // new: top level is usually a site
   return `<form class="panel-b fgrid" data-form="contract" data-id="${k ? k.id : ""}">
-    <label>Name<input class="field" name="name" maxlength="60" required value="${esc(k?.name || "")}" placeholder="${at ? "Delta BW" : "PHX"}"></label>
+    <div class="full radios" role="radiogroup" aria-label="What is it"><label><input type="radio" name="kind" value="location" ${kind === "location" ? "checked" : ""}> Location <small>A site or terminal, like PHX or T3</small></label>
+      <label><input type="radio" name="kind" value="contract" ${kind === "contract" ? "checked" : ""}> ${esc(w.one)} <small>The work itself, like Delta BW or Wheelchair</small></label></div>
+    <label>Name<input class="field" name="name" maxlength="60" required value="${esc(k?.name || "")}" placeholder="${kind === "location" ? "PHX" : "Delta BW"}"></label>
     <label>Inside<select class="field" name="parent"><option value="">Top level</option>${tree.filter((t) => !k || !ctInBranch(c, t.id, k.id))
       .map((t) => `<option value="${t.id}" ${t.id === at ? "selected" : ""}>${" ".repeat(t.depth)}${esc(t.name)}</option>`).join("")}</select></label>
     <label class="full check"><input type="checkbox" name="share" ${k?.share ? "checked" : ""}><span>What's under it shares badges and equipment<small>Off: the ${esc(w.many.toLowerCase())} under it never cross.</small></span></label>
     <label class="full check"><input type="checkbox" name="move" ${k?.move ? "checked" : ""}><span>Items move to where they're returned</span></label>
     <div class="err full" role="alert">${S.formErr?.form === "contract" ? esc(S.formErr.text) : ""}</div>
-    <div class="actions full"><button class="btn primary">${k ? "Save" : `Add ${esc(w.one.toLowerCase())}`}</button><button class="btn" type="button" data-act="ctCancel">Cancel</button>
+    <div class="actions full"><button class="btn primary">${k ? "Save" : "Add"}</button><button class="btn" type="button" data-act="ctCancel">Cancel</button>
       ${k ? (S.confirm === "ctdel:" + k.id ? `<span class="confirm">Remove ${esc(k.name)}? <button class="btn sm danger" type="button" data-act="ctDel" data-id="${k.id}">Remove</button><button class="btn sm" type="button" data-act="noConfirm">No</button></span>`
         : `<button class="btn danger" type="button" data-act="ctAskDel" data-id="${k.id}">Remove</button>`) : ""}</div></form>`;
 }
@@ -2711,7 +2717,7 @@ async function onSubmit(f, kind, fd, d) {
     if (!r.ok) { $("#invErr").textContent = r.error; return; } S.lastInvite = r; S.invRole = null; S.invCts = null;
     toast(r.mailErr ? "Invite made, but the email didn't send. Copy the link below." : `Invite sent to ${r.email}`); return render(); }
   if (kind === "contract") {
-    const id = f.dataset.id || null; const r = await api.saveContract(c.id, id, { name: d.name, parent: d.parent || null, share: !!d.share, move: !!d.move });
+    const id = f.dataset.id || null; const r = await api.saveContract(c.id, id, { name: d.name, kind: d.kind, parent: d.parent || null, share: !!d.share, move: !!d.move });
     if (!r.ok) { S.formErr = { form: "contract", text: r.error }; return render(); }
     S.ct = null; S.formErr = null; toast(id ? "Saved" : `Added ${d.name.trim()}`); return render(); }
   if (kind === "ctshare") { const r = await api.contractSettings(c.id, !!d.share, !!d.move); toast(r.ok ? "Sharing saved" : r.error); return render(); }

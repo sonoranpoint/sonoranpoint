@@ -2168,17 +2168,18 @@ function vContracts() {
   const T = CTERM(), tree = api.contracts(), o = DB.org;
   const count = (id) => ({ st: DB.stations.filter((x) => x.contract === id && !x.revoked).length, emp: DB.employees.filter((x) => x.contract === id && x.active).length,
     eq: DB.equipment.filter((x) => x.contract === id && x.status !== "retired").length });
-  const rules = (c) => [c.hasKids ? (c.share ? `Badges and equipment work across the ${T.many.toLowerCase()} under it` : `The ${T.many.toLowerCase()} under it don't share`) : "",
+  const rules = (c) => [c.hasKids ? (c.share ? `Badges and equipment work across everything ${c.kind === "location" ? "here" : "under it"}` : c.kind === "location" ? `What's here doesn't share` : `The ${T.many.toLowerCase()} under it don't share`) : "",
     c.move ? "Items move to where they're returned" : ""].filter(Boolean).join(" · ");
   const leads = (id) => (can("admin") ? api.members().members : []).filter((m) => m.role === "admin" && (m.contracts || []).includes(id)).map((m) => m.name);
-  return `<section class="panel" id="contracts"><div class="panel-h"><h2>${esc(T.many)}</h2></div>
+  const hasLoc = tree.some((c) => c.kind === "location");
+  return `<section class="panel" id="contracts"><div class="panel-h"><h2>${hasLoc ? `Locations and ${esc(T.many.toLowerCase())}` : esc(T.many)}</h2></div>
     <div class="panel-b muted" style="font-size:13.5px;padding-bottom:0">${tree.length
-      ? `Your stations, people and equipment are split into ${esc(T.many.toLowerCase())}. A station only serves its own ${esc(T.one.toLowerCase())} unless the group they're in shares. Each person on this dashboard sees only the ${esc(T.many.toLowerCase())} they're given; admins see everything.`
+      ? `Your stations, people and equipment are split into ${hasLoc ? `locations and ${esc(T.many.toLowerCase())}` : esc(T.many.toLowerCase())}. A station only serves its own ${esc(T.one.toLowerCase())} unless the group they're in shares. Each person on this dashboard sees only the ${esc(T.many.toLowerCase())} they're given; admins see everything.`
       : `Split your stations, people and equipment by site, airline or operation, like ${window.SP_DEMO ? "Shipping and Maintenance" : "PHX Delta BW and PDX Delta BW"}, each with its own lead who only sees their own. Ask us below and we'll set it up.`}</div>
     ${tree.length ? `<div class="panel-b ctree">
       ${!myScopeIds() && (tree.length > 1 || tree.some((c) => c.hasKids)) ? `<div class="crow top"><span><b>Whole company</b><span class="sub">${o.settings?.share_contracts ? `Top-level ${esc(T.many.toLowerCase())} share badges and equipment` : `Top-level ${esc(T.many.toLowerCase())} don't share`}${o.settings?.move_on_return ? " · Items move to where they're returned" : ""}</span></span><span></span><span></span></div>` : ""}
       ${tree.map((c) => { const n = count(c.id), ls = leads(c.id); return `<div class="crow" style="--d:${c.depth}">
-        <span><b>${esc(c.name)}</b><span class="sub">${[ls.length ? `Lead: ${ls.join(", ")}` : "", n.st && `${n.st} station${n.st > 1 ? "s" : ""}`, n.emp && `${n.emp} ${n.emp > 1 ? "people" : "person"}`, n.eq && `${n.eq} item${n.eq > 1 ? "s" : ""}`].filter(Boolean).map(esc).join(" · ") || (c.hasKids ? "" : "Nothing in it yet")}</span></span>
+        <span><b>${esc(c.name)}</b>${c.kind === "location" ? ` <span class="chip info" style="font-size:11.5px;padding:1px 7px">Location</span>` : ""}<span class="sub">${[ls.length ? `Lead: ${ls.join(", ")}` : "", n.st && `${n.st} station${n.st > 1 ? "s" : ""}`, n.emp && `${n.emp} ${n.emp > 1 ? "people" : "person"}`, n.eq && `${n.eq} item${n.eq > 1 ? "s" : ""}`].filter(Boolean).map(esc).join(" · ") || (c.hasKids ? "" : "Nothing in it yet")}</span></span>
         <span class="sub cflags">${esc(rules(c))}</span><span></span></div>`; }).join("")}
     </div>` : ""}
     ${can("admin") ? (S.ctSent ? `<div class="panel-b" style="border-top:1px solid var(--line)"><b>Request sent.</b> <span class="muted">We'll reply by email, usually within one business day.</span> <button class="btn sm" data-act="ctMore">Ask for something else</button></div>`
@@ -2829,7 +2830,7 @@ const live = {
       invites: (team.invites || []).map((i) => ({ id: i.id, email: i.email, role: i.role, created: ms(i.created_at), expires: ms(i.expires_at) })),
       me: { id: L.user.id, name: L.names[L.user.id], role, email: L.user.email }, audit: [], reportAcks: {}, occs: [],
       reasons: reasons.map((r) => ({ id: r.id, label: r.label, blocks: r.blocks_checkout, sort: r.sort_order })),
-      contracts: contracts.map((c) => ({ id: c.id, parent: c.parent_id, name: c.name, share: c.share_children, move: c.move_on_return, sort: c.sort_order })),
+      contracts: contracts.map((c) => ({ id: c.id, parent: c.parent_id, name: c.name, kind: c.kind || "contract", share: c.share_children, move: c.move_on_return, sort: c.sort_order })),
       emailPrefs: Object.fromEntries(prefs.map((p) => [p.user_id, p.kinds || []])),
     });
     DB.outages = await q(sb.from("station_outages").select("station_id,started_at,ended_at").eq("org_id", org).gte("ended_at", new Date(Date.now() - 8 * 86400000).toISOString()).limit(2000))

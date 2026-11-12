@@ -1510,6 +1510,21 @@ reset role;
 update equipment set contract_id = null where nfc_uid in ('04DE000101', '04DE000201');
 delete from equipment_categories where name = 'Tow bars';
 
+\echo '--- Locations in the tree (migration 35)'
+set role authenticated;
+select set_config('request.jwt.claim.sub', '99999999-0000-0000-0000-000000000009', false) \g /dev/null
+select save_contract('00000000-0000-0000-0000-00000000d3e0', '{"name":"PHX","kind":"location"}') as loc \gset
+select pg_temp.ok((:'loc'::jsonb->>'ok')::boolean and (select c->>'kind' from jsonb_array_elements(platform_customer('00000000-0000-0000-0000-00000000d3e0')->'contracts') c where c->>'name' = 'PHX') = 'location',
+                  'an entry can be a location');
+select pg_temp.ok(save_contract('00000000-0000-0000-0000-00000000d3e0', '{"name":"X","kind":"planet"}')->>'error' = 'bad_kind', 'only locations and contracts');
+select save_contract('00000000-0000-0000-0000-00000000d3e0', jsonb_build_object('id', :'loc'::jsonb->>'id', 'name', 'PHX Sky Harbor')) \g /dev/null
+reset role;
+select pg_temp.ok((select kind from contracts where name = 'PHX Sky Harbor') = 'location', 'renaming keeps it a location');
+set role authenticated;
+select delete_contract((:'loc'::jsonb->>'id')::uuid) as del \gset
+reset role;
+select pg_temp.ok((:'del'::jsonb->>'ok')::boolean and not exists (select 1 from contracts where name like 'PHX%'), 'and it can be removed');
+
 \echo '--- Visitor passes (migration 34)'
 reset role;
 select id as dbw from contracts where name = 'Delta BW' \gset

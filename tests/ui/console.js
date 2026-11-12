@@ -142,14 +142,15 @@ const api_set = async (id) => { E(`api.updateCustomer('${id}', { logo_dark_url: 
   {
     const fill = async (sel, vals) => { const f = doc.querySelector(sel); for (const [k, v] of Object.entries(vals)) f.elements[k].value = v; await submit(sel); };
     await go("customer/" + demoId); const ct = () => doc.querySelector("#contracts").textContent.replace(/\s+/g, " ");
-    check(/Contracts and leads/.test(ct()) && /Lead: Dana Brooks/.test(ct()) && /No lead yet/.test(ct()), "the customer page lists their contracts and who leads each");
+    check(/Locations, contracts and leads/.test(ct()) && /Lead: Dana Brooks/.test(ct()) && /No lead yet/.test(ct()), "the customer page lists their contracts and who leads each");
     await click('[data-act="ctAdd"][data-id=""]');
     await fill('[data-form="contract"]', { name: "PHX" });
     const phx = E("custOf('" + demoId + "').contracts.find(k => k.name === 'PHX')?.id");
-    check(!!phx && /PHX/.test(ct()) && E("DB.log[0].action") === "added contract", "add a top-level contract (logged)");
+    check(!!phx && /PHX Location/.test(ct()) && E("DB.log[0].action") === "added location", "add a location at the top (logged)");
     await click(`[data-act="ctAdd"][data-id="${phx}"]`);
     await fill('[data-form="contract"]', { name: "Wheelchair" });
-    check(E(`custOf('${demoId}').contracts.find(k => k.name === 'Wheelchair').parent_id`) === phx, "add one under it");
+    check(E(`custOf('${demoId}').contracts.find(k => k.name === 'Wheelchair').parent_id`) === phx && E(`custOf('${demoId}').contracts.find(k => k.name === 'Wheelchair').kind`) === "contract",
+          "add a contract under it (contract is the default there)");
     await click(`[data-act="ctAdd"][data-id="${phx}"]`); await fill('[data-form="contract"]', { name: "wheelchair" });
     check(/already one with that name/.test(ct()), "no two with the same name in one place");
     await click('[data-act="ctCancel"]');

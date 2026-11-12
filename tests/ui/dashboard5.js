@@ -20,9 +20,12 @@ const change = async (el, v) => { if (typeof v === "boolean") el.checked = v; el
   await go("settings");
   const rows = () => [...doc.querySelectorAll(".ctree .crow:not(.top) > span:first-child > b")].map((b) => b.textContent);
   check(JSON.stringify(rows()) === JSON.stringify(["BW", "Delta BW", "United BW", "AW", "Delta AW", "United AW"]), "settings shows the contract tree, groups first then what's under them");
-  check(/Whole company/.test(page()) && /Badges and equipment work across the contracts under it/.test(page()) && /The contracts under it don't share/.test(page()),
+  check(/Whole company/.test(page()) && /Badges and equipment work across everything under it/.test(page()) && /The contracts under it don't share/.test(page()),
         "it says how each group shares (AW on, BW off)");
   check(!doc.querySelector('[data-act="addContract"], [data-act="askDelContract"], input.cname, #contracts input[type=checkbox]'), "contracts can't be added, renamed, deleted or reshared here (Sonoran Point does that)");
+  E("contractOf('bw').kind = 'location'; render()"); await sleep(20);
+  check(/Locations and contracts/.test(page()) && /BWLocation/.test(page().replace(/\s+/g, "")) && /What's here doesn't share/.test(page()), "a location is labelled as one");
+  E("contractOf('bw').kind = 'contract'; render()"); await sleep(20);
   await submit('[data-form="contractRequest"]', { message: "  " });
   check(/Say what you'd like changed/.test(doc.querySelector("#ctReqErr").textContent), "an empty request is caught");
   await submit('[data-form="contractRequest"]', { message: "Add Wheelchair under AW with Walter as its lead" });
