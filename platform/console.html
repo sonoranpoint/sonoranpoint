@@ -147,6 +147,9 @@ button.row:hover { background: var(--surface-2); }
 .fgrid label { display: flex; flex-direction: column; gap: 5px; font-weight: 700; font-size: 13.5px; min-width: 0; }
 .fgrid label small { font-weight: 400; color: var(--muted); font-size: 12.5px; }
 .fgrid .field { width: 100%; }
+.fgrid label.check { flex-direction: row; gap: 10px; font-weight: 600; font-size: 14px; padding: 2px 0; }
+.fgrid label.check span { display: flex; flex-direction: column; gap: 2px; }
+.acct-why { margin: 0; padding: 10px 12px; border-radius: 8px; background: var(--bad-bg); color: var(--bad); font-size: 13.5px; line-height: 1.45; }
 @media (max-width: 560px) { .fgrid { grid-template-columns: minmax(0, 1fr); } }
 .colorrow { display: flex; gap: 8px; align-items: center; }
 .colorrow input[type=color] { width: 44px; height: 36px; padding: 2px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); flex: none; }
@@ -611,7 +614,7 @@ function buildDemo() {
   const waiting = (name, location, daysAgo) => st(name, location, { activated_at: null, last_seen: null, version: null, admin_claimed_at: null,
     code: newCode(), code_expires: now - daysAgo * DAY + 7 * DAY, created: now - daysAgo * DAY });
   const C = (o) => ({ id: uid("org"), logo_url: "", timezone: "America/Phoenix", terms: { ...DEFAULT_TERMS }, modules: [], station_limit: null,
-    trial_ends: null, notes: "", invites: [], log: [], contracts: [], locations: [], events: [], logo_dark_url: "", ...o });
+    trial_ends: null, pause_trial: true, paused_reason: null, notes: "", invites: [], log: [], contracts: [], locations: [], events: [], logo_dark_url: "", ...o });
   const demoContracts = [{ id: "bw", parent_id: null, name: "BW" }, { id: "aw", parent_id: null, name: "AW", share: true, move: true },
     { id: "dbw", parent_id: "bw", name: "Delta BW" }, { id: "ubw", parent_id: "bw", name: "United BW" }, { id: "daw", parent_id: "aw", name: "Delta AW" }, { id: "uaw", parent_id: "aw", name: "United AW" }];
   const customers = [
@@ -748,6 +751,7 @@ function changeText(d) {
     modules: (v) => `Modules: ${(v || []).map((m) => MODULES.find((x) => x.id === m)?.name || m).join(", ") || "none"}`,
     contact_name: (v) => `Contact: ${v}`, contact_email: (v) => `Contact email: ${v}`, contact_phone: (v) => `Contact phone: ${v}`,
     timezone: (v) => `Time zone: ${v}`, notes: () => "Notes changed",
+    pause_at_trial_end: (v) => v ? "Pauses when the trial ends" : "Won't pause when the trial ends", pause_trial: (v) => v ? "Pauses when the trial ends" : "Won't pause when the trial ends",
     unit: (v) => v, from_customer: (v) => `From ${v}`, from_station: (v) => `station ${v}`, kind: (v) => HW_KIND[v] || v, customer: (v) => v ? `Customer: ${v}` : "No customer", station: (v) => v ? `Station: ${v}` : "No station",
     pi_serial: (v) => v ? `Pi serial ${v}` : "Pi serial cleared", software: (v) => `Software ${v || "cleared"}`, built_at: (v) => v ? `Built ${fmtDay(v)}` : "Build date cleared",
     shipped_at: (v) => v ? `Shipped ${fmtDay(v)}` : "Ship date cleared", carrier: (v) => v ? `Carrier: ${v}` : "Carrier cleared", tracking: (v) => v ? `Tracking ${v}` : "Tracking cleared",
@@ -771,6 +775,10 @@ const log = (c, action, details = "") => DB.log.unshift({ id: uid("lg"), at: Dat
 const api = {
   /* rpc platform_customers() */
   customers() {
+    // Server: private.end_trials() (migration 32) pauses a trial a day after it ends, unless that's turned off.
+    for (const c of DB.customers) if (c.status === "trial" && c.pause_trial !== false && c.trial_ends && c.trial_ends + DAY <= Date.now()) {
+      c.status = "paused"; c.paused_reason = "trial_ended"; DB.log.unshift({ id: uid("lg"), at: Date.now(), by: "Sonoran Point", org: c.id, customer: c.name, action: "trial ended: paused", details: "" });
+    }
     return DB.customers.map((c) => {
       const live = c.stations.filter((s) => !s.revoked); const states = live.map((s) => stationState(s, c).key);
       return { ...c, stations_total: live.length, stations_online: states.filter((k) => k === "online").length,
@@ -818,6 +826,7 @@ const api = {
     const before = JSON.parse(JSON.stringify(c)), changed = {};
     for (const [k, v] of Object.entries(patch)) if (!k.startsWith("_") && JSON.stringify(before[k] ?? null) !== JSON.stringify(k === "primary" || k === "accent" ? v.toUpperCase() : v ?? null)) changed[k] = v;
     Object.assign(c, patch);
+    if ("status" in changed) c.paused_reason = null;
     if ("primary" in patch) c.primary = c.primary.toUpperCase(); if ("accent" in patch) c.accent = c.accent.toUpperCase();
     delete c._note;
     if (Object.keys(changed).length) log(c, "status" in changed ? `status: ${patch.status}` : what, patch._note || changeText(changed));
@@ -1111,6 +1120,7 @@ const live = {
       const p = prev[c.id] || {};
       return { ...p, id: c.id, name: c.name, slug: c.slug, status: c.status, plan: c.plan, primary: c.primary_color, accent: c.accent_color,
         logo_url: c.logo_url || "", modules: c.enabled_modules || [], station_limit: c.station_limit, trial_ends: ms(c.trial_ends_at),
+        pause_trial: c.pause_at_trial_end !== false, paused_reason: c.paused_reason || null,
         contact_name: c.contact_name || "", contact_email: c.contact_email || "", created: ms(c.created_at), has_owner: c.has_owner,
         usage: { employees: c.employees, equipment: c.equipment, taps7d: c.taps_7d, last_tap: ms(c.last_tap_at) },
         terms: p.terms || { ...DEFAULT_TERMS }, timezone: p.timezone || "America/Phoenix", contact_phone: p.contact_phone || "", notes: p.notes || "",
@@ -1173,7 +1183,7 @@ const liveApi = {
     if (("primary" in patch && !hex(patch.primary)) || ("accent" in patch && !hex(patch.accent))) return { ok: false, error: "Colors must look like #1F4E79." };
     if ("contact_email" in patch && patch.contact_email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(patch.contact_email)) return { ok: false, error: "That contact email doesn't look right." };
     const map = { name: "name", primary: "primary_color", accent: "accent_color", logo_url: "logo_url", logo_dark_url: "logo_dark_url", terms: "terminology", modules: "modules", status: "status", plan: "plan",
-      station_limit: "station_limit", contact_name: "contact_name", contact_email: "contact_email", contact_phone: "contact_phone", notes: "notes", timezone: "timezone" };
+      station_limit: "station_limit", pause_trial: "pause_at_trial_end", contact_name: "contact_name", contact_email: "contact_email", contact_phone: "contact_phone", notes: "notes", timezone: "timezone" };
     const p = {};
     for (const [k, v] of Object.entries(patch)) if (map[k]) p[map[k]] = k === "primary" || k === "accent" ? v.toUpperCase() : v;
     if ("trial_ends" in patch) p.trial_ends_at = patch.trial_ends ? new Date(patch.trial_ends).toISOString() : null;
@@ -1443,6 +1453,9 @@ function ago(ms, short) {
 }
 const fmtDate = (ms) => ms ? new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(ms)) : "—";
 const fmtWhen = (ms) => new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(ms));
+// When a trial customer's stations pause on their own: a day after the trial ends (private.end_trials, migration 32).
+const pauseAt = (c) => c.status === "trial" && c.trial_ends && c.pause_trial !== false ? c.trial_ends + DAY : null;
+const trialPaused = (c) => c.status === "paused" && c.paused_reason === "trial_ended";
 function untilText(ms) { const d = Math.ceil((ms - Date.now()) / DAY); return d < 0 ? `ended ${-d} day${d === -1 ? "" : "s"} ago` : d === 0 ? "ends today" : `${d} day${d === 1 ? "" : "s"} left`; }
 const fmtDay = (d) => d ? fmtDate(Date.parse(String(d).slice(0, 10) + "T12:00:00")) : "—";
 const hwChip = (st) => `<span class="chip ${HW_STATUS[st][1]}">${HW_STATUS[st][0]}</span>`;
@@ -1484,7 +1497,9 @@ function renderLayer() { $("#layer").innerHTML = (S.preview ? vPreview() : "") +
 function attention() {
   const out = [], now = Date.now();
   for (const c of api.customers()) {
-    if (c.status === "trial" && c.trial_ends && c.trial_ends - now < 7 * DAY) out.push({ kind: "trial", tone: c.trial_ends < now ? "bad" : "warn", c, text: `Trial ${untilText(c.trial_ends)}`, sub: "Talk to them about going live, or extend the trial." });
+    if (c.status === "trial" && c.trial_ends && c.trial_ends - now < 7 * DAY) out.push({ kind: "trial", tone: c.trial_ends < now ? "bad" : "warn", c, text: `Trial ${untilText(c.trial_ends)}`,
+      sub: pauseAt(c) ? `Their stations pause ${fmtDate(pauseAt(c))}. Talk to them about going live, or extend the trial.` : "Talk to them about going live, or extend the trial. It won't pause on its own." });
+    if (trialPaused(c)) out.push({ kind: "trial", tone: "bad", c, text: "Trial ended, stations paused", sub: "Set them to active to turn their stations back on, or extend the trial." });
     for (const s of c.stations.filter((x) => !x.revoked)) {
       const st = stationState(s, c);
       if (st.key === "offline" && now - s.last_seen > 15 * MIN) out.push({ kind: "offline", tone: st.tone, c, text: `${s.name} offline for ${ago(s.last_seen, true)}`, sub: "Taps are being saved on the station. Check its power and Wi-Fi." });
@@ -1590,7 +1605,7 @@ function vCustomers() {
             <td><span class="cust">${cav(c)}<span class="cname"><b>${esc(c.name)}</b><small>${esc(c.contact_name || c.slug)}</small></span></span></td>
             <td>${planChip(c.plan)}</td><td>${statusDot(c.status)}</td>
             <td class="num">${c.stations_total ? `${c.stations_online} / ${c.stations_total - c.stations_waiting}` : "—"}${c.stations_waiting ? `<span class="sub">${c.stations_waiting} waiting for setup</span>` : ""}${c.stations_offline ? `<span class="sub" style="color:var(--bad)">${c.stations_offline} offline</span>` : ""}</td>
-            <td>${c.status === "trial" && c.trial_ends ? `${esc(fmtDate(c.trial_ends))}<span class="days ${d < 0 ? "bad" : ""}">${d < 0 ? `Ended ${-d} day${d === -1 ? "" : "s"} ago` : d === 0 ? "Ends today" : `${d} day${d === 1 ? "" : "s"}`}</span>` : `<span class="muted">—</span>`}</td>
+            <td>${trialPaused(c) ? `${c.trial_ends ? esc(fmtDate(c.trial_ends)) : ""}<span class="days bad">Ended, paused</span>` : c.status === "trial" && c.trial_ends ? `${esc(fmtDate(c.trial_ends))}<span class="days ${d < 0 ? "bad" : ""}">${d < 0 ? `Ended ${-d} day${d === -1 ? "" : "s"} ago` : d === 0 ? "Ends today" : `${d} day${d === 1 ? "" : "s"}`}</span>` : `<span class="muted">—</span>`}</td>
             <td style="text-align:right"><button class="kebab" data-preview="${c.id}" aria-label="More about ${esc(c.name)}">${ic("more")}</button></td></tr>`; }).join("")
             || `<tr><td colspan="6" class="empty">${all.length ? "No customers match." : "No customers yet. Add your first one."}</td></tr>`}
           </tbody></table></div>
@@ -1662,6 +1677,8 @@ function vPreview() {
       <dt>Admin</dt><dd>${owner ? "Signed in" : c.invites.length ? `Invite sent to ${esc(c.invites[0].email)}` : "Not invited yet"}</dd></dl></div></section>
     <section class="panel"><div class="panel-h"><h2>Plan and status</h2></div><div class="panel-b"><dl class="kv">
       <dt>Plan</dt><dd>${planChip(c.plan)}</dd><dt>Status</dt><dd>${statusDot(c.status)}</dd>
+      ${trialPaused(c) ? `<dt>Paused</dt><dd style="color:var(--bad)">Trial ended${c.trial_ends ? ` ${esc(fmtDate(c.trial_ends))}` : ""}</dd>` : ""}
+      ${pauseAt(c) ? `<dt>Stations pause</dt><dd>${esc(fmtDate(pauseAt(c)))}</dd>` : c.status === "trial" ? `<dt>Stations pause</dt><dd class="muted">Not on their own</dd>` : ""}
       ${c.status === "trial" && c.trial_ends ? `<dt>Trial ends</dt><dd style="color:${d < 3 ? "var(--bad)" : "var(--t-orange)"}">${esc(fmtDate(c.trial_ends))} (${esc(untilText(c.trial_ends))})</dd>` : ""}
       <dt>Stations</dt><dd>${live.length}${c.station_limit != null ? ` of ${c.station_limit}` : ""}</dd></dl></div></section>
     ${live.length ? `<section class="panel"><div class="panel-h"><h2>Stations</h2></div><div class="list">${live.map((s) => { const st = stationState(s, c); return `<div class="ev" style="grid-template-columns:minmax(0,1fr) auto"><span><b>${esc(s.name)}</b><span class="sub">${esc(s.location || s.version || "")}</span></span><span class="chip ${st.tone}">${esc(st.label)}</span></div>`; }).join("")}</div></section>
@@ -1742,7 +1759,7 @@ function vCustomer() {
   const owners = c.members.filter((m) => m.role === "owner");
   return `<div><a class="back" href="#customers">‹ All customers</a></div>
     <div class="head"><div class="cust" style="gap:14px">${swatch(c, true)}
-      <div><h1>${esc(c.name)}</h1><p>${statusChip(c.status)} · ${esc(planName(c.plan))} plan${c.status === "trial" && c.trial_ends ? ` · trial ${esc(untilText(c.trial_ends))}` : ""} · customer since ${esc(fmtDate(c.created))}</p></div></div>
+      <div><h1>${esc(c.name)}</h1><p>${statusChip(c.status)} · ${esc(planName(c.plan))} plan${c.status === "trial" && c.trial_ends ? ` · trial ${esc(untilText(c.trial_ends))}` : ""}${trialPaused(c) ? " · paused because the trial ended" : ""} · customer since ${esc(fmtDate(c.created))}</p></div></div>
       <div class="actions">${c.status === "cancelled"
         ? `<button class="btn" data-act="reopen">Reopen account</button>`
         : cf === "close" ? (() => { const n = c.stations.filter((x) => !x.revoked).length, h = (DB.hw || []).filter((u) => u.org_id === c.id && ["ready", "shipped", "installed"].includes(u.status)).length;
@@ -1815,7 +1832,9 @@ function vCustomer() {
         <form class="panel-b fgrid" data-form="account">
           <label>Status<select class="field" name="status">${Object.entries(STATUS).map(([k, [l]]) => `<option value="${k}" ${c.status === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
           <label>Plan<select class="field" name="plan">${PLANS.map((p) => `<option value="${p.id}" ${c.plan === p.id ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select></label>
+          ${trialPaused(c) ? `<p class="full acct-why" role="status">Paused because the trial ended${c.trial_ends ? ` ${esc(fmtDate(c.trial_ends))}` : ""}. Set the status to Active, or back to Trial with a later end date, to turn their stations back on.</p>` : ""}
           <label id="trialEnds" ${c.status === "trial" ? "" : "hidden"}>Trial ends<input class="field" type="date" name="trial_ends" value="${c.trial_ends ? new Date(c.trial_ends).toISOString().slice(0, 10) : ""}"></label>
+          <label class="full check" id="trialPause" ${c.status === "trial" || trialPaused(c) ? "" : "hidden"}><input type="checkbox" name="pause_trial" ${c.pause_trial !== false ? "checked" : ""}><span>Pause their stations when the trial ends<small>The day after the end date. They and you get an email.</small></span></label>
           <label>Station limit<small>Blank = no limit</small><input class="field" type="number" min="0" max="500" name="station_limit" value="${c.station_limit ?? ""}"></label>
           <label>Contact<input class="field" name="contact_name" maxlength="60" value="${esc(c.contact_name || "")}"></label>
           <label>Contact phone<input class="field" name="contact_phone" maxlength="30" value="${esc(c.contact_phone || "")}"></label>
@@ -2354,7 +2373,7 @@ document.addEventListener("change", async (e) => {
   if (t.id === "logoFile" && t.files?.[0]) { const cc = custOf(S.id), file = t.files[0]; S.logoBusy = true; render();
     try { const url = await uploadLogo(cc.id, file); const r = await api.updateCustomer(cc.id, { logo_url: url }, "updated look"); toast(r.ok ? "Logo saved. Their stations show it within a minute." : r.error); }
     catch (err) { toast(err.message); } S.logoBusy = false; return render(); }
-  if (t.form?.dataset.form === "account" && t.name === "status") { const tr = $("#trialEnds"); if (tr) tr.hidden = t.value !== "trial"; }
+  if (t.form?.dataset.form === "account" && t.name === "status") { const tr = $("#trialEnds"); if (tr) tr.hidden = t.value !== "trial"; const tp = $("#trialPause"); if (tp) tp.hidden = t.value !== "trial"; }
   if (t.dataset.mod) { const c = custOf(S.id); const mods = new Set(c.modules); t.checked ? mods.add(t.dataset.mod) : mods.delete(t.dataset.mod);
     const mr = await api.updateCustomer(c.id, { modules: [...mods], _note: `${MODULES.find((m) => m.id === t.dataset.mod).name} ${t.checked ? "on" : "off"}` }); if (mr && !mr.ok) { toast(mr.error); return render(); } toast(`${MODULES.find((m) => m.id === t.dataset.mod).name} ${t.checked ? "on" : "off"}`); return render(); }
   if (t.dataset.shipunit && t.value) { const c = custOf(S.made?.id); const r = await api.saveHardware({ id: t.value, org_id: c.id, station_id: t.dataset.shipunit });
@@ -2468,7 +2487,7 @@ async function onSubmit(f, kind, fd, d) {
   if (kind === "addStation") { const r = await api.addStation(c.id, d.name); if (!r.ok) return toast(r.error); S.lastCode = { name: r.station.name, code: r.station.code }; toast(`Added ${r.station.name}`); return render(); }
   if (kind === "invite") { const r = await api.inviteOwner(c.id, d.email); if (!r.ok) { $("#invErr").textContent = r.error; return; } S.lastInvite = r; toast(r.mailErr ? "Invite made, but the email didn't send. Copy the link below." : `Invite sent to ${r.email}`); return render(); }
   if (kind === "account") {
-    const patch = { status: d.status, plan: d.plan, trial_ends: d.trial_ends ? Date.parse(d.trial_ends + "T23:59:00") : null, station_limit: d.station_limit === "" ? null : Number(d.station_limit),
+    const patch = { status: d.status, plan: d.plan, trial_ends: d.trial_ends ? Date.parse(d.trial_ends + "T23:59:00") : null, station_limit: d.station_limit === "" ? null : Number(d.station_limit), pause_trial: !!d.pause_trial,
       contact_name: d.contact_name.trim(), contact_phone: d.contact_phone.trim(), contact_email: d.contact_email.trim().toLowerCase(), notes: d.notes.trim() };
     if (patch.status === "trial" && !patch.trial_ends) { S.formErr = { form: "account", text: "Pick when the trial ends." }; return render(); }
     const r = await api.updateCustomer(c.id, patch); if (!r.ok) { S.formErr = { form: "account", text: r.error }; return render(); }

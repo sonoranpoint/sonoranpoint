@@ -300,6 +300,7 @@ label.btn { cursor: pointer; } label.btn.disabled { opacity: .55; cursor: defaul
 .viewas select option { color: #111; }
 .acct-note { border-radius: 10px; padding: 11px 14px; margin-bottom: 18px; font-size: 14px; line-height: 1.45; }
 .acct-note.bad { background: var(--bad-bg); color: var(--bad); } .acct-note.warn { background: var(--warn-bg); color: var(--warn); }
+.acct-note.info { background: var(--info-bg); color: var(--info); }
 .acct-note a { color: inherit; font-weight: 700; }
 .imp-start { display: grid; gap: 12px; } .imp-start label b { display: block; } .imp-start label small { color: var(--muted); }
 .imp-start textarea { min-height: 180px; font-size: 13px; white-space: pre; }
@@ -1399,6 +1400,13 @@ async function uploadLogo(file) {
 function accountNote() {
   const st = DB.org.status;
   if (st === "cancelled") return `<div class="acct-note bad" role="status"><b>This account is closed.</b> Your stations no longer record taps. Everything up to now is still here to look at and download. To reopen it, email <a href="mailto:support@sonoranpoint.com">support@sonoranpoint.com</a>.</div>`;
+  if (st === "paused" && DB.org.paused_reason === "trial_ended") return `<div class="acct-note warn" role="status"><b>Your trial has ended, so your stations are paused.</b> Everything recorded so far is still here. To keep going, email <a href="mailto:support@sonoranpoint.com">support@sonoranpoint.com</a> and we'll turn your stations back on.</div>`;
+  // Trial ending within a week: managers and admins hear when their stations will pause (a day after, migration 32).
+  const end = DB.org.trial_ends;
+  if (st === "trial" && end && end - Date.now() < 7 * 864e5 && can("admin")) {
+    const day = (ms) => { try { return new Date(ms).toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric", timeZone: DB.org.timezone || undefined }); } catch { return new Date(ms).toDateString(); } };
+    return `<div class="acct-note info" role="status"><b>Your trial ends ${esc(day(end))}.</b> ${DB.org.pause_trial !== false ? `If it isn't extended, your stations pause on ${esc(day(end + 864e5))}. ` : ""}To keep going, email <a href="mailto:support@sonoranpoint.com">support@sonoranpoint.com</a>.</div>`;
+  }
   if (st === "paused") return `<div class="acct-note warn" role="status"><b>This account is paused.</b> Your stations aren't recording right now; taps made meanwhile are saved on the station and sync when it's back on. Questions: <a href="mailto:support@sonoranpoint.com">support@sonoranpoint.com</a>.</div>`;
   return "";
 }
@@ -2709,7 +2717,7 @@ const live = {
     const pinSet = new Set(pins || []);
     Object.assign(DB, {
       org: { id: o.id, name: o.name, primary: o.primary_color, accent: o.accent_color, timezone: o.timezone, extended_hours: o.extended_checkout_hours == null ? null : Number(o.extended_checkout_hours),
-        settings: o.settings || {}, terminology: o.terminology || {}, modules: o.enabled_modules || [], logo_url: o.logo_url, logo_dark_url: o.logo_dark_url, status: o.status, trial_ends: ms(o.trial_ends_at) },
+        settings: o.settings || {}, terminology: o.terminology || {}, modules: o.enabled_modules || [], logo_url: o.logo_url, logo_dark_url: o.logo_dark_url, status: o.status, trial_ends: ms(o.trial_ends_at), paused_reason: o.paused_reason || null, pause_trial: o.pause_at_trial_end !== false },
       categories: cats.map((c) => ({ id: c.id, name: c.name, rule: c.time_limit_type, hours: c.default_checkout_hours == null ? null : Number(c.default_checkout_hours),
         extended: c.extended_alert_hours == null ? null : Number(c.extended_alert_hours), sort: c.sort_order })),
       equipment: eq.map((x) => ({ id: x.id, cat: x.category_id, name: x.name, tag: x.nfc_uid, asset: x.asset_tag, notes: x.notes, status: x.status, mode: x.time_limit_mode,

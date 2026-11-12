@@ -24,7 +24,7 @@ See README.md for the full product description.
 - Push to `main` → GitHub Actions runs `tests/run.sh db` + `ui`, then deploys app + console to Cloudflare Pages
   (projects `sonoranpoint-app`, `sonoranpoint-console`, `sonoranpoint-site`).
 - Database changes are NOT automatic. Add a new migration file (never edit one already run on the live
-  project), then tell Dez to run it in the Supabase SQL editor. Migrations 1–31 have been run (checked 2026-11-11;
+  project), then tell Dez to run it in the Supabase SQL editor. Migrations 1–31 have been run, 32 not yet (checked 2026-11-11;
   ask if unsure). Alert emails are live (Resend key in Vault, first send
   confirmed 2026-10-20).
 - Station changes reach the Pis by themselves: every deploy publishes `app.sonoranpoint.com/station-release/latest.json` + a zip
@@ -131,7 +131,12 @@ See README.md for the full product description.
   `select status, error, to_email, subject from private.email_batches order by id desc limit 20;`
 - Trial reminder (migration 19): 3 days before `trial_ends_at`, `private.send_trial_reminders()` (run from
   `send_emails()`) emails the customer's owners, admins and contact email (reply-to: operator owners) and copies
-  every operator; once per end date (`private.trial_reminders`). Nothing pauses automatically when a trial ends.
+  every operator; once per end date (`private.trial_reminders`).
+- Trial pause (migration 32): `private.end_trials()` (run first by `send_trial_reminders()`, so every minute) sets a trial to
+  `paused` with `paused_reason = 'trial_ended'` one day after `trial_ends_at`, emails the same people + operators, logs
+  'trial ended: paused'. Per customer `organizations.pause_at_trial_end` (default on; console Account checkbox). A trigger clears
+  `paused_reason` when the status changes (a pause by hand has none). Console: `pauseAt(c)` / `trialPaused(c)`; dashboard
+  `accountNote()` says so (and warns managers+ in the trial's last week).
 
 ## Rules
 - Run `tests/run.sh db` and `tests/run.sh ui` before pushing; add tests for new behaviour.

@@ -163,8 +163,14 @@ const change = async (el, v) => { if (typeof v === "boolean") el.checked = v; el
   check(/This account is closed/.test(page()), "a closed account shows a note on every page");
   E("DB.org.status = 'paused'; render()"); await sleep(20);
   check(/This account is paused/.test(page()), "so does a paused one");
-  E("DB.org.status = 'active'; render()"); await sleep(20);
-  check(!/This account is/.test(page()), "and nothing when it's active");
+  E("DB.org.paused_reason = 'trial_ended'; render()"); await sleep(20);
+  check(/Your trial has ended, so your stations are paused/.test(page()), "paused because the trial ended says so");
+  E("DB.org.status = 'trial'; DB.org.paused_reason = null; DB.org.trial_ends = Date.now() + 2 * 864e5; render()"); await sleep(20);
+  check(/Your trial ends/.test(page()) && /your stations pause on/.test(page()), "a trial ending this week says when stations pause");
+  E("DB.org.pause_trial = false; render()"); await sleep(20);
+  check(/Your trial ends/.test(page()) && !/stations pause/.test(page()), "not when pausing is off for them");
+  E("DB.org.status = 'active'; DB.org.trial_ends = null; DB.org.pause_trial = true; render()"); await sleep(20);
+  check(!/This account is|Your trial/.test(page()), "and nothing when it's active");
   // Connection history in a station's details
   E("render()"); const s1 = E("DB.stations.find(x => !x.revoked && !x.removed).id"); E(`openDrawer('station', '${s1}')`); await sleep(20);
   check(/Connection, last 7 days/.test(drawer()) && /Online 9\d\.\d% of the time/.test(drawer()) && /Offline for 18 min/.test(drawer()), "a station's details show its uptime and outages", drawer().slice(0, 400));

@@ -116,7 +116,28 @@ const api_set = async (id) => { E(`api.updateCustomer('${id}', { logo_dark_url: 
   check(doc.querySelector("#trialEnds").hidden, "no trial date box for a paying customer");
   const stSel = doc.querySelector('[data-form="account"] [name=status]'); stSel.value = "trial"; stSel.dispatchEvent(new dom.window.Event("change", { bubbles: true })); await sleep(10);
   check(!doc.querySelector("#trialEnds").hidden, "it appears when you switch them to trial");
+  check(!doc.querySelector("#trialPause").hidden && doc.querySelector('[name=pause_trial]').checked, "so does the pause-when-it-ends switch, on by default");
   check(doc.querySelector("#logoFile") && !doc.querySelector(".pv-logo img") && /Copper State Cargo|Demo Air Services/.test(doc.querySelector(".pv-logo").textContent), "logo upload on the customer page; preview shows their name until they have a logo");
+  // Pausing when a trial ends (migration 32): a day after the end date, unless it's turned off.
+  {
+    const dg = E("DB.customers.find(c => c.slug === 'desertground').id"), sky = E("DB.customers.find(c => c.slug === 'skyharborcatering').id");
+    E(`custOf('${dg}').trial_ends = Date.now() - 23 * HOUR; custOf('${sky}').trial_ends = Date.now() - 2 * DAY; custOf('${sky}').pause_trial = false`);
+    await go("overview"); await sleep(20);
+    check(E(`custOf('${dg}').status`) === "trial", "within a day of the end date the trial keeps going");
+    E(`custOf('${dg}').trial_ends = Date.now() - 25 * HOUR`); await go("customers"); await go("overview"); await sleep(20);
+    check(E(`custOf('${dg}').status`) === "paused" && E(`custOf('${dg}').paused_reason`) === "trial_ended" && E(`custOf('${sky}').status`) === "trial",
+          "a day after, it pauses (not the one with pausing turned off)");
+    check(/Trial ended, stations paused/.test(page()) && /won't pause on its own/.test(page()), "needs a look: the paused one, and a trial that won't pause");
+    check(E("DB.log[0].action") === "trial ended: paused", "the log notes it");
+    await go("customer/" + dg);
+    check(/paused because the trial ended/.test(page()) && doc.querySelector(".acct-why") && !doc.querySelector("#trialPause").hidden, "its page says why it's paused");
+    const f = doc.querySelector('[data-form="account"]'); f.elements.status.value = "active"; f.dispatchEvent(new dom.window.Event("submit", { bubbles: true, cancelable: true })); await sleep(30);
+    check(E(`custOf('${dg}').status`) === "active" && E(`custOf('${dg}').paused_reason`) === null && !doc.querySelector(".acct-why"), "set to active: back on, the reason is cleared");
+    await go("customer/" + sky); const f2 = doc.querySelector('[data-form="account"]');
+    f2.elements.trial_ends.value = new Date(Date.now() + 10 * 864e5).toISOString().slice(0, 10); f2.elements.pause_trial.checked = true;
+    f2.dispatchEvent(new dom.window.Event("submit", { bubbles: true, cancelable: true })); await sleep(30);
+    check(E(`custOf('${sky}').pause_trial`) === true && /Pauses when the trial ends/.test(E(`DB.log[0].details`)), "turning it back on is saved and logged", E("JSON.stringify(DB.log[0])"));
+  }
   // team
   await go("team");
   check(/Jordan Ellis/.test(page()) && /\(you\)/.test(page()) && /Invited as Operator/.test(page()) && /Invite someone/.test(page()), "team page (demo)");

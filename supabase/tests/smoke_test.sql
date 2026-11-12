@@ -1380,6 +1380,57 @@ select pg_temp.ok(not am_platform_operator() and list_members('00000000-0000-000
 select set_config('request.jwt.claims', '', false) \g /dev/null
 reset role;
 
+\echo '--- Pausing when a trial ends (migration 32)'
+reset role;
+select status as dgstatus from organizations where id = :'dg' \gset
+update organizations set status = 'active', station_limit = null where id = :'dg';
+set role authenticated;
+select set_config('request.jwt.claim.sub', '99999999-0000-0000-0000-000000000009', false) \g /dev/null
+select platform_add_station(:'dg', 'Trial Room')->>'activation_code' as tpcode \gset
+set role anon;
+select activate_station(:'tpcode') ->> 'device_key' as tpkey \gset
+reset role;
+update organizations set status = 'trial', trial_ends_at = now() - interval '23 hours', contact_email = 'boss@dg.example', pause_at_trial_end = true where id = :'dg';
+delete from private.email_batches;
+select pg_temp.ok(private.end_trials() = 0 and (select status from organizations where id = :'dg') = 'trial', 'within a day of the end date the trial keeps going');
+update organizations set trial_ends_at = now() - interval '25 hours' where id = :'dg';
+update organizations set pause_at_trial_end = false, trial_ends_at = now() - interval '3 days' where slug = 'demo' and status = 'trial';
+select pg_temp.ok(private.send_trial_reminders() >= 0, 'the minute check runs');
+select pg_temp.ok((select status = 'paused' and paused_reason = 'trial_ended' from organizations where id = :'dg'), 'a day after it ends the account pauses, marked as the trial ending');
+set role anon;
+select pg_temp.ok(station_config(:'tpkey')->>'error' = 'account_paused', 'its stations stop recording');
+reset role;
+select pg_temp.ok(exists (select 1 from private.email_batches where to_email = 'boss@dg.example' and subject = 'Your Sonoran Point trial has ended' and html like '%stations are paused%'),
+                  'the customer is told');
+select pg_temp.ok(exists (select 1 from private.email_batches where to_email = 'dez@vendor.example' and subject like 'Trial ended: % is paused' and html like '%boss@dg.example%'), 'we are told who was emailed');
+select pg_temp.ok((select action from private.platform_log where org_id = :'dg' order by id desc limit 1) = 'trial ended: paused', 'the console log notes it');
+select count(*) as nmail from private.email_batches \gset
+select pg_temp.ok(private.end_trials() = 0 and (select count(*) from private.email_batches) = :nmail, 'only once');
+select pg_temp.ok((select status <> 'paused' from organizations where slug = 'demo'), 'with pausing turned off, an ended trial keeps going');
+set role authenticated;
+select set_config('request.jwt.claim.sub', '99999999-0000-0000-0000-000000000009', false) \g /dev/null
+select pg_temp.ok((select (c->>'paused_reason') = 'trial_ended' and (c->>'pause_at_trial_end')::boolean from jsonb_array_elements(platform_customers()) c where c->>'id' = :'dg'),
+                  'the console list shows why it paused');
+select pg_temp.ok((platform_update_customer(:'dg', '{"status":"trial","trial_ends_at":"2099-01-01T00:00:00Z"}')->>'ok')::boolean, 'operator extends the trial');
+reset role;
+select pg_temp.ok((select status = 'trial' and paused_reason is null from organizations where id = :'dg'), 'extending clears the reason');
+set role authenticated;
+select pg_temp.ok((platform_update_customer(:'dg', '{"status":"paused","pause_at_trial_end":false}')->>'ok')::boolean, 'operator pauses by hand and turns auto-pause off');
+reset role;
+select pg_temp.ok((select status = 'paused' and paused_reason is null and not pause_at_trial_end from organizations where id = :'dg'), 'a pause by hand has no reason');
+-- the reminder says when stations pause, unless pausing is off
+update organizations set status = 'trial', trial_ends_at = now() + interval '2 days', pause_at_trial_end = true where id = :'dg';
+delete from private.email_batches;
+select private.send_trial_reminders() \g /dev/null
+select pg_temp.ok(exists (select 1 from private.email_batches where to_email = 'boss@dg.example' and html like '%your stations pause on%'), 'the reminder says when stations pause');
+update organizations set trial_ends_at = now() + interval '1 day', pause_at_trial_end = false where id = :'dg';
+delete from private.email_batches;
+select private.send_trial_reminders() \g /dev/null
+select pg_temp.ok(exists (select 1 from private.email_batches where to_email = 'boss@dg.example') and not exists (select 1 from private.email_batches where html like '%stations pause on%'),
+                  'with pausing off it doesn''t');
+update organizations set status = :'dgstatus', trial_ends_at = null, pause_at_trial_end = true, contact_email = null where id = :'dg';
+update organizations set pause_at_trial_end = true where slug = 'demo';
+
 \echo '--- Deleting a company removes all its data'
 delete from organizations where slug = 'demo';
 select pg_temp.ok((select count(*) from equipment) = 0 and (select count(*) from transactions) = 0, 'company delete cascades cleanly');
