@@ -801,9 +801,11 @@ function ctCheck(c, id, name, parent) {   // same checks as save_contract
   return null;
 }
 function ctInUse(c, id, counts) {
-  const n = counts || { contracts: c.contracts.filter((k) => k.parent_id === id).length, stations: c.stations.filter((s) => s.contract_id === id && !s.revoked).length };
-  const parts = [["contracts", ctWord(c).many.toLowerCase()], ["stations", "stations"], ["employees", "people"], ["equipment", "items"], ["shifts", "shifts"]]
-    .filter(([k]) => +n[k] > 0).map(([k, w]) => `${n[k]} ${+n[k] === 1 ? w.replace(/s$/, "") : w}`);
+  const n = counts || { contracts: c.contracts.filter((k) => k.parent_id === id).length, stations: c.stations.filter((s) => s.contract_id === id && !s.revoked).length,
+    members: c.members.filter((m) => (m.contracts || []).includes(id)).length + c.invites.filter((i) => (i.contracts || []).includes(id)).length };
+  const parts = [["contracts", ctWord(c).one.toLowerCase(), ctWord(c).many.toLowerCase()], ["stations", "station", "stations"], ["employees", "person", "people"],
+    ["equipment", "item", "items"], ["shifts", "shift", "shifts"], ["members", "dashboard user", "dashboard users"]]
+    .filter(([k]) => +n[k] > 0).map(([k, one, many]) => `${n[k]} ${+n[k] === 1 ? one : many}`);
   return parts.length ? `Move what's in it first: ${parts.join(", ")}.` : null;
 }
 function memberCheck(c, role, contracts) {   // same checks as contracts_problem (an Admin may have contracts: migration 37)

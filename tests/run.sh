@@ -4,6 +4,7 @@
 #   tests/run.sh          everything
 #   tests/run.sh db       database only
 #   tests/run.sh ui       screens in demo mode only (no database needed)
+#   tests/run.sh live     screens against a real database (Postgres + PostgREST)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 ROOT=$PWD
@@ -18,11 +19,12 @@ if [[ $what == all || $what == db ]]; then
     | $PSQL -d sp_test | grep -E "^(pass|ALL TESTS)" | tail -1
 fi
 
+run() { local out rc=0; out=$(cd tests/ui && node "$1" "$ROOT/$2" 2>&1) || rc=$?; local n; n=$(grep -c "^pass" <<<"$out" || true)
+  if grep -q "^FAIL" <<<"$out"; then echo "FAIL $1"; grep -A2 "^FAIL" <<<"$out"; exit 1
+  elif [[ $rc -ne 0 ]]; then echo "FAIL $1 (crashed)"; tail -8 <<<"$out"; exit 1; else echo "ok   $1 ($n checks)"; fi; }
+if [[ $what == all || $what == ui || $what == live ]]; then (cd tests/ui && [ -d node_modules ] || npm install --silent --no-audit --no-fund); fi
+
 if [[ $what == all || $what == ui ]]; then
-  (cd tests/ui && [ -d node_modules ] || npm install --silent --no-audit --no-fund)
-  run() { local out rc=0; out=$(cd tests/ui && node "$1" "$ROOT/$2" 2>&1) || rc=$?; local n; n=$(grep -c "^pass" <<<"$out" || true)
-    if grep -q "^FAIL" <<<"$out"; then echo "FAIL $1"; grep -A2 "^FAIL" <<<"$out"; exit 1
-    elif [[ $rc -ne 0 ]]; then echo "FAIL $1 (crashed)"; tail -8 <<<"$out"; exit 1; else echo "ok   $1 ($n checks)"; fi; }
   echo "== screens (demo data)"
   run console.js platform/console.html
   for f in dashboard1.js dashboard2.js dashboard3.js dashboard4.js dashboard5.js dashboard6.js dashboard7.js; do run $f dashboard/dashboard.html; done
@@ -32,7 +34,8 @@ if [[ $what == all || $what == ui ]]; then
   python3 station/pi/test_station_updater.py | grep -E "^(FAIL|ALL)" || { echo "FAIL station updater"; exit 1; }
 fi
 
-if [[ $what == all ]] && [[ -x ${POSTGREST_BIN:-.tools/postgrest} ]]; then
+if [[ $what == live && ! -x ${POSTGREST_BIN:-.tools/postgrest} ]]; then echo "FAIL live: no PostgREST at ${POSTGREST_BIN:-.tools/postgrest}"; exit 1; fi
+if [[ $what == all || $what == live ]] && [[ -x ${POSTGREST_BIN:-.tools/postgrest} ]]; then
   echo "== screens against a real database"
   run console_live.js platform/console.html
   run dashboard_live.js dashboard/dashboard.html

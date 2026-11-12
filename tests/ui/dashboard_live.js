@@ -207,15 +207,14 @@ const ORG = "00000000-0000-0000-0000-00000000d3e0";
     P.submit(`[data-form="stationEdit:${sid}"]`);
     check(await P.until(() => one(`select s.name || '|' || l.name from stations s join locations l on l.id = s.location_id where s.id='${sid}'`) === "Ramp Room|Terminal 4"), "rename a station and change its location");
     await P.settled(); if (P.doc.querySelector('[data-act="close"]')) P.click('[data-act="close"]'); }
-  // contracts: build a small tree, put a person and a station in it
-  P.go("settings"); await P.until(() => P.doc.querySelector('[data-form="newContract:"]'));
-  P.set('[data-form="newContract:"] [name=name]', "BW"); P.submit('[data-form="newContract:"]');
-  check(await P.until(() => one(`select count(*) from contracts where org_id='${ORG}' and name='BW'`) === "1"), "add a top-level contract");
-  await P.settled(); await P.until(() => P.doc.querySelector('[data-act="addContract"]'));
-  P.click('[data-act="addContract"]'); await P.until(() => P.doc.querySelector('[data-form^="newContract:"] [name=name]:not([placeholder^="New"])'));
-  { const f = [...P.doc.querySelectorAll('[data-form^="newContract:"]')].find((x) => x.dataset.form !== "newContract:");
-    f.querySelector("[name=name]").value = "Delta BW"; f.dispatchEvent(new P.dom.window.Event("submit", { bubbles: true, cancelable: true })); }
-  check(await P.until(() => one(`select p.name from contracts c join contracts p on p.id = c.parent_id where c.name='Delta BW' and c.org_id='${ORG}'`) === "BW"), "add one under it");
+  // contracts: Sonoran Point builds the tree (console); the customer sees it and asks for changes
+  one(`insert into contracts (org_id, name) values ('${ORG}', 'BW')`);
+  one(`insert into contracts (org_id, parent_id, name) select org_id, id, 'Delta BW' from contracts where org_id='${ORG}' and name='BW'`);
+  await P.E("live.reload()"); await P.settled();
+  P.go("settings"); await P.until(() => /Delta BW/.test(P.text()) && P.doc.querySelector('[data-form="contractRequest"]'));
+  check(!P.doc.querySelector('[data-act="addContract"], input.cname'), "contracts show in Settings, read-only");
+  P.set('[data-form="contractRequest"] [name=message]', "Add Wheelchair under BW"); P.submit('[data-form="contractRequest"]');
+  check(await P.until(() => one(`select count(*) from private.contact_requests where source='dashboard' and org_id='${ORG}' and message like '%Wheelchair%'`) === "1"), "ask us for a change (lands in our requests)");
   await P.settled();
   { const cid = one(`select id from contracts where name='Delta BW' and org_id='${ORG}'`), eid = one(`select id from employees where org_id='${ORG}' and first_name='Alex'`);
     P.go("employees"); P.E(`openDrawer('empForm', '${eid}')`); await P.until(() => P.doc.querySelector('[data-form^="emp:"] [name=contract]'));

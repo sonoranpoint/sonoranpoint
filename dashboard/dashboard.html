@@ -1194,25 +1194,8 @@ const api = {
     return { ok: true };
   },
   endLoan(eqId) { const l = loanOf(eqId); if (l) Object.assign(l, { ended_at: Date.now(), how: "ended", ended_by: DB.me.name }); return { ok: true }; },
-  /* contracts: save_contract / delete_contract rpcs (admins) */
+  /* contracts: set up by Sonoran Point (console); read-only here */
   contracts() { return contractTree(); },
-  saveContract(id, d) {
-    const name = (d.name || "").trim(), parent = d.parent || null;
-    if (!name) return { ok: false, error: "Enter a name." };
-    if (name.length > 60) return { ok: false, error: "Keep it under 60 characters." };
-    if (id && parent && inBranch(parent, id)) return { ok: false, error: "It can't go inside itself." };
-    if (DB.contracts.some((c) => c.id !== id && (c.parent || null) === parent && c.name.toLowerCase() === name.toLowerCase())) return { ok: false, error: "There's already one with that name there." };
-    if (id) { Object.assign(contractOf(id), { name, parent, share: !!d.share, move: !!d.move }); return { ok: true, id }; }
-    const nid = "k" + Date.now(); DB.contracts.push({ id: nid, parent, name, share: !!d.share, move: !!d.move, sort: DB.contracts.length });
-    return { ok: true, id: nid };
-  },
-  deleteContract(id) {
-    const n = DB.contracts.filter((c) => c.parent === id).length + DB.stations.filter((x) => x.contract === id && !x.revoked).length
-      + DB.employees.filter((x) => x.contract === id && x.active).length + DB.equipment.filter((x) => x.contract === id && x.status !== "retired").length;
-    if (n) return { ok: false, error: "in_use" };
-    DB.contracts = DB.contracts.filter((c) => c.id !== id); [DB.stations, DB.employees, DB.equipment].forEach((l) => l.forEach((x) => { if (x.contract === id) x.contract = null; }));
-    return { ok: true };
-  },
   /* problem_reasons (the company's list) */
   reasons() { return (DB.reasons || []).filter((r) => !r.archived).sort((a, b) => a.sort - b.sort || a.label.localeCompare(b.label)); },
   /* equipment_problems: open ones first, newest first */
@@ -2503,11 +2486,6 @@ document.addEventListener("click", async (e) => {
   if (a === "visitorBack") { S.visitor = { ...S.visitor, pick: null }; return render(); }
   if (a === "endPass") { const r = await api.endVisitorPass(t.dataset.id); toast(r.ok ? "Pass ended" : r.error); return render(); }
   if (a === "ctMore") { S.ctSent = false; render(); $("#ctReq")?.focus(); return; }
-  if (a === "addContract") { S.f.addContract = t.dataset.id; render(); $(`[data-form="newContract:${t.dataset.id}"] input`)?.focus(); return; }
-  if (a === "cancelContract") { S.f.addContract = null; return render(); }
-  if (a === "askDelContract") { S.confirm = "delcontract:" + t.dataset.id; return render(); }
-  if (a === "doDelContract") { const r = api.deleteContract(t.dataset.id); S.confirm = null;
-    toast(r.ok ? "Deleted" : `Move its ${CTERM().many.toLowerCase()}, stations, people and items out first.`); return render(); }
   if (a === "askRmReason") { S.confirm = "rmreason:" + t.dataset.id; return render(); }
   if (a === "doRmReason") { api.removeReason(t.dataset.id); S.confirm = null; toast("Reason removed"); return render(); }
   if (a === "hideSetup") { try { localStorage.setItem("sp.setupHidden." + (DB.org.id || "demo"), "1"); } catch {} toast("Hidden. Everything is still under the menu on the left."); return render(); }
@@ -2612,12 +2590,6 @@ document.addEventListener("change", (e) => {
     const uid = t.dataset.email; const kinds = [...document.querySelectorAll(`input[data-email="${cssq(uid)}"]:checked`)].map((x) => x.value);
     const r = api.setEmailPrefs(uid, kinds); toast(r.ok ? "Email alerts saved" : r.error); return render();
   }
-  if (t.dataset.contract !== undefined && t.dataset.k) {
-    const id = t.dataset.contract, k = t.dataset.k;
-    if (!id) { api.saveSettings({ settings: { ...DB.org.settings, [k === "share" ? "share_contracts" : "move_on_return"]: t.checked } }); toast("Saved"); return render(); }
-    const c = contractOf(id); const r = api.saveContract(id, { name: k === "name" ? t.value : c.name, parent: c.parent, share: k === "share" ? t.checked : c.share, move: k === "move" ? t.checked : c.move });
-    toast(r.ok ? "Saved" : r.error); return render();
-  }
   if (t.dataset.reason) {
     const r0 = DB.reasons.find((x) => x.id === t.dataset.reason); if (!r0) return;
     const r = api.saveReason(r0.id, t.dataset.k === "label" ? { label: t.value, blocks: r0.blocks } : { label: r0.label, blocks: t.checked });
@@ -2668,11 +2640,6 @@ document.addEventListener("submit", async (e) => {
     toast(r.already ? "Already reported. Your details were added." : r.blocks ? "Reported. Nobody can check it out until it's cleared." : "Reported"); return render();
   }
   if (kind.startsWith("clear:")) { api.clearProblem(kind.slice(6), data.note); S.f.clearing = null; toast("Cleared. It can be checked out again."); return render(); }
-  if (kind.startsWith("newContract:")) {
-    const parent = kind.slice(12) || null; const r = api.saveContract(null, { name: data.name, parent });
-    if (!r.ok) { if (parent) toast(r.error); else $("#contractErr").textContent = r.error; return; }
-    S.f.addContract = null; toast(`Added ${data.name.trim()}`); return render();
-  }
   if (kind === "contractWord") {
     const w = (data.word || "").trim().replace(/s$/i, "") || "Contract";
     api.saveSettings({ terminology: { ...DB.org.terminology, contract: w, contract_plural: w + "s" } }); toast(`Saved. The dashboard now says ${w}.`); return render();
@@ -2923,10 +2890,6 @@ const REMOTE = {
     if (st.location) { const found = await q(sb.from("locations").select("id").eq("org_id", ORG()).eq("name", st.location).limit(1));
       loc = found[0]?.id || (await q(sb.from("locations").insert({ org_id: ORG(), name: st.location }).select("id").single())).id; }
     await upd("stations", id, { name: st.name, location_id: loc, ...(DB.contracts?.length ? { contract_id: st.contract || null } : {}) }); },
-  saveContract: async ([id], r) => { const c = contractOf(r.id); if (!c) return;
-    const res = await okRpc("save_contract", { p_org: ORG(), p: { id: id || null, name: c.name, parent_id: c.parent || null, share_children: c.share, move_on_return: c.move } });
-    if (!id) { L.idMap[r.id] = res.id; c.id = res.id; } },
-  deleteContract: ([id]) => okRpc("delete_contract", { p_contract: id }),
   lend: ([eq, to, notes]) => okRpc("lend_equipment", { p_equipment: eq, p_to_contract: to, p_notes: (notes || "").trim() || null }),
   endLoan: ([eq]) => okRpc("end_equipment_loan", { p_equipment: eq }),
   setActive: ([id, active]) => upd("employees", id, { active }),
@@ -3096,7 +3059,7 @@ async function afterSignIn() {
     try {
       const r = await rpc("accept_invite", { p_token: invite });
       if (!r.ok) AUTH.err = { wrong_account: `That invite was sent to ${r.invited_email}. Sign out and open the invite email again.`,
-        invite_expired: "That invite has expired. Ask for a new one.", invalid_invite: "That invite link was already used or cancelled." }[r.error] || r.error;
+        invite_expired: "That invite has expired. Ask for a new one.", invalid_invite: "That invite link was already used or cancelled.", invite_outdated: "What you were invited to has changed. Ask for a new invite." }[r.error] || r.error;
       else { AUTH.joined = r.org_id; }
     } catch (e) { AUTH.err = niceErr(e); }
   }

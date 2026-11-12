@@ -1589,6 +1589,30 @@ select delete_contract((:'loc'::jsonb->>'id')::uuid) as del \gset
 reset role;
 select pg_temp.ok((:'del'::jsonb->>'ok')::boolean and not exists (select 1 from contracts where name like 'PHX%'), 'and it can be removed');
 
+\echo '--- Deleting a contract people are on (migration 39)'
+set role authenticated;
+select set_config('request.jwt.claim.sub', '99999999-0000-0000-0000-000000000009', false) \g /dev/null
+select save_contract('00000000-0000-0000-0000-00000000d3e0', '{"name":"Temp"}')->>'id' as tmp \gset
+select set_member_contracts('00000000-0000-0000-0000-00000000d3e0', '51e77a00-0000-0000-0000-000000000052', array[:'tmp'::uuid]) \g /dev/null
+select delete_contract(:'tmp'::uuid) as dt \gset
+select pg_temp.ok(:'dt'::jsonb->>'error' = 'in_use' and (:'dt'::jsonb->'counts'->>'members')::int = 1, 'a contract someone is on can''t be deleted');
+select invite_member('00000000-0000-0000-0000-00000000d3e0', 'tempadmin@example.com', 'owner', array[:'tmp'::uuid]) as ti \gset
+select set_member_contracts('00000000-0000-0000-0000-00000000d3e0', '51e77a00-0000-0000-0000-000000000052', array[:'ubw'::uuid]) \g /dev/null
+select pg_temp.ok(delete_contract(:'tmp'::uuid)->>'error' = 'in_use', 'nor one an open invite is for');
+reset role;
+delete from org_invites where email = 'tempadmin@example.com';
+insert into auth.users (id, email) values ('7e3a0000-0000-0000-0000-000000000039', 'tempadmin@example.com');
+set role authenticated;
+select delete_contract(:'tmp'::uuid) as dt2 \gset
+select pg_temp.ok((:'dt2'::jsonb->>'ok')::boolean, 'once nobody is on it, it goes');
+select set_config('request.jwt.claim.sub', '7e3a0000-0000-0000-0000-000000000039', false) \g /dev/null
+reset role;
+insert into org_invites (org_id, email, role, token_hash, contracts) values ('00000000-0000-0000-0000-00000000d3e0', 'tempadmin@example.com', 'owner', private.sha256_hex('oldtoken39'), array[:'tmp'::uuid]);
+set role authenticated;
+select pg_temp.ok(accept_invite('oldtoken39')->>'error' = 'invite_outdated', 'an Admin invite whose contracts are gone is refused (it doesn''t become whole-company)');
+reset role;
+delete from org_invites where email = 'tempadmin@example.com';
+
 \echo '--- Visitor passes (migration 34)'
 reset role;
 select id as dbw from contracts where name = 'Delta BW' \gset

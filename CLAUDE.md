@@ -21,10 +21,10 @@ See README.md for the full product description.
 - `tests/run.sh` — runs everything; `tests/ui/` — jsdom screen tests
 
 ## How changes ship
-- Push to `main` → GitHub Actions runs `tests/run.sh db` + `ui`, then deploys app + console to Cloudflare Pages
+- Push to `main` → GitHub Actions runs `tests/run.sh db`, `ui` and `live` (PostgREST downloaded in CI), then deploys app + console to Cloudflare Pages
   (projects `sonoranpoint-app`, `sonoranpoint-console`, `sonoranpoint-site`).
 - Database changes are NOT automatic. Add a new migration file (never edit one already run on the live
-  project), then tell Dez to run it in the Supabase SQL editor. Migrations 1–31 have been run, 32–38 not yet (checked 2026-11-12;
+  project), then tell Dez to run it in the Supabase SQL editor. Migrations 1–31 have been run, 32–39 not yet (checked 2026-11-12;
   ask if unsure). Alert emails are live (Resend key in Vault, first send
   confirmed 2026-10-20).
 - Station changes reach the Pis by themselves: every deploy publishes `app.sonoranpoint.com/station-release/latest.json` + a zip
@@ -66,6 +66,8 @@ See README.md for the full product description.
 - Defaults for leads (migration 38): a trigger puts stations, equipment, employees and shifts that a contract-limited user adds
   without a contract into their first contract. Dashboard forms start on `myDefaultContract()` (the Show switcher's contract, else
   your own); `contractOptions(..., filter=true)` keeps "All" in list filters.
+- Guard (migration 39): a contract with people (`member_contracts`) or open invites on it can't be deleted, and an invite whose
+  contracts are all gone is refused (`invite_outdated`): otherwise an Admin could be left with none = whole company.
 - Visitors (migration 34): `public.visitor_passes` (functions only, no RLS policies) let someone into another contract's stations.
   Station: their badge is refused -> `S.visit` screen ("Manager: tap your fob") -> a manager from that station (+PIN) ->
   `station_visitor_pass` (until midnight, `private.end_of_today`); sync cache `visitors` {employee id: ends_at} so it works offline

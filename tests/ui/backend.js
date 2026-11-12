@@ -13,11 +13,13 @@ const b64 = (o) => Buffer.from(typeof o === "string" ? o : JSON.stringify(o)).to
 const sign = (claims) => { const h = b64({ alg: "HS256", typ: "JWT" }), p = b64(claims);
   return `${h}.${p}.${crypto.createHmac("sha256", SECRET).update(`${h}.${p}`).digest("base64url")}`; };
 const ANON = sign({ role: "anon", iss: "local", exp: 4102444800 });
-const psql = (sql) => execSync(`su postgres -c "psql -v ON_ERROR_STOP=1 -q -t -A -d etlive"`, { input: sql }).toString().trim();
+// Runs as the postgres user: via su on a dev box, or with PGHOST/PGUSER/PGPASSWORD when set (CI's Postgres container).
+const asPg = (cmd) => process.env.PGHOST && process.env.CI ? cmd : `su postgres -c "${cmd}"`;
+const psql = (sql) => execSync(asPg("psql -v ON_ERROR_STOP=1 -q -t -A -d etlive"), { input: sql }).toString().trim();
 
 function resetDb() {
-  execSync(`su postgres -c "dropdb --if-exists --force etlive; createdb etlive"`);
-  execSync(`cat ${ROOT}/tests/local_supabase_stub.sql ${ROOT}/migrations/*.sql ${ROOT}/seed.sql | su postgres -c "psql -v ON_ERROR_STOP=1 -q -d etlive"`, { stdio: ["ignore", "ignore", "inherit"] });
+  execSync(process.env.PGHOST && process.env.CI ? "dropdb --if-exists --force etlive; createdb etlive" : `su postgres -c "dropdb --if-exists --force etlive; createdb etlive"`);
+  execSync(`cat ${ROOT}/tests/local_supabase_stub.sql ${ROOT}/migrations/*.sql ${ROOT}/seed.sql | ${asPg("psql -v ON_ERROR_STOP=1 -q -d etlive")}`, { stdio: ["ignore", "ignore", "inherit"] });
   psql(`do $$ begin if not exists (select 1 from pg_roles where rolname='authenticator') then
           create role authenticator login password 'authpass' noinherit; end if; end $$;
         grant anon, authenticated, service_role to authenticator;
