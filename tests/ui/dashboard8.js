@@ -79,6 +79,15 @@ const access = () => doc.querySelector('.drawer select[name=access]');
   await submit('[data-form^="emp:"]', {});
   check(E(`posShort(empOf('${pri}')).join()`) === "Janitorial,Lead – Sky Club" && E(`empOf('${pri}').positions.map(posText).join()`) === "Supervisor – Janitorial,Lead – Sky Club" && E(`empOf('${pri}').last`) === "Shah-Kaur", "positions save with the rest",
         E(`empOf('${pri}').positions.map(posText).join()`));
+  // Shift ticks survive the form redrawing (changing the role, adding a position)
+  E("openDrawer('empForm', '')"); await sleep(20);
+  doc.querySelector('.drawer [name=first]').value = "Shifty"; doc.querySelector('.drawer [name=badge]').value = "";
+  doc.querySelector('.drawer input[name=shifts][value="s2"]').checked = true;
+  await change(access(), "viewer"); doc.querySelector('.drawer [data-act="posAdd"]').click(); await sleep(15);
+  check(doc.querySelector('.drawer input[name=shifts][value="s2"]').checked && doc.querySelector('.drawer [name=first]').value === "Shifty", "shift ticks stay after changing the role or adding a position");
+  doc.querySelector('.drawer [name=pos_title]').value = ""; await submit('[data-form^="emp:"]', {});
+  check(E("DB.employees.find(e => e.first === 'Shifty').shifts.join()") === "s2", "and they save");
+  await go("employees");
   // Departments
   check(/Departments/.test(doc.querySelector(".main").textContent), "Employees has the department list");
   await submit('[data-form="dept"]', { name: "Ramp", contract: "dbw" });

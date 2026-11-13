@@ -1026,7 +1026,7 @@ const api = {
   /* employees + station roles */
   employees() {
     return DB.employees.filter((e) => !e.visitor).map((e) => ({ ...e, out: DB.equipment.filter((q) => q.holder === e.id && q.status !== "lost").length,
-      shiftNames: e.shifts.map((s) => DB.shifts.find((x) => x.id === s).name),
+      shiftNames: e.shifts.map((s) => DB.shifts.find((x) => x.id === s)?.name).filter(Boolean),
       last: DB.txns.filter((t) => t.emp === e.id).reduce((m, t) => Math.max(m, t.at), 0) || null }));
   },
   /* station_overview view */
@@ -2585,6 +2585,17 @@ function dEqForm(id) {
       <div class="actions full"><button class="btn primary">${id ? "Save changes" : "Add equipment"}</button><button class="btn" type="button" data-act="${id ? "backEq" : "close"}">Cancel</button></div>
     </form></div>`;
 }
+// Redraw the open drawer form and put back what was typed and ticked (shifts included), except the fields the redraw sets itself.
+function redrawForm(skip = []) {
+  const f = $(".drawer form"), vals = [], ticks = new Set(), boxes = new Set();
+  if (f) for (const el of f.elements) { if (!el.name || skip.includes(el.name) || el.name.startsWith("pos_")) continue;
+    if (el.type === "checkbox" || el.type === "radio") { boxes.add(el.name); if (el.checked) ticks.add(el.name + "=" + el.value); } else vals.push([el.name, el.value]); }
+  renderLayer();
+  const f2 = $(".drawer form"); if (!f2) return f2;
+  for (const el of f2.elements) if (boxes.has(el.name)) el.checked = ticks.has(el.name + "=" + el.value);
+  for (const [k, v] of vals) { const el = f2.elements[k]; if (el && !(el instanceof RadioNodeList)) el.value = v; }
+  return f2;
+}
 function dEmpForm(id) {
   const e = id ? empOf(id) : { first: "", last: "", number: "", badge: "", shifts: [], role: "employee", access: "", positions: [] };
   const role = S.formRole ?? e.role;
@@ -2738,8 +2749,7 @@ document.addEventListener("click", async (e) => {
   if (a === "posAdd" || a === "posDel") { const f = $(".drawer form"), fd = new FormData(f), keep = Object.fromEntries(fd), d = fd.getAll("pos_dept");
     S.formPos = fd.getAll("pos_title").map((title, i) => ({ title, dept: d[i] || null }));
     if (a === "posAdd") S.formPos.push({ title: "", dept: null }); else S.formPos.splice(+t.dataset.i, 1);
-    S.formAccess = keep.access ?? S.formAccess; renderLayer();
-    const f2 = $(".drawer form"); for (const [k, v] of Object.entries(keep)) if (f2.elements[k] && !["shifts", "pos_title", "pos_dept", "access"].includes(k) && typeof v === "string") f2.elements[k].value = v;
+    S.formAccess = keep.access ?? S.formAccess; const f2 = redrawForm(["access"]);
     if (a === "posAdd") [...f2.querySelectorAll("[name=pos_title]")].pop()?.focus(); return; }
   if (a === "delDept") { const r = api.deleteDepartment(t.dataset.id); toast(r.ok ? "Department removed" : r.error); return render(); }
   if (a === "cancelInv") { api.cancelInvite(t.dataset.id); toast("Invite cancelled"); return render(); }
@@ -2795,10 +2805,8 @@ document.addEventListener("change", (e) => {
   }
   if (t.dataset.member) { const r = api.setMemberRole(t.dataset.member, t.value); toast(r.ok ? "Role updated" : r.error); return render(); }
   if (t.dataset.actChange === "formAccess") { const fd = new FormData(t.form), keep = Object.fromEntries(fd), d = fd.getAll("pos_dept"); S.formAccess = t.value;
-    if (fd.has("pos_title")) S.formPos = fd.getAll("pos_title").map((title, i) => ({ title, dept: d[i] || null })); renderLayer();
-    const f2 = $(".drawer form"); for (const [k, v] of Object.entries(keep)) if (f2.elements[k] && !["shifts", "pos_title", "pos_dept", "access"].includes(k) && typeof v === "string") f2.elements[k].value = v; return; }
-  if (t.dataset.actChange === "formRole") { const form = t.form; const keep = Object.fromEntries(new FormData(form)); S.formRole = t.value; renderLayer();
-    const f2 = $(".drawer form"); for (const [k, v] of Object.entries(keep)) if (f2.elements[k] && k !== "shifts" && k !== "role") f2.elements[k].value = v; return; }
+    if (fd.has("pos_title")) S.formPos = fd.getAll("pos_title").map((title, i) => ({ title, dept: d[i] || null })); redrawForm(["access"]); return; }
+  if (t.dataset.actChange === "formRole") { S.formRole = t.value; redrawForm(["role"]); return; }
   if (t.dataset.f === "eqCat") { S.f.eqCat = t.value; return render(); }
   if (t.id === "impFile" && t.files?.[0]) return impFile(t.files[0]);
   if (t.dataset.impcol != null) { const i = +t.dataset.impcol; if (t.value) S.imp.map = S.imp.map.map((f) => (f === t.value ? "" : f)); S.imp.map[i] = t.value; return render(); }
@@ -2889,7 +2897,7 @@ document.addEventListener("submit", async (e) => {
     const id = kind.slice(4) || null, fd = new FormData(f); data.shifts = fd.getAll("shifts");
     const d = fd.getAll("pos_dept"), pos = fd.getAll("pos_title").map((title, i) => ({ title: title.trim(), dept: d[i] || null })).filter((p) => p.title);
     const keepForm = (err) => { S.formErr = err; S.formAccess = data.access ?? S.formAccess; if (fd.has("pos_title")) S.formPos = fd.getAll("pos_title").map((title, i) => ({ title, dept: d[i] || null }));
-      const keep = data; renderLayer(); const f2 = $(".drawer form"); for (const [k, v] of Object.entries(keep)) if (f2.elements[k] && !["shifts", "access"].includes(k) && typeof v === "string") f2.elements[k].value = v; };
+      redrawForm(["access"]); };
     const e0 = id ? empOf(id) : null, acc0 = e0 ? empAccess(e0) : { value: "" }, email = (data.email || "").trim().toLowerCase(), pin = (data.pin || "").trim();
     const accessChange = "access" in data && (data.access !== acc0.value || !!pin || (!!email && !acc0.member && email !== acc0.invite?.email));
     if (accessChange && pin && !/^[0-9]{4,8}$/.test(pin)) return keepForm("PINs are 4 to 8 digits.");
