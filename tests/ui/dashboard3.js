@@ -29,8 +29,9 @@ const setChecks = (name, vals) => doc.querySelectorAll(`.drawer input[name="${na
   check(/Morning/.test(page()) && /Mon–Fri/.test(page()), "list shows new name and Mon–Fri");
   // validation
   await click('[data-open="shiftForm:s2"]');
-  await submit('[data-form="shift:s2"]', { name: "morning" });
-  check(/already a shift with that name/.test(drawer()), "duplicate name refused");
+  { const other = E("JSON.stringify(DB.shifts.find(x => x.name.toLowerCase() === 'morning'))"), o = JSON.parse(other);
+    await submit('[data-form="shift:s2"]', { name: "morning", ...(doc.querySelector('[data-form="shift:s2"] [name=contract]') ? { contract: o.contract || "" } : {}) }); }
+  check(/already a shift with that name/.test(drawer()), "duplicate name in the same contract refused");
   await submit('[data-form="shift:s2"]', { name: "PM", start: "13:00", end: "13:00" });
   check(/can't be the same time/.test(drawer()), "same start/end refused");
   setChecks("days", []);

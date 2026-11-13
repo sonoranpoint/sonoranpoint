@@ -25,7 +25,7 @@ See README.md for the full product description.
 - Push to `main` → GitHub Actions runs `tests/run.sh db`, `ui` and `live` (PostgREST downloaded in CI), then deploys app + console to Cloudflare Pages
   (projects `sonoranpoint-app`, `sonoranpoint-console`, `sonoranpoint-site`).
 - Database changes are NOT automatic. Add a new migration file (never edit one already run on the live
-  project), then tell Dez to run it in the Supabase SQL editor. Migrations 1–43 have been run (checked 2026-11-13;
+  project), then tell Dez to run it in the Supabase SQL editor. Migrations 1–43 have been run, 44 not yet (checked 2026-11-13;
   ask if unsure). Alert emails are live (Resend key in Vault, first send
   confirmed 2026-10-20).
 - Station changes reach the Pis by themselves: every deploy publishes `app.sonoranpoint.com/station-release/latest.json` + a zip
@@ -108,6 +108,7 @@ See README.md for the full product description.
   (title + optional department, several per person; People box). Dashboard: employee form "Role" (+PIN, optional email), positions
   rows (`S.formPos`, `posAdd`/`posDel`), Employees -> "Departments" (`vDepartments`), `accessOf`/`accessLabel`/`stationPowers`/`fobOf`.
   Station: `sCan(box)`, `boxesOf`, `roleInfo`, `roleText`; demo server mirrors it (`demo.boxes/canGive/canManage`).
+- Migration 44: shift names are unique per contract (`shifts_name` index on org, coalesce(contract), name), not per company.
 - Dashboard: `PERMS`, `ROLE_PERMS`, `has(perm)`, `roleLabel`, `roleOptions` ("role:<id>" values), Team page "Your roles" (`vRoles`).
   Console team panel lists the customer's roles in its role picker (`roleName`, `splitRole`).
 

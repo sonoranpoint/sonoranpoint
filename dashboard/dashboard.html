@@ -1112,7 +1112,8 @@ const api = {
     if (has("shifts")) {
       const name = (d.name || "").trim(), t = /^([01][0-9]|2[0-3]):[0-5][0-9]$/;
       if (!name) return { ok: false, error: "Enter a shift name." };
-      if (DB.shifts.some((x) => x.id !== id && x.name.toLowerCase() === name.toLowerCase())) return { ok: false, error: "There's already a shift with that name." };
+      const ct = "contract" in d ? d.contract || null : s0?.contract || null;   // names only clash within a contract (migration 44)
+      if (DB.shifts.some((x) => x.id !== id && (x.contract || null) === ct && x.name.toLowerCase() === name.toLowerCase())) return { ok: false, error: "There's already a shift with that name." };
       if (!t.test(d.start || "") || !t.test(d.end || "")) return { ok: false, error: "Enter a start and end time." };
       if (d.start === d.end) return { ok: false, error: "Start and end can't be the same time." };
       const days = (d.days || []).map(Number);
@@ -2999,7 +3000,7 @@ function dupText(e) {
     [/badge_uid/, "That badge is already registered to someone else."], [/employees_barcode/, "That badge barcode is already used by someone else."],
     [/equipment_barcode|equipment.*barcode/, "That barcode is already on another item."], [/nfc_uid/, "That tag is already on another item."],
     [/asset_tag/, "That asset tag is already used."], [/employees_user/, "That dashboard account is already linked to another employee."],
-    [/departments_name/, "That department is already there."], [/shift_assignments/, "They're already on that shift."]]) if (re.test(m)) return text;
+    [/departments_name/, "That department is already there."], [/shifts_name|shifts_org_id_name/, "There's already a shift with that name (it may be in another contract or for the whole company)."], [/shift_assignments/, "They're already on that shift."]]) if (re.test(m)) return text;
   return "That's already used by something else.";
 }
 async function sendInviteEmail(email, token, name) {
