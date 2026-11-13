@@ -24,7 +24,7 @@ See README.md for the full product description.
 - Push to `main` → GitHub Actions runs `tests/run.sh db`, `ui` and `live` (PostgREST downloaded in CI), then deploys app + console to Cloudflare Pages
   (projects `sonoranpoint-app`, `sonoranpoint-console`, `sonoranpoint-site`).
 - Database changes are NOT automatic. Add a new migration file (never edit one already run on the live
-  project), then tell Dez to run it in the Supabase SQL editor. Migrations 1–31 have been run, 32–41 not yet (checked 2026-11-12;
+  project), then tell Dez to run it in the Supabase SQL editor. Migrations 1–40 have been run, 41 and 42 not yet (checked 2026-11-12;
   ask if unsure). Alert emails are live (Resend key in Vault, first send
   confirmed 2026-10-20).
 - Station changes reach the Pis by themselves: every deploy publishes `app.sonoranpoint.com/station-release/latest.json` + a zip
@@ -88,6 +88,11 @@ See README.md for the full product description.
   requests), status, reports (sign off shift reports), alerts (mark seen), visitors, equipment, stations, fobs, shifts, team.
   Supervisor = people, status, reports, visitors. Manager = that + remove_people, equipment, alerts, shifts, team (limited: only roles
   below Manager whose boxes they have). Admin = everything (stations and fobs are Admin-only among built-ins).
+- Migration 42: Admins (role owner) are made, changed and removed only by operators (`can_manage_role` never lets a customer give
+  owner; dashboard `canManageRole`, `ADMIN_NOTE`). Employee <-> dashboard account: `employees.user_id`, `org_invites.employee_id`;
+  `set_employee_access(employee, role?, custom_role?, email?)`: both null = Agent (badge only: invites cancelled, member removed),
+  linked = change role, else links an existing member with that email or invites them (employee's contract). `accept_invite` links.
+  Dashboard employee form "Dashboard role" (`empAccess`, `S.formAccess`, `api.setEmployeeAccess`), Team-box holders only.
 - Dashboard: `PERMS`, `ROLE_PERMS`, `has(perm)`, `roleLabel`, `roleOptions` ("role:<id>" values), Team page "Your roles" (`vRoles`).
   Console team panel lists the customer's roles in its role picker (`roleName`, `splitRole`).
 

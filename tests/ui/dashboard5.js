@@ -207,12 +207,12 @@ const change = async (el, v) => { if (typeof v === "boolean") el.checked = v; el
   E("S.drawer = null; DB.me.role = 'owner'; DB.me.contracts = ['dbw']; render()"); await go("settings");
   check(E("JSON.stringify(myScopeIds())") === '["dbw"]' && doc.querySelector("main fieldset").disabled, "an Admin of one contract sees only it, and not company settings");
   await go("team");
-  doc.querySelectorAll('.inv-scopes input').forEach((i) => { i.checked = false; });
-  await submit('[data-form="invite"]', { email: "admin2@demoair.example", role: "owner" });
-  check(/Pick at least one/.test(doc.querySelector("#invErr").textContent), "she can't add a whole-company Admin");
+  check(![...doc.querySelectorAll('[data-form="invite"] select[name=role] option')].some((o) => o.value === "owner") && /Admins are added and changed by Sonoran Point/.test(page()),
+        "Admins aren't offered: Sonoran Point adds them (migration 42)");
+  check(/Sonoran Point/.test(E("api.invite('admin2@demoair.example', 'owner', '', ['dbw']).error")), "and the api refuses an Admin invite");
   doc.querySelector('.inv-scopes input[value="dbw"]').checked = true;
-  await submit('[data-form="invite"]', { email: "admin2@demoair.example", role: "owner" });
-  check(E("DB.invites[0].email") === "admin2@demoair.example" && E("DB.invites[0].contracts.join()") === "dbw", "she adds another Delta BW Admin");
+  await submit('[data-form="invite"]', { email: "mgr2@demoair.example", role: "admin" });
+  check(E("DB.invites[0].email") === "mgr2@demoair.example" && E("DB.invites[0].contracts.join()") === "dbw", "she adds a Delta BW Manager");
   E("DB.me.contracts = ['ubw', 'dbw']; DB.contracts.find(c => c.id === 'dbw').sort = -1; S.f.eqContract = ''; openDrawer('eqForm')"); await sleep(20);
   check(doc.querySelector('.drawer select[name=contract]').value === "ubw", "adding equipment starts on her own contract");
   E("S.drawer = null; S.view = 'dbw'; openDrawer('empForm')"); await sleep(20);

@@ -612,8 +612,11 @@ exception when insufficient_privilege then null; end $$;
 select pg_temp.ok(true, 'admins can''t remove owners');
 select pg_temp.ok((invite_member('00000000-0000-0000-0000-00000000d3e0', 'office@example.com', 'viewer')->>'ok')::boolean, 'admins can invite view-only staff');
 select set_config('request.jwt.claim.sub', 'aaaaaaaa-0000-0000-0000-000000000001', false) \g /dev/null
-select pg_temp.ok(set_member_role('00000000-0000-0000-0000-00000000d3e0', 'aaaaaaaa-0000-0000-0000-000000000001', 'admin')->>'error' = 'last_owner',
-                  'the last owner can''t be demoted (company always has an owner)');
+do $$ begin
+  perform set_member_role('00000000-0000-0000-0000-00000000d3e0', 'aaaaaaaa-0000-0000-0000-000000000001', 'admin');
+  raise exception 'FAIL: a customer changed an Admin';
+exception when insufficient_privilege then null; end $$;
+select pg_temp.ok(true, 'customers can''t change Admins, even themselves (only Sonoran Point, migration 42)');
 select remove_member('00000000-0000-0000-0000-00000000d3e0', 'dddddddd-0000-0000-0000-000000000004') as rm \gset
 select pg_temp.ok((:'rm'::jsonb->>'ok')::boolean and not exists (select 1 from org_members where user_id = 'dddddddd-0000-0000-0000-000000000004'),
                   'owner removes a member');
@@ -1060,7 +1063,7 @@ select id as erm02 from stations where name = 'Equipment Room 02' \gset
 select id as uawroom from stations where name = 'United AW room' \gset
 set role authenticated;
 select set_config('request.jwt.claim.sub', 'aaaaaaaa-0000-0000-0000-000000000001', false) \g /dev/null
-select pg_temp.ok((set_member_contracts('00000000-0000-0000-0000-00000000d3e0', 'aaaaaaaa-0000-0000-0000-000000000001', '{}')->>'ok')::boolean, 'an Admin with no contracts runs the whole company');
+select pg_temp.ok(not exists (select 1 from member_contracts where user_id = 'aaaaaaaa-0000-0000-0000-000000000001'), 'an Admin with no contracts runs the whole company');
 select pg_temp.ok((set_member_contracts('00000000-0000-0000-0000-00000000d3e0', 'cccccccc-0000-0000-0000-000000000003', array[:'dbw'::uuid])->>'ok')::boolean, 'admin makes Kelly a Delta BW supervisor');
 select set_config('request.jwt.claim.sub', 'cccccccc-0000-0000-0000-000000000003', false) \g /dev/null
 select pg_temp.ok((select count(*) from equipment where contract_id = :'ubw') = 0 and (select count(*) from equipment where contract_id = :'dbw') > 0
@@ -1527,13 +1530,13 @@ select pg_temp.ok((select array_agg(contract_id) from member_contracts where use
 set role authenticated;
 select set_config('request.jwt.claim.sub', '51e77a00-0000-0000-0000-000000000051', false) \g /dev/null
 select pg_temp.ok(exists (select 1 from equipment where nfc_uid = '04DE000101') and not exists (select 1 from equipment where nfc_uid = '04DE000201'), 'a Delta BW Admin sees Delta BW only');
-select pg_temp.ok(invite_member('00000000-0000-0000-0000-00000000d3e0', 'co-admin@example.com', 'owner', array[:'ubw'::uuid])->>'error' = 'outside_scope', 'she can''t make Admins for other contracts');
-select invite_member('00000000-0000-0000-0000-00000000d3e0', 'co-admin@example.com', 'owner') as ci \gset
+select pg_temp.ok(pg_temp.raises($$select invite_member('00000000-0000-0000-0000-00000000d3e0', 'co-admin@example.com', 'owner')$$), 'she can''t make Admins (only Sonoran Point)');
+select invite_member('00000000-0000-0000-0000-00000000d3e0', 'co-admin@example.com', 'admin') as ci \gset
 reset role;
 select pg_temp.ok((:'ci'::jsonb->>'ok')::boolean and (select contracts from org_invites where email = 'co-admin@example.com' and accepted_at is null) = array[:'dbw'::uuid],
-                  'an Admin she invites is an Admin of Delta BW, not the whole company');
+                  'a Manager she invites is for Delta BW, not the whole company');
 set role authenticated;
-select pg_temp.ok(set_member_contracts('00000000-0000-0000-0000-00000000d3e0', '51e77a00-0000-0000-0000-000000000051', '{}')->>'error' = 'pick_contract', 'she can''t make herself whole-company');
+select pg_temp.ok(pg_temp.raises($$select set_member_contracts('00000000-0000-0000-0000-00000000d3e0', '51e77a00-0000-0000-0000-000000000051', '{}')$$), 'she can''t make herself whole-company');
 update org_members set role = 'owner' where user_id = '51e77a00-0000-0000-0000-000000000052';
 select pg_temp.ok(not exists (select 1 from org_members where user_id = '51e77a00-0000-0000-0000-000000000052' and role = 'owner'), 'or change the members table directly');
 update organizations set name = 'Hacked' where id = '00000000-0000-0000-0000-00000000d3e0';
@@ -1568,7 +1571,7 @@ insert into auth.users (id, email) values ('0a0a0a0a-0000-0000-0000-000000000036
 insert into org_members (org_id, user_id, role) values ((:'pc'::jsonb->>'org_id')::uuid, '0a0a0a0a-0000-0000-0000-000000000036', 'owner');
 set role authenticated;
 select set_config('request.jwt.claim.sub', '0a0a0a0a-0000-0000-0000-000000000036', false) \g /dev/null
-select pg_temp.ok(remove_member((:'pc'::jsonb->>'org_id')::uuid, '0a0a0a0a-0000-0000-0000-000000000036')->>'error' = 'last_owner', 'a customer can''t remove their own last admin');
+select pg_temp.ok(pg_temp.raises($$select remove_member('$$ || (:'pc'::jsonb->>'org_id') || $$', '0a0a0a0a-0000-0000-0000-000000000036')$$), 'a customer can''t remove their own last admin (Admins are ours to change)');
 select set_config('request.jwt.claim.sub', '99999999-0000-0000-0000-000000000009', false) \g /dev/null
 select pg_temp.ok((remove_member((:'pc'::jsonb->>'org_id')::uuid, '0a0a0a0a-0000-0000-0000-000000000036')->>'ok')::boolean, 'but we can, from the console');
 reset role;
@@ -1747,6 +1750,52 @@ delete from org_members where user_id in ('41410000-0000-0000-0000-000000000041'
 delete from org_invites where custom_role_id is not null or email in ('viewer2@x.example');
 delete from org_members where user_id = '40400000-0000-0000-0000-000000000040';
 delete from equipment where name = 'Lead radio';
+
+\echo '--- An employee''s role from their page (migration 42)'
+insert into auth.users (id, email) values ('42420000-0000-0000-0000-000000000042', 'mgr42@example.com');
+insert into org_members (org_id, user_id, role) values ('00000000-0000-0000-0000-00000000d3e0', '42420000-0000-0000-0000-000000000042', 'admin');
+insert into member_contracts (org_id, user_id, contract_id) values ('00000000-0000-0000-0000-00000000d3e0', '42420000-0000-0000-0000-000000000042', :'dbw');
+insert into employees (org_id, first_name, last_name, employee_number, contract_id) values
+  ('00000000-0000-0000-0000-00000000d3e0', 'Agent', 'Fortytwo', 'E4242', :'dbw'), ('00000000-0000-0000-0000-00000000d3e0', 'Other', 'Fortytwo', 'E4243', :'dbw');
+select id as e42 from employees where employee_number = 'E4242' \gset
+select id as e43 from employees where employee_number = 'E4243' \gset
+set role authenticated;
+select set_config('request.jwt.claim.sub', '42420000-0000-0000-0000-000000000042', false) \g /dev/null
+select pg_temp.ok(set_employee_access(:'e42', 'supervisor', null, '')->>'error' = 'email_needed', 'a dashboard role needs an email for someone without an account');
+select set_employee_access(:'e42', 'supervisor', null, 'New42@X.example') as inv42 \gset
+select pg_temp.ok((:'inv42'::jsonb->>'ok')::boolean, 'a Manager makes an employee a Supervisor (invite sent)');
+select pg_temp.ok(pg_temp.raises($$select set_employee_access('$$ || :'e43' || $$', 'admin', null, 'm43@x.example')$$), 'a Manager can''t make Managers from the employee page either');
+select pg_temp.ok(pg_temp.raises($$select set_employee_access('$$ || :'e43' || $$', 'owner', null, 'o43@x.example')$$), 'nobody makes Admins there');
+reset role;
+select pg_temp.ok((select employee_id from org_invites where email = 'new42@x.example') = :'e42' and
+                  (select contracts from org_invites where email = 'new42@x.example') = array[:'dbw'::uuid], 'the invite remembers the employee and their contract');
+insert into auth.users (id, email) values ('42420000-0000-0000-0000-000000000043', 'new42@x.example');
+set role authenticated;
+select set_config('request.jwt.claim.sub', '42420000-0000-0000-0000-000000000043', false) \g /dev/null
+select pg_temp.ok((accept_invite(:'inv42'::jsonb->>'token')->>'ok')::boolean, 'they accept');
+reset role;
+select pg_temp.ok((select user_id from employees where id = :'e42') = '42420000-0000-0000-0000-000000000043', 'their employee record is linked to the account');
+set role authenticated;
+select set_config('request.jwt.claim.sub', '42420000-0000-0000-0000-000000000042', false) \g /dev/null
+select pg_temp.ok((set_employee_access(:'e42', 'viewer')->>'ok')::boolean, 'changing the role later needs no email');
+reset role;
+select pg_temp.ok((select role from org_members where user_id = '42420000-0000-0000-0000-000000000043') = 'viewer', 'now View Only');
+set role authenticated;
+select set_config('request.jwt.claim.sub', '42420000-0000-0000-0000-000000000042', false) \g /dev/null
+select pg_temp.ok((set_employee_access(:'e42')->>'ok')::boolean, 'back to Agent');
+reset role;
+select pg_temp.ok(not exists (select 1 from org_members where user_id = '42420000-0000-0000-0000-000000000043')
+                  and (select user_id from employees where id = :'e42') is null, 'Agent = badge only: dashboard access removed');
+set role authenticated;
+select set_config('request.jwt.claim.sub', 'aaaaaaaa-0000-0000-0000-000000000001', false) \g /dev/null
+select pg_temp.ok((set_employee_access(:'e43', 'admin', null, 'MGR42@example.com')->>'linked')::boolean, 'an email already on the team links that account');
+select pg_temp.ok(set_employee_access(:'e42', 'supervisor', null, 'mgr42@example.com')->>'error' = 'email_linked', 'one account per employee');
+select pg_temp.ok(pg_temp.raises($$select invite_member('00000000-0000-0000-0000-00000000d3e0', 'a42@x.example', 'owner')$$), 'a customer Admin can''t add Admins (only Sonoran Point)');
+select pg_temp.ok((invite_member('00000000-0000-0000-0000-00000000d3e0', 'm42@x.example', 'admin', array[:'dbw'::uuid])->>'ok')::boolean, 'but can add Managers');
+reset role;
+delete from org_invites where email in ('m42@x.example', 'new42@x.example');
+delete from employees where employee_number in ('E4242', 'E4243');
+delete from org_members where user_id = '42420000-0000-0000-0000-000000000042';
 
 \echo '--- Deleting a company removes all its data'
 delete from organizations where slug = 'demo';

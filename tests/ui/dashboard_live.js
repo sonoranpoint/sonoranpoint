@@ -75,7 +75,16 @@ const ORG = "00000000-0000-0000-0000-00000000d3e0";
   check(await P.until(() => P.E("empOf(S.drawer.id)?.pin") === true), "dashboard knows Rosa's fob has a PIN", P.E("JSON.stringify({d: S.drawer, idmap: L.idMap, emp: DB.employees.filter(e => e.number === 'E2001')})"));
   P.click('[data-act="askDeactivate"]'); await P.until(() => P.doc.querySelector('[data-act="doActive"]')); P.click('[data-act="doActive"][data-v="0"]');
   check(await P.until(() => one(`select active from employees where id='${rosa}'`) === "f"), "deactivate saves");
-  await P.settled(); P.click('[data-act="close"]');
+  await P.settled();
+  // Her dashboard role from her page (migration 42): Supervisor, invited at the email given.
+  P.click('[data-act="editEmp"]'); await P.until(() => P.doc.querySelector('[data-form^="emp:"] [name=access]'));
+  P.change('[data-form^="emp:"] [name=access]', "supervisor"); await P.until(() => P.doc.querySelector('[data-form^="emp:"] [name=email]'));
+  P.set('[data-form^="emp:"] [name=email]', "Rosa.Diaz@DemoAir.example"); P.submit('[data-form^="emp:"]');
+  check(await P.until(() => one(`select role || ' ' || employee_id from org_invites where email='rosa.diaz@demoair.example'`) === `supervisor ${rosa}`), "giving an employee a role invites them, tied to their record");
+  check(await P.until(() => b.outbox.some((m) => m.email === "rosa.diaz@demoair.example" && /\/\?invite=[0-9a-f]{48}$/.test(m.redirect_to))), "and emails them the invite link");
+  await P.settled();
+  check(await P.until(() => /Invite sent to rosa.diaz@demoair.example/.test(P.text())), "her page shows the invite waiting", P.text().slice(0, 600));
+  P.click('[data-act="close"]');
 
   // categories
   P.go("settings"); await P.until(() => P.doc.querySelector('[data-form="newCat"]'));

@@ -27,7 +27,7 @@ if [[ $what == all || $what == ui || $what == live ]]; then (cd tests/ui && [ -d
 if [[ $what == all || $what == ui ]]; then
   echo "== screens (demo data)"
   run console.js platform/console.html
-  for f in dashboard1.js dashboard2.js dashboard3.js dashboard4.js dashboard5.js dashboard6.js dashboard7.js; do run $f dashboard/dashboard.html; done
+  for f in dashboard1.js dashboard2.js dashboard3.js dashboard4.js dashboard5.js dashboard6.js dashboard7.js dashboard8.js; do run $f dashboard/dashboard.html; done
   for i in 1 2 3 4 5 6 7 8 9 10 11; do run station$i.js station/station.html; done
   run site.js site/index.html
   echo "== station updater (Pi)"
