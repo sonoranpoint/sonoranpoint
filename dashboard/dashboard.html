@@ -307,6 +307,8 @@ label.btn { cursor: pointer; } label.btn.disabled { opacity: .55; cursor: defaul
 @media (max-width: 560px) { .fgrid { grid-template-columns: minmax(0, 1fr); } }
 .checks { display: flex; flex-wrap: wrap; gap: 6px 14px; font-weight: 400; }
 .checks label { flex-direction: row; align-items: center; gap: 6px; font-weight: 400; }
+.pos-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 8px; align-items: center; }
+@media (max-width: 560px) { .pos-row { grid-template-columns: minmax(0, 1fr) auto; } .pos-row select { grid-row: 2; } }
 .err { color: var(--bad); font-weight: 700; font-size: 14px; min-height: 1em; }
 .viewas { display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
 .viewas select { background: rgba(255,255,255,.14); color: inherit; border: 1px solid rgba(255,255,255,.3); border-radius: 7px; padding: 3px 6px; font-size: 13px; }
@@ -718,7 +720,7 @@ function buildDemo() {
     ["Dana", "Brooks", "M2001", "s1", "manager"], ["Morgan", "Reyes", "A3001", null, "admin"], ["Chris", "Diaz", "E1012", "s2", "employee", false],
   ];
   const employees = people.map(([first, last, number, shift, role = "employee", active = true], i) => ({
-    id: "e" + (i + 1), first, last, name: `${first} ${last}`, number, role, active,
+    id: "e" + (i + 1), first, last, name: `${first} ${last}`, number, role, active, access: { manager: "admin", admin: "owner" }[role] || "", custom: null, positions: [],
     badge: "04BA0000" + String(i + 1).padStart(4, "0"), shifts: shift ? [shift] : [], pin: role !== "employee" }));
   const stations = [
     { id: "st1", name: "Equipment Room 01", location: window.SP_DEMO ? "Phoenix site" : "Terminal 3", version: "station-0.1.0", last_seen: now - 40 * 1000, revoked: false, added: now - 30 * 86400000 },
@@ -839,6 +841,13 @@ function buildDemo() {
   stations[0].contract = "dbw"; stations[1].contract = "ubw";
   members.find((m) => m.id === "u3").contracts = ["dbw"];
   employees.forEach((e) => { const m = members.find((x) => x.name === e.name); if (m) e.user = m.id; });   // Dana's badge and dashboard account are the same person
+  // Departments belong to a contract (migration 43); positions say who leads what.
+  const departments = (window.SP_DEMO ? [["dp1", "dbw", "Packing"], ["dp2", "dbw", "Receiving"], ["dp3", "ubw", "Repairs"]]
+    : [["dp1", "dbw", "Cabin"], ["dp2", "dbw", "Janitorial"], ["dp3", "dbw", "Lav"], ["dp4", "dbw", "Sky Club"], ["dp5", "ubw", "Cabin"]])
+    .map(([id, contract, name], i) => ({ id, contract, name, sort: i }));
+  const pri = employees.find((e) => e.name === "Priya Shah"); pri.access = "supervisor"; pri.role = "manager"; pri.pin = true; pri.contract = "dbw";
+  pri.positions = [{ id: "ps1", title: "Supervisor", dept: "dp1" }, { id: "ps2", title: "Supervisor", dept: "dp2" }];
+  employees.find((e) => e.name === "Dana Brooks").positions = [{ id: "ps3", title: "Duty manager", dept: null }];
   shifts.forEach((x) => { x.contract = { AM: "dbw", PM: "ubw" }[x.name] || null; });
   const loans = [{ id: "ln1", eq: equipment.find((q) => q.name === "Battery 06").id, from: "ubw", to: "dbw", at: now - 5 * HOUR, by: "Dana Brooks", notes: window.SP_DEMO ? "Shipping's chargers are down" : "Delta's chargers are down" }];
   const emailPrefs = { u1: ["problem"], u2: ["problem", "overdue"], u3: ["overdue", "shift_report"], u4: [] };
@@ -850,7 +859,7 @@ function buildDemo() {
     { station: "st2", at: now - 12 * 86400000 + 2 * HOUR, kind: "set_up", details: {}, by: "Dana Brooks" },
     { station: "st2", at: now - 6 * 86400000, kind: "moved_contract", details: window.SP_DEMO ? { from: "Shipping", to: "Maintenance" } : { from: "Delta BW", to: "United BW" }, by: "Morgan Reyes" },
   ];
-  return { now, org, categories, equipment, employees, shifts, stations, txns, alerts, audit, reportAcks, occs, members, invites, reasons, problems, emailPrefs, contracts, loans, stationEvents, outages,
+  return { now, org, categories, equipment, employees, shifts, stations, txns, alerts, audit, reportAcks, occs, members, invites, reasons, problems, emailPrefs, contracts, loans, stationEvents, outages, departments,
            roles: [{ id: "rl", name: "Ramp lead", perms: ["people", "status", "equipment"], contract_id: null, contract: null }],
            me: { id: "u1", name: "Morgan Reyes", role: "owner", email: "morgan.reyes@" + DEMO_MAIL } };
 }
@@ -861,15 +870,16 @@ const RANK = { viewer: 0, supervisor: 1, admin: 2, owner: 3 };
 const ROLE_NAME = { viewer: "View Only", supervisor: "Supervisor", admin: "Manager", owner: "Admin" };
 const can = (need) => RANK[DB.me.role] >= RANK[need];
 /* Permissions (migration 40). Admins have all; built-in roles have a fixed set; a custom role has its own boxes. */
-const PERMS = [["people", "People", "Add and edit employees, issue and replace badges, put people on shifts"],
+const PERMS = [["people", "People", "Add and edit employees, issue and replace badges, put people on shifts, give positions"],
   ["remove_people", "Deactivate people", "Deactivate and reactivate employees"],
   ["status", "Equipment status", "Mark items lost or in maintenance, report and clear problems, lend items"],
   ["reports", "Shift reports", "Sign off shift reports"], ["alerts", "Alerts", "Mark alerts seen"],
   ["visitors", "Visitors", "Let people from other contracts use your stations"],
   ["equipment", "Equipment", "Add, edit and remove equipment, categories, time limits, import, labels"],
-  ["stations", "Stations", "Add, rename and remove stations, setup codes"], ["fobs", "Station fobs", "Give manager or admin fobs and set PINs"],
-  ["shifts", "Shifts", "Create shifts and change their times"], ["team", "Team", "Invite and manage dashboard users below them"]];
-const ALL_PERMS = PERMS.map(([k]) => k);
+  ["stations", "Stations", "Add, rename and remove stations, setup codes, station Wi-Fi"],
+  ["shifts", "Shifts", "Create shifts and change their times"], ["team", "Team", "Give people roles below their own, keep the department list"]];
+// "fobs" (migration 40) is kept for old roles but no longer shown: since migration 43 a person's role is also their fob.
+const ALL_PERMS = [...PERMS.map(([k]) => k), "fobs"];
 // Built-in roles (migration 41): Supervisor < Manager < Admin.
 const ROLE_PERMS = { viewer: [], supervisor: ["people", "status", "reports", "visitors"],
   admin: ["people", "remove_people", "status", "reports", "alerts", "visitors", "equipment", "shifts", "team"], owner: ALL_PERMS };
@@ -897,14 +907,28 @@ function roleOptions(sel) {
   return built + (mine.length ? `<optgroup label="Your roles">${mine.map((r) => `<option value="role:${r.id}" ${sel === "role:" + r.id ? "selected" : ""}>${esc(r.name)}</option>`).join("")}</optgroup>` : "");
 }
 
-// An employee's dashboard access (migration 42): their linked account's role, an invite waiting, or Agent (badge only).
+// One role per person (migration 43): an employee's role ("" = Agent, a built-in, or "role:<id>") sets what their fob does at the
+// station and, with a dashboard account, what they can do here. Station powers come from the role's boxes.
+const STATION_BOXES = ["people", "remove_people", "status", "visitors", "equipment", "team", "stations"];
+const accessPerms = (v) => !v ? [] : String(v).startsWith("role:") ? roleOf(v.slice(5))?.perms || [] : v === "owner" ? ALL_PERMS : ROLE_PERMS[v] || [];
+const stationPowers = (v) => accessPerms(v).some((p) => STATION_BOXES.includes(p));
+const fobOf = (v) => accessPerms(v).includes("stations") ? "admin" : stationPowers(v) ? "manager" : "employee";
+const accessOf = (e) => e.custom ? "role:" + e.custom : e.access || "";
+const accessLabel = (v) => !v ? "Agent" : String(v).startsWith("role:") ? roleOf(v.slice(5))?.name || "Custom role" : ROLE_NAME[v];
+const canManageAccess = (v) => !v || (String(v).startsWith("role:") ? canGiveRole(roleOf(v.slice(5))) : canManageRole(v));
 function empAccess(e) {
-  const m = e.user ? (DB.members || []).find((x) => x.id === e.user) : null;
-  if (m) return { value: m.custom ? "role:" + m.custom : m.role, label: roleLabel(m), member: m, can: canManageMember(m) };
-  const i = (DB.invites || []).find((x) => x.employee === e.id);
-  if (i) return { value: i.custom ? "role:" + i.custom : i.role, label: roleLabel(i), invite: i, can: canManageRole(i.role) && (!i.custom || canGiveRole(roleOf(i.custom))) };
-  return { value: "", label: "Agent", can: true };
+  const v = accessOf(e), m = e.user ? (DB.members || []).find((x) => x.id === e.user) : null;
+  const i = !m ? (DB.invites || []).find((x) => x.employee === e.id) : null;
+  return { value: v, label: accessLabel(v), member: m, invite: i, can: canManageAccess(v) };
 }
+// Departments (migration 43) for someone in this contract: the company's own and those of the contract or a group above it.
+function deptsFor(contract) {
+  const up = new Set(); let c = contract; while (c) { up.add(c); c = (DB.contracts || []).find((x) => x.id === c)?.parent || null; }
+  return (DB.departments || []).filter((d) => !d.contract || up.has(d.contract));
+}
+const deptName = (id) => (DB.departments || []).find((d) => d.id === id)?.name || "";
+const posText = (p) => p.dept && deptName(p.dept) ? `${p.title} – ${deptName(p.dept)}` : p.title;
+const POS_TITLES = ["Lead", "Supervisor", "Manager", "Duty manager", "Trainer"];
 
 /* =====================================================================
    API — the only way screens read or change data
@@ -1131,14 +1155,11 @@ const api = {
     if (!first) return { ok: false, error: "Enter a first name." };
     if (number && DB.employees.some((e) => e.number === number && e.id !== id)) return { ok: false, error: `Employee # ${number} is already used by ${DB.employees.find((e) => e.number === number).name}.` };
     if (badge) { const own = uidOwner(badge, id); if (own) return { ok: false, error: `That badge ID is already used by ${own}.` }; }
-    const e0 = id ? empOf(id) : null; const role = d.role || "employee";
-    if (role !== "employee" && !(e0 && e0.pin) && !/^[0-9]{4,8}$/.test(d.pin || "")) return { ok: false, error: "A manager or admin fob needs a PIN of 4 to 8 digits." };
-    if (d.pin && !/^[0-9]{4,8}$/.test(d.pin)) return { ok: false, error: "PINs are 4 to 8 digits." };
+    const e0 = id ? empOf(id) : null;
     const patch = { first, last, name: [first, last].filter(Boolean).join(" "), number: number || null, badge: badge || null, barcode: code, shifts: d.shifts || [], ...("contract" in d ? { contract: d.contract || null } : {}) };
-    if (has("fobs")) { patch.role = role; if (d.pin) patch.pin = true; if (role === "employee") patch.pin = false; }
     if (id) { Object.assign(e0, patch); return { ok: true, id }; }
     const nid = "e" + Date.now();
-    DB.employees.push({ id: nid, active: true, role: "employee", ...patch });
+    DB.employees.push({ id: nid, active: true, role: "employee", access: "", custom: null, positions: [], ...patch });
     DB.audit.push({ at: Date.now(), actor: DB.me.name, text: `added employee ${patch.name}` });
     return { ok: true, id: nid };
   },
@@ -1157,7 +1178,7 @@ const api = {
   importEmployees(items) {
     if (!has("people")) return { ok: false, error: "Ask a supervisor to import employees." };
     const t = Date.now();
-    items.forEach((x, i) => DB.employees.push({ id: `e${t}_${i}`, active: true, role: "employee", first: x.first, last: x.last, name: x.name, number: x.number,
+    items.forEach((x, i) => DB.employees.push({ id: `e${t}_${i}`, active: true, role: "employee", access: "", custom: null, positions: [], first: x.first, last: x.last, name: x.name, number: x.number,
       badge: x.badge || (x.barcode ? barcodeUid(x.barcode) : null), barcode: x.barcode, shifts: x.shifts, contract: x.contract }));
     DB.audit.push({ at: Date.now(), actor: DB.me.name, text: `imported ${items.length} employee${items.length === 1 ? "" : "s"}` });
     return { ok: true, count: items.length };
@@ -1216,7 +1237,9 @@ const api = {
     if (!canManageMember(m) || (custom ? !canGiveRole(roleOf(custom)) : !canManageRole(role))) return { ok: false, error: m?.role === "owner" || role === "owner" ? ADMIN_NOTE : "You can't give that role." };
     if (custom) role = "viewer";
     if (m.role === "owner" && role !== "owner" && DB.members.filter((x) => x.role === "owner").length === 1) return { ok: false, error: "The company needs at least one admin. Make someone else an admin first." };
-    m.role = role; m.custom = custom; if (m.id === DB.me.id) Object.assign(DB.me, { role, custom }); return { ok: true };
+    m.role = role; m.custom = custom; if (m.id === DB.me.id) Object.assign(DB.me, { role, custom });
+    DB.employees.filter((e) => e.user === m.id).forEach((e) => Object.assign(e, { access: role, custom, role: fobOf(custom ? "role:" + custom : role) }));
+    return { ok: true };
   },
   /* rpc list_custom_roles / save_custom_role / delete_custom_role (Admins, for their own area) */
   roles() { return (DB.roles || []).map((r) => ({ ...r, members: DB.members.filter((m) => m.custom === r.id).length })); },
@@ -1243,29 +1266,64 @@ const api = {
     DB.members = DB.members.filter((x) => x.id !== id); return { ok: true };
   },
   cancelInvite(id) { DB.invites = DB.invites.filter((i) => i.id !== id); },
-  /* rpc set_employee_access (migration 42): Agent (badge only) or a dashboard role, from the employee's page */
-  setEmployeeAccess(id, value, email) {
+  /* rpc set_employee_access (migrations 42, 43): their role ("" = Agent: badge only), a PIN when the role has station powers,
+     and optionally an email so they can also sign in to the dashboard with the same role */
+  setEmployeeAccess(id, value, email, pin) {
     const e = empOf(id); if (!e) return { ok: false, error: "That employee isn't here any more." };
-    if (!has("people") || !has("team")) return { ok: false, error: "Ask a manager or admin to change dashboard access." };
-    const custom = String(value || "").startsWith("role:") ? value.slice(5) : null, role = custom ? "viewer" : value || null;
-    if (role === "owner") return { ok: false, error: ADMIN_NOTE };
-    if (value && (custom ? !canGiveRole(roleOf(custom)) : !canManageRole(role))) return { ok: false, error: "You can't give that role." };
+    if (!has("people")) return { ok: false, error: "Ask a supervisor or manager to change roles." };
+    value = value || ""; email = (email || "").trim().toLowerCase(); pin = pin || "";
+    const cur = accessOf(e), changed = value !== cur, custom = value.startsWith("role:") ? value.slice(5) : null, role = custom ? "viewer" : value || null;
+    if (role === "owner" && changed) return { ok: false, error: ADMIN_NOTE };
+    if (cur && (changed || pin || email) && !canManageAccess(cur)) return { ok: false, error: cur === "owner" ? ADMIN_NOTE : "You can't change their role." };
+    if (changed && value && !canManageAccess(value)) return { ok: false, error: "You can't give that role." };
+    if (pin && !/^[0-9]{4,8}$/.test(pin)) return { ok: false, error: "PINs are 4 to 8 digits." };
+    const powers = stationPowers(value);
+    if (powers && !pin && (e.badge || e.barcode) && !e.pin) return { ok: false, error: "Give them a PIN of 4 to 8 digits for the station's Admin menu." };
     const m = e.user ? DB.members.find((x) => x.id === e.user) : null;
-    if (m && !canManageMember(m)) return { ok: false, error: m.role === "owner" ? ADMIN_NOTE : "You can't change their access." };
-    if (!value) { DB.invites = DB.invites.filter((i) => i.employee !== id); if (m) DB.members = DB.members.filter((x) => x !== m); e.user = null; return { ok: true }; }
-    if (m) { m.role = role; m.custom = custom; return { ok: true }; }
-    email = (email || "").trim().toLowerCase();
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return { ok: false, error: "Enter their email so we can send them an invite." };
-    const other = DB.members.find((x) => x.email === email);
-    if (other) {
-      if (DB.employees.some((x) => x.user === other.id && x.id !== id)) return { ok: false, error: "That email is already linked to another employee." };
-      if (!canManageMember(other)) return { ok: false, error: other.role === "owner" ? ADMIN_NOTE : "You can't change their access." };
-      other.role = role; other.custom = custom; e.user = other.id; return { ok: true, linked: true };
+    if (!value) {
+      if (m && !canManageMember(m)) return { ok: false, error: m.role === "owner" ? ADMIN_NOTE : "You can't change their access." };
+      DB.invites = DB.invites.filter((i) => i.employee !== id); if (m) DB.members = DB.members.filter((x) => x !== m);
+      Object.assign(e, { user: null, access: "", custom: null, pin: false, role: "employee" }); return { ok: true };
     }
-    if (DB.contracts?.length && !e.contract) return { ok: false, error: `Give them a ${CTERM().one.toLowerCase()} first: dashboard access follows it.` };
-    DB.invites = DB.invites.filter((i) => i.email !== email && i.employee !== id);
-    DB.invites.unshift({ id: "i" + Date.now(), email, role, custom, contracts: e.contract ? [e.contract] : [], employee: id, created: Date.now(), expires: Date.now() + 14 * 86400000 });
-    return { ok: true, invited: email };
+    let other = null;
+    if (!m && email) {
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return { ok: false, error: "Enter a full email address, or leave it blank." };
+      other = DB.members.find((x) => x.email === email) || null;
+      if (other && DB.employees.some((x) => x.user === other.id && x.id !== id)) return { ok: false, error: "That email is already linked to another employee." };
+      if (other && !canManageMember(other)) return { ok: false, error: other.role === "owner" ? ADMIN_NOTE : "You can't change their access." };
+      if (!other && DB.contracts?.length && !e.contract) return { ok: false, error: `Give them a ${CTERM().one.toLowerCase()} first: dashboard access follows it.` };
+    }
+    Object.assign(e, { access: role, custom, role: fobOf(value) }); if (powers && pin) e.pin = true; if (!powers) e.pin = false;
+    if (m) { if (changed) Object.assign(m, { role, custom }); return { ok: true }; }
+    if (other) { Object.assign(other, { role, custom }); e.user = other.id; return { ok: true, linked: true }; }
+    if (email) {
+      DB.invites = DB.invites.filter((i) => i.email !== email && i.employee !== id);
+      DB.invites.unshift({ id: "i" + Date.now(), email, role, custom, contracts: e.contract ? [e.contract] : [], employee: id, created: Date.now(), expires: Date.now() + 14 * 86400000 });
+      return { ok: true, invited: email };
+    }
+    return { ok: true };
+  },
+  /* employee_positions table (migration 43): replace someone's positions */
+  savePositions(id, rows) {
+    const e = empOf(id); if (!e) return { ok: false, error: "That employee isn't here any more." };
+    if (!has("people")) return { ok: false, error: "Ask a supervisor or manager to change positions." };
+    rows = rows.map((r) => ({ title: (r.title || "").trim(), dept: r.dept || null })).filter((r) => r.title);
+    if (rows.some((r) => r.title.length > 40)) return { ok: false, error: "Position titles are up to 40 characters." };
+    e.positions = rows.map((r, i) => ({ id: "ps" + Date.now() + i, ...r })); return { ok: true };
+  },
+  /* departments table (migration 43): each belongs to a contract, or the whole company */
+  saveDepartment(d) {
+    if (!has("team")) return { ok: false, error: "Ask a manager or admin to change departments." };
+    const name = (d.name || "").trim(), contract = d.contract || null;
+    if (!name || name.length > 40) return { ok: false, error: "Give it a name (up to 40 characters)." };
+    if (!contract && myScopeIds()) return { ok: false, error: `Pick one of your ${CTERM().many.toLowerCase()}.` };
+    if ((DB.departments ||= []).some((x) => (x.contract || null) === contract && x.name.toLowerCase() === name.toLowerCase())) return { ok: false, error: "That department is already there." };
+    const nid = "dp" + Date.now(); DB.departments.push({ id: nid, contract, name, sort: DB.departments.length }); return { ok: true, id: nid };
+  },
+  deleteDepartment(id) {
+    if (!has("team")) return { ok: false, error: "Ask a manager or admin to change departments." };
+    DB.departments = (DB.departments || []).filter((d) => d.id !== id);
+    DB.employees.forEach((e) => (e.positions || []).forEach((p) => { if (p.dept === id) p.dept = null; })); return { ok: true };
   },
   /* rpc set_member_contracts (admins and managers, inside their own branch): which contracts someone covers */
   setMemberContracts(id, ids) {
@@ -1707,15 +1765,29 @@ function vEmployees() {
   const q = S.f.empSearch.trim().toLowerCase();
   const rows = api.employees().filter((e) => (!q || `${e.name} ${e.number} ${e.barcode || ""}`.toLowerCase().includes(q)) && (!S.f.empContract || inBranch(e.contract, S.f.empContract)))
     .sort((a, b) => (b.active - a.active) || (b.out - a.out) || a.name.localeCompare(b.name));
-  return head("Employees", `${rows.filter((e) => e.active).length} active · also addable at a station with a manager or admin fob`, (has("people") || has("equipment")) ? `<span class="actions"><button class="btn" data-act="labOpen" data-k="employees">${ic("tag")}Print labels</button><a class="btn" href="#import-employees">${ic("upload")}Import</a><button class="btn primary" data-act="newEmp">Add employee</button></span>` : "") + `
+  return head("Employees", `${rows.filter((e) => e.active).length} active · also addable at a station with a supervisor's or manager's fob`, (has("people") || has("equipment")) ? `<span class="actions"><button class="btn" data-act="labOpen" data-k="employees">${ic("tag")}Print labels</button><a class="btn" href="#import-employees">${ic("upload")}Import</a><button class="btn primary" data-act="newEmp">Add employee</button></span>` : "") + `
     <div class="filters"><input class="field" type="search" id="empSearch" aria-label="Search employees" placeholder="Search name or employee #" value="${esc(S.f.empSearch)}" data-f="empSearch">${DB.contracts?.length ? `<select class="field" id="empContract" aria-label="${esc(CTERM().one)}" data-f="empContract">${contractOptions(S.f.empContract || "", `All ${CTERM().many.toLowerCase()}`, null, true)}</select>` : ""}</div>
     <section class="panel"><div class="tablewrap"><table class="cardify">
       <thead><tr><th>Name</th><th>Role</th><th>Shift</th><th>Badge</th><th>Has out</th><th>Last tap</th></tr></thead>
       <tbody>${rows.map((e) => `<tr class="click" data-open="employee:${e.id}" tabindex="0" ${e.active ? "" : 'style="opacity:.55"'}>
         <td class="lead"><b>${esc(e.name)}</b><span class="sub">${esc([e.number, contractName(e.contract)].filter(Boolean).join(" · "))}${e.active ? "" : " · Inactive"}</span></td>
-        <td class="pin">${e.role === "employee" ? `<span class="muted">Employee</span>` : `<span class="chip brand">${ROLE[e.role]} fob</span>`}</td>
+        <td class="pin">${accessOf(e) ? `<span class="chip brand">${esc(accessLabel(accessOf(e)))}</span>` : `<span class="muted">Agent</span>`}${(e.positions || []).length ? `<span class="sub">${esc(e.positions.map(posText).join(", "))}</span>` : ""}</td>
         <td data-label="Shift">${esc(e.shiftNames.join(", ") || "—")}</td><td data-label="Badge">${realTag(e.badge) ? `On file <span class="muted mono" title="${esc(fmtUid(e.badge))}">${esc(shortUid(e.badge))}</span>` : e.barcode ? `Barcode <span class="muted mono">${esc(e.barcode)}</span>` : `<span class="muted">No badge</span>`}</td>
-        <td class="num" data-label="Has out">${e.out ? `<b>${e.out}</b>` : `<span class="muted">0</span>`}</td><td class="num ${e.last ? "" : "empty-sm"}" data-label="Last tap">${e.last ? esc(fmtWhen(e.last)) : ""}</td></tr>`).join("")}</tbody></table></div></section>${vVisitors()}`;
+        <td class="num" data-label="Has out">${e.out ? `<b>${e.out}</b>` : `<span class="muted">0</span>`}</td><td class="num ${e.last ? "" : "empty-sm"}" data-label="Last tap">${e.last ? esc(fmtWhen(e.last)) : ""}</td></tr>`).join("")}</tbody></table></div></section>${vVisitors()}${vDepartments()}`;
+}
+// Departments (migration 43): each contract keeps its own list (Delta BW: Cabin, Janitorial, Lav, Sky Club). Positions use them.
+function vDepartments() {
+  if (!has("team") && !(DB.departments || []).length) return "";
+  const list = (DB.departments || []).filter((d) => !d.contract || contractOf(d.contract)).slice().sort((a, b) => (contractName(a.contract) || "").localeCompare(contractName(b.contract) || "") || a.sort - b.sort);
+  const T = CTERM();
+  return `<section class="panel"><div class="panel-h"><h2>Departments</h2></div>
+    <div class="panel-b muted" style="font-size:13.5px;padding-bottom:0">Used for positions, like Supervisor – Cabin.${DB.contracts?.length ? ` Each ${esc(T.one.toLowerCase())} has its own.` : ""}</div>
+    ${list.length ? `<div class="list">${list.map((d) => `<div class="row" style="grid-template-columns:minmax(0,1fr) auto"><span><b>${esc(d.name)}</b>${DB.contracts?.length ? `<span class="sub">${esc(contractName(d.contract) || "Whole company")}</span>` : ""}</span>
+      ${has("team") ? `<button class="btn sm" data-act="delDept" data-id="${d.id}">Remove</button>` : ""}</div>`).join("")}</div>` : `<div class="panel-b muted">No departments yet.</div>`}
+    ${has("team") ? `<form class="panel-b inline-form" data-form="dept" style="border-top:1px solid var(--line)">
+      <input class="field" name="name" aria-label="Department name" placeholder="Department, like Cabin" maxlength="40" required style="max-width:240px">
+      ${DB.contracts?.length ? `<select class="field" name="contract" aria-label="${esc(T.one)}" style="max-width:220px">${contractOptions(myDefaultContract() || "", myScopeIds() ? null : "Whole company")}</select>` : ""}
+      <button class="btn">Add department</button><span class="err" id="deptErr" role="alert"></span></form>` : ""}</section>`;
 }
 
 /* ---------------- Import from a spreadsheet (equipment or employees) ----------------
@@ -2338,6 +2410,8 @@ function vTeam() {
     <section class="panel"><div class="panel-h"><h2>What each role can do</h2></div><div class="tablewrap"><table class="roles-t">
       <thead><tr><th></th><th>View Only</th><th>Supervisor</th><th>Manager</th><th>Admin</th>${api.roles().map((r) => `<th>${esc(r.name)}</th>`).join("")}</tr></thead>
       <tbody><tr><td>See equipment, activity, alerts and reports${DB.contracts?.length ? ` <span class="muted">(their ${esc(CTERM().many.toLowerCase())})</span>` : ""}</td>${"<td aria-label='Yes'>✓</td>".repeat(4 + api.roles().length)}</tr>
+        <tr><td>At the station<span class="sub">What their fob does (a role with station boxes needs a PIN)</span></td>${["viewer", "supervisor", "admin", "owner"].concat(api.roles().map((r) => "role:" + r.id))
+          .map((v) => `<td>${stationPowers(v) ? "Admin menu" : "<span class='muted'>Badge only</span>"}</td>`).join("")}</tr>
         ${PERMS.map(([k, l, d]) => `<tr><td>${esc(l)}<span class="sub">${esc(d)}</span></td>${["viewer", "supervisor", "admin", "owner"].map((r) => ROLE_PERMS[r].includes(k))
           .concat(api.roles().map((r) => r.perms.includes(k))).map((y) => `<td aria-label="${y ? "Yes" : "No"}">${y ? "✓" : "<span class='muted'>–</span>"}</td>`).join("")}</tr>`).join("")}
         <tr><td>Company settings<span class="sub">Name, logo, categories, checkout rules (whole-company access only)</span></td><td aria-label="No"><span class='muted'>–</span></td><td aria-label="No"><span class='muted'>–</span></td><td aria-label="Yes">✓</td><td aria-label="Yes">✓</td>${"<td aria-label='No'><span class='muted'>–</span></td>".repeat(api.roles().length)}</tr></tbody></table></div>
@@ -2431,12 +2505,15 @@ function dEmployee(id) {
   const lateCount = api.activity().filter((a) => a.action === "checkin" && a.prev === id && a.flags.includes("returned_after_extended")).length;
   const c = S.confirm;
   return drawerHead(esc(e.name), `${esc(e.number || "")}${e.shiftNames.length ? " · " + esc(e.shiftNames.join(", ")) + " shift" : ""}`,
-      `<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">${e.active ? `<span class="chip ok">Active</span>` : `<span class="chip quiet">Inactive</span>`}${e.role !== "employee" ? `<span class="chip brand">${ROLE[e.role]} fob</span>` : ""}</div>`) + `<div class="drawer-b">
+      `<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">${e.active ? `<span class="chip ok">Active</span>` : `<span class="chip quiet">Inactive</span>`}${accessOf(e) ? `<span class="chip brand">${esc(accessLabel(accessOf(e)))}</span>` : ""}</div>`) + `<div class="drawer-b">
     <div class="sect"><h3>Has out now (${items.length})</h3>${items.length ? `<div class="list" style="border:1px solid var(--line);border-radius:10px">${items.map((q) => `<button class="row" data-open="equipment:${q.id}" style="grid-template-columns:minmax(0,1fr) auto">
         <span><b>${esc(q.name)}</b><span class="sub">Since ${esc(fmtWhen(q.out_at))}${q.due_at ? " · due " + esc(fmtWhen(q.due_at)) : ""}</span></span>${statusChip(q)}</button>`).join("")}</div>` : `<p class="muted" style="margin:0">Nothing checked out.</p>`}</div>
     <div class="sect"><dl class="kv"><dt>Badge</dt><dd class="mono">${realTag(e.badge) ? esc(fmtUid(e.badge)) : `<span class="muted" style="font-family:var(--body)">${e.barcode ? "No NFC badge (uses its barcode)" : "No badge yet"}</span>`}</dd>${e.barcode ? `<dt>Badge barcode</dt><dd class="mono">${esc(e.barcode)}</dd>` : ""}<dt>Late returns (7 days)</dt><dd>${lateCount}</dd>
-      <dt>Last tap</dt><dd>${e.last ? esc(fmtWhen(e.last)) : "Never"}</dd>${has("team") ? (() => { const a = empAccess(e);
-        return `<dt>Dashboard</dt><dd>${esc(a.label)}${a.invite ? `<span class="muted" style="display:block;font-weight:400;font-size:13px">Invite sent to ${esc(a.invite.email)}, not accepted yet</span>` : a.member ? `<span class="muted" style="display:block;font-weight:400;font-size:13px">${esc(a.member.email)}</span>` : `<span class="muted" style="display:block;font-weight:400;font-size:13px">Badge only</span>`}</dd>`; })() : ""}</dl></div>
+      <dt>Last tap</dt><dd>${e.last ? esc(fmtWhen(e.last)) : "Never"}</dd>
+      ${(() => { const a = empAccess(e), sub = (t) => `<span class="muted" style="display:block;font-weight:400;font-size:13px">${t}</span>`;
+        return `<dt>Role</dt><dd>${esc(a.label)}${sub(!a.value ? "Badge only" : stationPowers(a.value) ? `Opens the station's Admin menu${e.pin ? "" : " (no PIN yet)"}` : "Badge only at the station")}</dd>
+          ${has("team") && a.value ? `<dt>Dashboard</dt><dd>${a.member ? `Signs in${sub(esc(a.member.email))}` : a.invite ? `Invited${sub(`${esc(a.invite.email)}, not accepted yet`)}` : `No${sub("Station only. Add their email to give them the dashboard too.")}`}</dd>` : ""}
+          ${(e.positions || []).length ? `<dt>Positions</dt><dd>${e.positions.map((p) => esc(posText(p))).join("<br>")}</dd>` : ""}`; })()}</dl></div>
     ${has("people") ? `<div class="actions"><button class="btn" data-act="editEmp">Edit details</button></div>
     ${has("remove_people") ? `<div class="sect"><h3>Access</h3>${c === "deactivate" ? `<div class="confirm">Deactivate ${esc(e.name)}? Their badge stops working right away. Their history stays.
         <button class="btn sm danger" data-act="doActive" data-v="0">Deactivate</button><button class="btn sm" data-act="noConfirm">Cancel</button></div>`
@@ -2507,9 +2584,10 @@ function dEqForm(id) {
     </form></div>`;
 }
 function dEmpForm(id) {
-  const e = id ? empOf(id) : { first: "", last: "", number: "", badge: "", shifts: [], role: "employee" };
+  const e = id ? empOf(id) : { first: "", last: "", number: "", badge: "", shifts: [], role: "employee", access: "", positions: [] };
   const role = S.formRole ?? e.role;
   const acc = id ? empAccess(e) : { value: "", label: "Agent", can: true }, access = S.formAccess ?? acc.value, team = has("team") && has("people");
+  const pos = S.formPos ?? (e.positions || []), depts = deptsFor(id ? e.contract : myDefaultContract() || null);
   return drawerHead(id ? `Edit ${esc(e.name)}` : "Add employee", id ? "" : "Or add them at a station: Admin menu, Add employee, then tap their badge.") + `<div class="drawer-b">
     <form class="fgrid" data-form="emp:${id || ""}">
       <label>First name<input class="field" name="first" required maxlength="40" value="${esc(e.first)}"></label>
@@ -2521,14 +2599,19 @@ function dEmpForm(id) {
         <select class="field" name="contract">${contractOptions(id ? e.contract : S.f.empContract || myDefaultContract() || "", "Whole company (works everywhere)")}</select></label>` : ""}
       <div class="full" style="display:flex;flex-direction:column;gap:5px"><b style="font-size:13.5px">Shifts</b>
         <div class="checks">${DB.shifts.filter((s) => s.active || e.shifts.includes(s.id)).map((s) => `<label><input type="checkbox" name="shifts" value="${s.id}" ${e.shifts.includes(s.id) ? "checked" : ""}> ${esc(s.name)} <span class="muted">${fmtClock(s.start)}–${fmtClock(s.end)}</span></label>`).join("")}</div></div>
-      ${has("fobs") ? `<label>Station fob<small>Managers and admins open the station's Admin menu</small>
-        <select class="field" name="role" data-act-change="formRole">${["employee", "manager", "admin"].map((r) => `<option value="${r}" ${role === r ? "selected" : ""}>${{ employee: "Regular badge", manager: "Manager fob", admin: "Admin fob" }[r]}</option>`).join("")}</select></label>
-        ${role !== "employee" ? `<label>${e.pin ? "New PIN" : "PIN"}<small>${e.pin ? "Leave blank to keep the current PIN" : "4 to 8 digits, needed for the Admin menu"}</small><input class="field" name="pin" inputmode="numeric" maxlength="8" autocomplete="off"></label>` : "<span></span>"}` : ""}
-      ${!team ? "" : !acc.can ? `<div class="full"><b style="font-size:13.5px">Dashboard role</b><p class="muted" style="margin:4px 0 0">${esc(acc.label)}. ${acc.member?.role === "owner" ? esc(ADMIN_NOTE) : "Someone with more access can change it."}</p></div>`
-        : `<label>Dashboard role<small>Agents only use their badge at stations</small><select class="field" name="access" data-act-change="formAccess">
-          <option value="">Agent (badge only, no dashboard)</option>${roleOptions(access)}</select></label>
-        ${access && !acc.member ? `<label>Their email<small>${acc.invite ? `Invite sent to ${esc(acc.invite.email)}. Change it to send a new one.` : "We'll email them an invite to sign in"}</small><input class="field" type="email" name="email" maxlength="200" value="${esc(acc.invite?.email || "")}" placeholder="name@company.com" autocomplete="off"></label>` : "<span></span>"}
+      ${!has("people") ? "" : !team || !acc.can ? `<div class="full"><b style="font-size:13.5px">Role</b><p class="muted" style="margin:4px 0 0">${esc(acc.label)}. ${acc.value === "owner" ? esc(ADMIN_NOTE) : "A manager or admin can change it."}</p></div>`
+        : `<label>Role<small>Sets what their fob can do at the station, and on the dashboard if they sign in</small><select class="field" name="access" data-act-change="formAccess">
+          <option value="">Agent (badge only)</option>${roleOptions(access)}</select></label>
+        ${stationPowers(access) ? `<label>${e.pin ? "New PIN" : "PIN"}<small>${e.pin ? "Leave blank to keep the current PIN" : "4 to 8 digits, for the station's Admin menu"}</small><input class="field" name="pin" inputmode="numeric" maxlength="8" autocomplete="off"></label>` : "<span></span>"}
+        ${access && !acc.member ? `<label class="full">Email<small>Optional. ${acc.invite ? `Invite sent to ${esc(acc.invite.email)}. Change it to send a new one.` : "Add it to let them sign in to the dashboard too. We'll email them an invite."}</small><input class="field" type="email" name="email" maxlength="200" value="${esc(acc.invite?.email || "")}" placeholder="name@company.com" autocomplete="off"></label>` : ""}
         <p class="muted full" style="margin:-4px 0 0;font-size:13px">${esc(ADMIN_NOTE)}</p>`}
+      ${has("people") ? `<div class="full" style="display:flex;flex-direction:column;gap:6px"><b style="font-size:13.5px">Positions</b>
+        <small class="muted" style="margin-top:-4px">Optional. Someone can have several, like Supervisor – Cabin and Supervisor – Janitorial.</small>
+        ${pos.map((p, i) => `<div class="pos-row"><input class="field" name="pos_title" list="posTitles" maxlength="40" value="${esc(p.title)}" placeholder="Supervisor" aria-label="Position ${i + 1} title">
+          <select class="field" name="pos_dept" aria-label="Position ${i + 1} department"><option value="">${depts.length ? "No department" : "No departments yet"}</option>${depts.map((d) => `<option value="${d.id}" ${p.dept === d.id ? "selected" : ""}>${esc(d.name)}${DB.contracts?.length && d.contract !== e.contract ? ` (${esc(contractName(d.contract) || "whole company")})` : ""}</option>`).join("")}</select>
+          <button class="btn sm" type="button" data-act="posDel" data-i="${i}">Remove</button></div>`).join("")}
+        <div><button class="btn sm" type="button" data-act="posAdd">Add a position</button></div>
+        <datalist id="posTitles">${POS_TITLES.map((t) => `<option value="${t}">`).join("")}</datalist></div>` : ""}
       <div class="err full" role="alert">${esc(S.formErr || "")}</div>
       <div class="actions full"><button class="btn primary">${id ? "Save changes" : "Add employee"}</button><button class="btn" type="button" data-act="${id ? "backEmp" : "close"}">Cancel</button></div>
     </form></div>`;
@@ -2634,13 +2717,13 @@ document.addEventListener("click", async (e) => {
   if (a === "pickOrg") return openCompany(t.dataset.id);
   if (a === "skipPass") return openCompany(L.org);
   if (a === "editName") { S.ready = false; S.drawer = null; AUTH.err = ""; AUTH.view = "name"; return renderAuth(); }
-  if (a === "close") { S.drawer = null; S.confirm = null; S.formErr = null; S.formRole = null; S.formAccess = null; return renderLayer(); }
+  if (a === "close") { S.drawer = null; S.confirm = null; S.formErr = null; S.formRole = null; S.formAccess = null; S.formPos = null; return renderLayer(); }
   if (a === "newEq") { S.formErr = null; return openDrawer("eqForm", ""); }
   if (a === "editEq") { S.formErr = null; return openDrawer("eqForm", D.id); }
   if (a === "backEq") { S.formErr = null; return openDrawer("equipment", D.id); }
-  if (a === "newEmp") { S.formErr = null; S.formRole = null; S.formAccess = null; return openDrawer("empForm", ""); }
-  if (a === "editEmp") { S.formErr = null; S.formRole = null; S.formAccess = null; return openDrawer("empForm", D.id); }
-  if (a === "backEmp") { S.formErr = null; S.formRole = null; S.formAccess = null; return openDrawer("employee", D.id); }
+  if (a === "newEmp") { S.formErr = null; S.formRole = null; S.formAccess = null; S.formPos = null; return openDrawer("empForm", ""); }
+  if (a === "editEmp") { S.formErr = null; S.formRole = null; S.formAccess = null; S.formPos = null; return openDrawer("empForm", D.id); }
+  if (a === "backEmp") { S.formErr = null; S.formRole = null; S.formAccess = null; S.formPos = null; return openDrawer("employee", D.id); }
   if (a === "askDelCat") { S.confirm = "delcat:" + t.dataset.id; return render(); }
   if (a === "delCat") { const r = api.deleteCategory(t.dataset.id); S.confirm = null; toast(r.ok ? "Category deleted" : "It still has equipment"); return render(); }
   if (a === "askRm") { S.confirm = "rm:" + t.dataset.id; return render(); }
@@ -2650,6 +2733,13 @@ document.addEventListener("click", async (e) => {
   if (a === "roleAskDel") { S.confirm = "rmrole:" + t.dataset.id; return render(); }
   if (a === "roleDel") { const r = await api.deleteRole(t.dataset.id); S.confirm = null; toast(r.ok ? "Role deleted" : r.error); return render(); }
   if (a === "rmMember") { const r = api.removeMember(t.dataset.id); S.confirm = null; toast(r.ok ? "Removed from the team" : r.error); return render(); }
+  if (a === "posAdd" || a === "posDel") { const f = $(".drawer form"), fd = new FormData(f), keep = Object.fromEntries(fd), d = fd.getAll("pos_dept");
+    S.formPos = fd.getAll("pos_title").map((title, i) => ({ title, dept: d[i] || null }));
+    if (a === "posAdd") S.formPos.push({ title: "", dept: null }); else S.formPos.splice(+t.dataset.i, 1);
+    S.formAccess = keep.access ?? S.formAccess; renderLayer();
+    const f2 = $(".drawer form"); for (const [k, v] of Object.entries(keep)) if (f2.elements[k] && !["shifts", "pos_title", "pos_dept", "access"].includes(k) && typeof v === "string") f2.elements[k].value = v;
+    if (a === "posAdd") [...f2.querySelectorAll("[name=pos_title]")].pop()?.focus(); return; }
+  if (a === "delDept") { const r = api.deleteDepartment(t.dataset.id); toast(r.ok ? "Department removed" : r.error); return render(); }
   if (a === "cancelInv") { api.cancelInvite(t.dataset.id); toast("Invite cancelled"); return render(); }
   if (a === "askStopShift") { S.confirm = "stopShift"; return renderLayer(); }
   if (a === "doShiftActive") { api.setShiftActive(D.id, t.dataset.v === "1"); S.confirm = null; toast(t.dataset.v === "1" ? "Shift is in use again" : "Shift stopped. Past reports are kept."); return render(); }
@@ -2702,8 +2792,9 @@ document.addEventListener("change", (e) => {
     t.form.querySelectorAll("input[name=perm]").forEach((c) => { c.checked = perms.includes(c.value); }); return;
   }
   if (t.dataset.member) { const r = api.setMemberRole(t.dataset.member, t.value); toast(r.ok ? "Role updated" : r.error); return render(); }
-  if (t.dataset.actChange === "formAccess") { const keep = Object.fromEntries(new FormData(t.form)); S.formAccess = t.value; renderLayer();
-    const f2 = $(".drawer form"); for (const [k, v] of Object.entries(keep)) if (f2.elements[k] && k !== "shifts" && k !== "access") f2.elements[k].value = v; return; }
+  if (t.dataset.actChange === "formAccess") { const fd = new FormData(t.form), keep = Object.fromEntries(fd), d = fd.getAll("pos_dept"); S.formAccess = t.value;
+    if (fd.has("pos_title")) S.formPos = fd.getAll("pos_title").map((title, i) => ({ title, dept: d[i] || null })); renderLayer();
+    const f2 = $(".drawer form"); for (const [k, v] of Object.entries(keep)) if (f2.elements[k] && !["shifts", "pos_title", "pos_dept", "access"].includes(k) && typeof v === "string") f2.elements[k].value = v; return; }
   if (t.dataset.actChange === "formRole") { const form = t.form; const keep = Object.fromEntries(new FormData(form)); S.formRole = t.value; renderLayer();
     const f2 = $(".drawer form"); for (const [k, v] of Object.entries(keep)) if (f2.elements[k] && k !== "shifts" && k !== "role") f2.elements[k].value = v; return; }
   if (t.dataset.f === "eqCat") { S.f.eqCat = t.value; return render(); }
@@ -2793,18 +2884,32 @@ document.addEventListener("submit", async (e) => {
     S.formErr = null; toast(id ? "Saved" : `Added ${data.name.trim()}`); render(); return openDrawer("equipment", r.id);
   }
   if (kind.startsWith("emp:")) {
-    const id = kind.slice(4) || null; data.shifts = new FormData(f).getAll("shifts");
-    const keepForm = (err) => { S.formErr = err; const keep = data; renderLayer(); const f2 = $(".drawer form"); for (const [k, v] of Object.entries(keep)) if (f2.elements[k] && k !== "shifts" && typeof v === "string") f2.elements[k].value = v; };
-    const acc0 = id ? empAccess(empOf(id)) : { value: "" }, email = (data.email || "").trim().toLowerCase();
-    const accessChange = "access" in data && (data.access !== acc0.value || (acc0.invite && email && email !== acc0.invite.email));
-    if (accessChange && data.access && !acc0.member && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return keepForm("Enter their email so we can send them an invite.");
+    const id = kind.slice(4) || null, fd = new FormData(f); data.shifts = fd.getAll("shifts");
+    const d = fd.getAll("pos_dept"), pos = fd.getAll("pos_title").map((title, i) => ({ title: title.trim(), dept: d[i] || null })).filter((p) => p.title);
+    const keepForm = (err) => { S.formErr = err; S.formAccess = data.access ?? S.formAccess; if (fd.has("pos_title")) S.formPos = fd.getAll("pos_title").map((title, i) => ({ title, dept: d[i] || null }));
+      const keep = data; renderLayer(); const f2 = $(".drawer form"); for (const [k, v] of Object.entries(keep)) if (f2.elements[k] && !["shifts", "access"].includes(k) && typeof v === "string") f2.elements[k].value = v; };
+    const e0 = id ? empOf(id) : null, acc0 = e0 ? empAccess(e0) : { value: "" }, email = (data.email || "").trim().toLowerCase(), pin = (data.pin || "").trim();
+    const accessChange = "access" in data && (data.access !== acc0.value || !!pin || (!!email && !acc0.member && email !== acc0.invite?.email));
+    if (accessChange && pin && !/^[0-9]{4,8}$/.test(pin)) return keepForm("PINs are 4 to 8 digits.");
+    if (accessChange && stationPowers(data.access) && !pin && !e0?.pin && ((data.badge || "").trim() || (data.barcode || "").trim() || e0?.badge))
+      return keepForm("Give them a PIN of 4 to 8 digits for the station's Admin menu.");
+    if (accessChange && email && !acc0.member && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return keepForm("Enter a full email address, or leave it blank.");
     const r = api.saveEmployee(id, data);
     if (!r.ok) return keepForm(r.error);
-    if (accessChange) { const a = api.setEmployeeAccess(r.id, data.access, email);
-      if (!a.ok) { S.formErr = null; S.formRole = null; S.formAccess = null; render(); openDrawer("empForm", r.id); S.formErr = a.error; S.formAccess = data.access; return renderLayer(); }
-      toast(!data.access ? "Saved. They're an Agent now: badge only." : a.invited ? `Saved. Invite sent to ${a.invited}.` : a.linked ? "Saved and linked to their dashboard account." : "Saved. Role updated.");
-      S.formErr = null; S.formRole = null; S.formAccess = null; render(); return openDrawer("employee", r.id); }
-    S.formErr = null; S.formRole = null; S.formAccess = null; toast(id ? "Saved" : `Added ${data.first.trim()}`); render(); return openDrawer("employee", r.id);
+    const reopen = (err) => { S.formErr = null; S.formRole = null; S.formAccess = null; S.formPos = null; render(); openDrawer("empForm", r.id); S.formErr = err; S.formAccess = data.access; S.formPos = pos; return renderLayer(); };
+    let a = { ok: true };
+    if (accessChange) { a = api.setEmployeeAccess(r.id, data.access, email, pin); if (!a.ok) return reopen(a.error); }
+    if (has("people") && JSON.stringify(pos) !== JSON.stringify((e0?.positions || []).map((p) => ({ title: p.title, dept: p.dept || null })))) {
+      const pr = api.savePositions(r.id, pos); if (!pr.ok) return reopen(pr.error); }
+    S.formErr = null; S.formRole = null; S.formAccess = null; S.formPos = null;
+    toast(accessChange ? (!data.access ? "Saved. They're an Agent: badge only." : a.invited ? `Saved. Invite sent to ${a.invited}.` : a.linked ? "Saved and linked to their dashboard account." : `Saved. They're ${/^[aeiou]/i.test(accessLabel(data.access)) ? "an" : "a"} ${accessLabel(data.access)}.`)
+      : id ? "Saved" : `Added ${data.first.trim()}`);
+    render(); return openDrawer("employee", r.id);
+  }
+  if (kind === "dept") {
+    const r = api.saveDepartment(data);
+    if (!r.ok) { $("#deptErr").textContent = r.error; return; }
+    toast(`Added ${data.name.trim()}`); return render();
   }
   if (kind.startsWith("shift:")) {
     const id = kind.slice(6) || null; const fd = new FormData(f); data.days = fd.getAll("days"); const crew = fd.getAll("crew");
@@ -2914,6 +3019,9 @@ const live = {
     // Added in database update 11; the dashboard still works before it's run.
     const since30 = new Date(Date.now() - 30 * 86400000).toISOString();
     const contracts = await q(sb.from("contracts").select("*").eq("org_id", org).order("sort_order")).catch(() => []);
+    // Departments and positions (migration 43); empty until it's run.
+    const depts = await q(sb.from("departments").select("*").eq("org_id", org).order("sort_order")).catch(() => []);
+    const posRows = await all("employee_positions", "*", (x) => x.eq("org_id", org).order("sort_order")).catch(() => []);
     const covers = await q(sb.from("member_contracts").select("user_id,contract_id").eq("org_id", org)).catch(() => []);
     const coversOf = (uid) => covers.filter((x) => x.user_id === uid).map((x) => x.contract_id);
     const loans = await all("equipment_loans", "*", (x) => x.eq("org_id", org).or(`ended_at.is.null,lent_at.gte.${new Date(Date.now() - 30 * 86400000).toISOString()}`).order("lent_at")).catch(() => []);
@@ -2938,7 +3046,8 @@ const live = {
         hours: x.checkout_hours == null ? null : Number(x.checkout_hours), extended: x.extended_alert_hours == null ? null : Number(x.extended_alert_hours),
         holder: x.current_employee_id, out_at: ms(x.checked_out_at), due_at: ms(x.due_at), lost_at: x.status === "lost" ? ms(x.last_event_at) : null, contract: x.contract_id || null, barcode: x.barcode || null })),
       employees: emps.map((e) => ({ id: e.id, first: e.first_name, last: e.last_name, name: [e.first_name, e.last_name].filter(Boolean).join(" "), number: e.employee_number,
-        role: e.station_role, active: e.active, badge: e.badge_uid, pin: pinSet.has(e.id), shifts: assigns.filter((a) => a.employee_id === e.id).map((a) => a.shift_id), contract: e.contract_id || null, barcode: e.barcode || null, user: e.user_id || null })),
+        role: e.station_role, active: e.active, badge: e.badge_uid, pin: pinSet.has(e.id), shifts: assigns.filter((a) => a.employee_id === e.id).map((a) => a.shift_id), contract: e.contract_id || null, barcode: e.barcode || null, user: e.user_id || null,
+        access: e.access_role || "", custom: e.custom_role_id || null, positions: posRows.filter((p) => p.employee_id === e.id).map((p) => ({ id: p.id, title: p.title, dept: p.department_id || null })) })),
       shifts: shifts.map((s) => ({ id: s.id, name: s.name, start: hhmm(s.start_time), end: hhmm(s.end_time), grace: s.grace_minutes, early: s.early_checkout_minutes, contract: s.contract_id || null,
         days: s.days_of_week && s.days_of_week.length < 7 ? s.days_of_week : null, active: s.active })),
       stations: stations.map((s) => ({ id: s.id, name: s.name, location: s.location || "", version: s.software_version, last_seen: ms(s.last_seen_at) || 0, revoked: !!s.revoked_at,
@@ -2952,6 +3061,7 @@ const live = {
       me: { id: L.user.id, name: L.names[L.user.id], role, email: L.user.email }, audit: [], reportAcks: {}, occs: [],
       reasons: reasons.map((r) => ({ id: r.id, label: r.label, blocks: r.blocks_checkout, sort: r.sort_order })),
       contracts: contracts.map((c) => ({ id: c.id, parent: c.parent_id, name: c.name, kind: c.kind || "contract", share: c.share_children, move: c.move_on_return, sort: c.sort_order })),
+      departments: depts.map((d) => ({ id: d.id, contract: d.contract_id || null, name: d.name, sort: d.sort_order })),
       emailPrefs: Object.fromEntries(prefs.map((p) => [p.user_id, p.kinds || []])),
     });
     DB.outages = await q(sb.from("station_outages").select("station_id,started_at,ended_at").eq("org_id", org).gte("ended_at", new Date(Date.now() - 8 * 86400000).toISOString()).limit(2000))
@@ -3068,7 +3178,6 @@ const REMOTE = {
     let eid = id;
     if (id) await upd("employees", id, row); else { eid = (await q(sb.from("employees").insert({ org_id: ORG(), ...row }).select("id").single())).id; L.idMap[r.id] = eid; e.id = eid; if (S.drawer?.id === r.id) S.drawer.id = eid; }
     await syncAssignments("employee_id", eid, e.shifts || [], "shift_id");
-    if (has("fobs")) await okRpc("set_employee_station_role", { p_employee: eid, p_role: e.role || "employee", p_pin: d.pin || null });
   },
   setBarcodes: async ([kind, pairs]) => {
     const table = kind === "equipment" ? "equipment" : "employees";
@@ -3102,11 +3211,21 @@ const REMOTE = {
   setMemberRole: ([id, role]) => String(role).startsWith("role:") ? okRpc("set_member_role", { p_org: ORG(), p_user: id, p_role: "viewer", p_custom_role: role.slice(5) })
     : okRpc("set_member_role", { p_org: ORG(), p_user: id, p_role: role }),
   removeMember: ([id]) => okRpc("remove_member", { p_org: ORG(), p_user: id }),
-  setEmployeeAccess: async ([id, value, email]) => {
+  savePositions: async ([id, rows]) => {
+    const eid = L.idMap[id] || id;
+    await q(sb.from("employee_positions").delete().eq("employee_id", eid));
+    const list = rows.map((r) => ({ title: (r.title || "").trim(), dept: r.dept || null })).filter((r) => r.title);
+    if (list.length) await q(sb.from("employee_positions").insert(list.map((r, i) => ({ org_id: ORG(), employee_id: eid, title: r.title, department_id: r.dept, sort_order: i }))));
+  },
+  saveDepartment: async ([d], r) => { const x = (DB.departments || []).find((y) => y.id === r.id);
+    const row = await q(sb.from("departments").insert({ org_id: ORG(), contract_id: x.contract, name: x.name, sort_order: x.sort }).select("id").single()); L.idMap[r.id] = row.id; x.id = row.id; },
+  deleteDepartment: ([id]) => q(sb.from("departments").delete().eq("id", id)),
+  setEmployeeAccess: async ([id, value, email, pin]) => {
     const eid = L.idMap[id] || id, custom = String(value || "").startsWith("role:") ? value.slice(5) : null;
-    const x = await okRpc("set_employee_access", { p_employee: eid, p_role: value ? (custom ? "viewer" : value) : null, p_custom_role: custom, p_email: email || null })
+    const x = await okRpc("set_employee_access", { p_employee: eid, p_role: value ? (custom ? "viewer" : value) : null, p_custom_role: custom, p_email: email || null, p_pin: pin || null })
       .catch((e) => { throw new Error({ email_needed: "Enter their email so we can send them an invite.", email_linked: "That email is already linked to another employee.",
-        pick_contract: `Give them a ${CTERM().one.toLowerCase()} first: dashboard access follows it.`, bad_email: "Enter a full email address." }[e.message] || niceErr(e)); });
+        pick_contract: `Give them a ${CTERM().one.toLowerCase()} first: dashboard access follows it.`, bad_email: "Enter a full email address.",
+        pin_needed: "Give them a PIN of 4 to 8 digits for the station's Admin menu.", already_member: "That email is already on the team." }[e.message] || niceErr(e)); });
     if (x.token) { const err = await sendInviteEmail(x.email, x.token, empOf(eid)?.name || ""); if (err) toast("Invite saved, but the email didn't send: " + err); }
   },
   cancelInvite: ([id]) => rpc("cancel_invite", { p_invite: id }),

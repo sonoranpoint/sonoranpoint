@@ -31,10 +31,10 @@ const DANA = "04BA0000000A", MORGAN = "04BA0000000B";
   await pin("1111");
   check(/Wrong PIN. 4 tries left/.test(text()), "wrong PIN -> tries left");
   await pin("2468");
-  check(E("S.screen") === "staff" && /Add employee/.test(text()) && /Replace a lost badge/.test(text()) && !/unpair/i.test(text()), "right PIN -> manager menu (no admin-only items)");
+  check(E("S.screen") === "staff" && /Add employee/.test(text()) && /Roles, PINs, badges, deactivate/.test(text()) && !/unpair|Wi-Fi/i.test(text()), "right PIN -> Manager menu (no Admin-only station settings)");
 
   await click('[data-act="addEmp"]', 50);
-  check(/First name/.test(text()) && !/Role/.test(text()), "add employee form (managers don't see Role)");
+  check(/First name/.test(text()) && /Role\s*Agent/.test(text()), "add employee form: a Manager picks their role (starts as Agent)");
   await type("chris"); await click('[data-k="NEXT"]', 20); await type("diaz"); await click('[data-k="NEXT"]', 20); await type("e1004");
   check(/Chris/.test(text()) && /Diaz/.test(text()) && /E1004/.test(text()), "on-screen keyboard fills the fields (auto-capitalized)");
   await click('[data-act="primary"]', 50);
@@ -81,7 +81,7 @@ const DANA = "04BA0000000A", MORGAN = "04BA0000000B";
   await click('[data-act="menu"]', 50);
 
   await click('[data-act="item"]', 50); await tap("04DE000101", 500);
-  check(/Vacuum 01/.test(text()) && /AVAILABLE/.test(text()) && /Mark lost/.test(text()) && !/Retire/.test(text()), "Equipment status: tap an item -> its status + actions (no Retire for managers)");
+  check(/Vacuum 01/.test(text()) && /AVAILABLE/.test(text()) && /Mark lost/.test(text()) && /Retire/.test(text()), "Equipment status: tap an item -> its status + actions (a Manager can retire)");
   await click('[data-act="setStatus"][data-status="maintenance"]', 500);
   check(/in maintenance and can't be checked out/.test(text()) && /IN MAINTENANCE/.test(text()), "send to maintenance");
   await click('[data-act="setStatus"][data-status="available"]', 500);
@@ -92,7 +92,8 @@ const DANA = "04BA0000000A", MORGAN = "04BA0000000B";
   await click('[data-act="menu"]', 50); await click('[data-act="people"]', 50);
   const chrisId = E("demo.db.employees.find(e=>e.name==='Chris Diaz').id");
   await click(`[data-pick="person:${chrisId}"]`, 50);
-  check(/Chris Diaz/.test(text()) && /Replace lost badge/.test(text()) && !/Deactivate/.test(text()), "manager: employee page shows Replace badge only");
+  check(/Chris Diaz/.test(text()) && /Replace lost badge/.test(text()) && /Deactivate/.test(text()) && !!doc.querySelector('#screen [data-pick="setrole:supervisor"]') && !doc.querySelector('#screen [data-pick="setrole:admin"]'),
+        "Manager: employee page has badge, deactivate, and roles up to Supervisor (not Manager)");
   await click('[data-act="replaceBadge"]', 50); await tap("04BA000000C9", 600);
   check(/New badge for Chris Diaz/.test(text()), "replace Chris's lost badge");
   const morganId = E("demo.db.employees.find(e=>e.name==='Morgan Reyes').id");
@@ -103,11 +104,11 @@ const DANA = "04BA0000000A", MORGAN = "04BA0000000B";
   await tap(MORGAN, 100); doc.querySelector("#staffBtn").click(); await sleep(100); await pin("1357");
   check(/Admin/.test(text()) && /Roles, PINs/.test(text()), "admin fob -> admin menu");
   await click('[data-act="people"]', 50); await click(`[data-pick="person:${chrisId}"]`, 50);
-  await click('[data-pick="setrole:manager"]', 50);
-  check(/Give Chris Diaz's fob a PIN/.test(text()) && /New PIN/.test(text()), "promote to manager asks for a PIN first");
+  await click('[data-pick="setrole:admin"]', 50);
+  check(/Give Chris Diaz's fob a PIN to make them a Manager/.test(text()) && /New PIN/.test(text()), "making him a Manager asks for a PIN first");
   for (const d of "8642") await click(`[data-k="${d}"]`, 5);
   await click('[data-act="primary"]', 600);
-  check(/Chris Diaz is now a manager/.test(text()), "Chris is now a manager");
+  check(/Chris Diaz is now a Manager/.test(text()) && E("demo.db.employees.find(e=>e.name==='Chris Diaz').access") === "admin", "Chris is now a Manager");
   await click('[data-act="toggleActive"]', 600);
   check(/deactivated/.test(text()) && /INACTIVE/.test(text()), "admin deactivates Chris");
   await click('[data-act="menu"]', 50); await click('[data-act="station"]', 50);
@@ -119,8 +120,18 @@ const DANA = "04BA0000000A", MORGAN = "04BA0000000B";
 
   const log = doc.querySelector("#activity").textContent;
   check(/Dana Brooks added employee Chris Diaz/.test(log) && /Dana Brooks added equipment Radio 03/.test(log)
-        && /Morgan Reyes made Chris Diaz a manager/.test(log) && /Morgan Reyes deactivated Chris Diaz/.test(log), "activity log records every staff action with whose fob");
+        && /Morgan Reyes made Chris Diaz a Manager/.test(log) && /Morgan Reyes deactivated Chris Diaz/.test(log), "activity log records every staff action with whose fob");
 
+  // A Supervisor's fob (Priya): people and badges, item status, no equipment, no deactivating, no roles.
+  await tap("04BA0000000C", 100); doc.querySelector("#staffBtn").click(); await sleep(100); await pin("1470");
+  check(/Supervisor/.test(text()) && /Add employee/.test(text()) && !/Add equipment/.test(text()) && /Equipment status/.test(text()) && !/deactivate/i.test(text()),
+        "Supervisor menu: add people, item status; no adding equipment or deactivating");
+  await click('[data-act="addEmp"]', 50);
+  check(!/Role/.test(text()), "a Supervisor adds Agents only (no Role field)");
+  await click('[data-act="menu"]', 50); await click('[data-act="item"]', 50); await tap(E("demo.db.equipment.find(q => q.status === 'available' && q.nfc_uid && !q.nfc_uid.startsWith('B0C0DE')).nfc_uid"), 500);
+  check(/Mark lost/.test(text()) && !/Retire/.test(text()), "a Supervisor can mark lost but not retire");
+  await click('[data-act="exit"]', 100);
+  // An Agent with a fob that has no PIN yet just checks out.
   await tap(DANA, 100); doc.querySelector("#staffBtn").click(); await sleep(100); for (let i = 0; i < 5; i++) await pin("9999");
   check(/Fob locked/.test(text()), "5 wrong PINs lock the fob");
   check(errors.length === 0, "no script errors " + errors.join(";"));

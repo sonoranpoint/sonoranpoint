@@ -491,8 +491,14 @@ set role anon;
 
 select pg_temp.ok(station_set_item_status(:'key', '04BA0000000A', '2468', '04DE000510', 'lost')->'equipment'->>'status' = 'lost',
                   'manager marks Radio 10 lost from the station');
+reset role;
+update employees set access_role = 'supervisor' where badge_uid = '04BA0000000A';   -- a Supervisor's fob (migration 43)
+set role anon;
 select pg_temp.ok(station_set_item_status(:'key', '04BA0000000A', '2468', '04DE000510', 'retired')->>'error' = 'admin_only',
-                  'only admins can retire equipment');
+                  'retiring equipment needs the equipment box: a Supervisor can''t');
+reset role;
+update employees set access_role = 'admin' where badge_uid = '04BA0000000A';        -- back to Manager (what a manager fob became)
+set role anon;
 
 select station_replace_uid(:'key', '04BA0000000A', '2468', 'employee',
        (select (x->>'id')::uuid from jsonb_array_elements(station_staff_login(:'key', '04BA0000000A', '2468')->'employees') x where x->>'name' = 'Chris Diaz'),
@@ -1761,7 +1767,11 @@ select id as e42 from employees where employee_number = 'E4242' \gset
 select id as e43 from employees where employee_number = 'E4243' \gset
 set role authenticated;
 select set_config('request.jwt.claim.sub', '42420000-0000-0000-0000-000000000042', false) \g /dev/null
-select pg_temp.ok(set_employee_access(:'e42', 'supervisor', null, '')->>'error' = 'email_needed', 'a dashboard role needs an email for someone without an account');
+select pg_temp.ok((set_employee_access(:'e42', 'supervisor', null, '')->>'ok')::boolean, 'a role without an email: station only (migration 43)');
+reset role;
+select pg_temp.ok((select access_role::text || ' ' || station_role from employees where id = :'e42') = 'supervisor manager'
+                  and not exists (select 1 from org_invites where employee_id = :'e42'), 'they''re a Supervisor at the station, no invite sent');
+set role authenticated;
 select set_employee_access(:'e42', 'supervisor', null, 'New42@X.example') as inv42 \gset
 select pg_temp.ok((:'inv42'::jsonb->>'ok')::boolean, 'a Manager makes an employee a Supervisor (invite sent)');
 select pg_temp.ok(pg_temp.raises($$select set_employee_access('$$ || :'e43' || $$', 'admin', null, 'm43@x.example')$$), 'a Manager can''t make Managers from the employee page either');
@@ -1789,13 +1799,107 @@ select pg_temp.ok(not exists (select 1 from org_members where user_id = '4242000
 set role authenticated;
 select set_config('request.jwt.claim.sub', 'aaaaaaaa-0000-0000-0000-000000000001', false) \g /dev/null
 select pg_temp.ok((set_employee_access(:'e43', 'admin', null, 'MGR42@example.com')->>'linked')::boolean, 'an email already on the team links that account');
-select pg_temp.ok(set_employee_access(:'e42', 'supervisor', null, 'mgr42@example.com')->>'error' = 'email_linked', 'one account per employee');
+select set_config('t.e42', :'e42', false) \g /dev/null
+do $$ begin perform set_employee_access(current_setting('t.e42')::uuid, 'supervisor', null, 'mgr42@example.com'); raise exception 'FAIL: linked twice';
+exception when raise_exception then if sqlerrm <> 'email_linked' then raise; end if; end $$;
+select pg_temp.ok(true, 'one account per employee');
 select pg_temp.ok(pg_temp.raises($$select invite_member('00000000-0000-0000-0000-00000000d3e0', 'a42@x.example', 'owner')$$), 'a customer Admin can''t add Admins (only Sonoran Point)');
 select pg_temp.ok((invite_member('00000000-0000-0000-0000-00000000d3e0', 'm42@x.example', 'admin', array[:'dbw'::uuid])->>'ok')::boolean, 'but can add Managers');
 reset role;
 delete from org_invites where email in ('m42@x.example', 'new42@x.example');
 delete from employees where employee_number in ('E4242', 'E4243');
 delete from org_members where user_id = '42420000-0000-0000-0000-000000000042';
+
+\echo '--- One role per person: fobs follow the role; departments and positions (migration 43)'
+reset role;
+select pg_temp.ok((select access_role::text from employees where badge_uid = '04BA0000000A') = 'admin'
+                  and (select access_role::text from employees where badge_uid = '04BA0000000B') = 'owner', 'a manager fob became a Manager, an admin fob an Admin');
+insert into employees (org_id, first_name, last_name, employee_number, badge_uid, access_role, contract_id) values
+  ('00000000-0000-0000-0000-00000000d3e0', 'Sup', 'Fortythree', 'E4301', '04BA00004301', 'supervisor', :'dbw'),
+  ('00000000-0000-0000-0000-00000000d3e0', 'Agent', 'Fortythree', 'E4302', '04BA00004302', null, :'dbw');
+select id as sup43 from employees where employee_number = 'E4301' \gset
+select id as agt43 from employees where employee_number = 'E4302' \gset
+select id as morgan43 from employees where badge_uid = '04BA0000000B' \gset
+select pg_temp.ok((select station_role::text from employees where id = :'sup43') = 'manager' and (select station_role::text from employees where id = :'agt43') = 'employee',
+                  'a Supervisor''s fob opens the Admin menu; an Agent''s doesn''t');
+set role anon;
+select station_staff_login(:'key4', '04BA00004301', '1111') as np \gset
+select pg_temp.ok(:'np'::jsonb->>'error' = 'no_pin', 'a fob with powers but no PIN is refused');
+reset role;
+select private.set_pin(:'sup43', '4343') \g /dev/null
+set role anon;
+select station_staff_login(:'key4', '04BA00004301', '4343') as sl \gset
+select pg_temp.ok((:'sl'::jsonb->>'ok')::boolean and :'sl'::jsonb->'staff'->>'role_label' = 'Supervisor' and :'sl'::jsonb->'roles' = '[]'::jsonb,
+                  'a Supervisor opens the Admin menu, and can''t give roles (no Team box)');
+select pg_temp.ok(station_add_equipment(:'key4', '04BA00004301', '4343', 'Nope 43', (select id from equipment_categories where org_id = '00000000-0000-0000-0000-00000000d3e0' limit 1), '04DE00004399')->>'error' = 'admin_only',
+                  'a Supervisor can''t add equipment at the station');
+select pg_temp.ok((station_add_employee(:'key4', '04BA00004301', '4343', 'New', 'Agent', null, '04BA00004303', p_access => '')->>'ok')::boolean, 'but adds an Agent');
+select pg_temp.ok(station_add_employee(:'key4', '04BA00004301', '4343', 'New', 'Sup', null, '04BA00004304', p_new_pin => '1234', p_access => 'supervisor')->>'error' = 'admin_only',
+                  'not a Supervisor');
+select pg_temp.ok(station_update_employee(:'key4', '04BA00004301', '4343', :'agt43', p_active => false)->>'error' = 'admin_only', 'and can''t deactivate (Managers do)');
+select pg_temp.ok((station_update_employee(:'key4', '04BA00004301', '4343', :'sup43', p_new_pin => '4444')->>'ok')::boolean, 'changes their own PIN');
+-- A Manager's fob (Dana)
+select station_staff_login(:'key4', '04BA0000000A', '2468') as ml \gset
+select pg_temp.ok((select string_agg(x->>'label', ',' order by x->>'sort') from jsonb_array_elements(:'ml'::jsonb->'roles') x where x->>'value' not like 'role:%') = 'View Only,Supervisor',
+                  'a Manager gives View Only and Supervisor, not Manager or Admin');
+select pg_temp.ok(station_add_employee(:'key4', '04BA0000000A', '2468', 'New', 'Sup', null, '04BA00004304', p_access => 'supervisor')->>'error' = 'pin_needed', 'a role with station powers needs a PIN');
+select station_add_employee(:'key4', '04BA0000000A', '2468', 'New', 'Sup', null, '04BA00004304', p_new_pin => '1234', p_access => 'supervisor') as ns \gset
+select pg_temp.ok(:'ns'::jsonb->'employee'->>'role_label' = 'Supervisor', 'a Manager adds a Supervisor at the station');
+select pg_temp.ok(station_add_employee(:'key4', '04BA0000000A', '2468', 'New', 'Mgr', null, '04BA00004305', p_new_pin => '1234', p_access => 'admin')->>'error' = 'admin_only', 'but not a Manager');
+select pg_temp.ok((station_update_employee(:'key4', '04BA0000000A', '2468', :'agt43', p_active => false)->>'ok')::boolean, 'a Manager deactivates an Agent');
+select pg_temp.ok(station_update_employee(:'key4', '04BA0000000A', '2468', :'morgan43', p_access => 'viewer')->>'error' = 'admin_only',
+                  'but can''t change an Admin');
+select pg_temp.ok(station_update_employee(:'key4', '04BA0000000A', '2468', :'sup43', p_access => '')->>'ok' = 'true', 'and can make a Supervisor an Agent again');
+reset role;
+select pg_temp.ok((select station_role::text from employees where id = :'sup43') = 'employee' and not exists (select 1 from private.staff_pins where employee_id = :'sup43'),
+                  'an Agent''s fob loses the menu and its PIN');
+-- Custom role boxes change what the fob does.
+insert into custom_roles (org_id, name, perms) values ('00000000-0000-0000-0000-00000000d3e0', 'Ramp 43', '{reports}') returning id as cr43 \gset
+update employees set custom_role_id = :'cr43' where id = :'sup43';
+select pg_temp.ok((select station_role::text from employees where id = :'sup43') = 'employee', 'a role with no station boxes: badge only');
+update custom_roles set perms = '{status}' where id = :'cr43';
+select pg_temp.ok((select station_role::text from employees where id = :'sup43') = 'manager', 'give the role a station box: the fob opens the menu');
+-- The dashboard can't change roles by writing the table.
+insert into auth.users (id, email) values ('43430000-0000-0000-0000-000000000043', 'mgr43@example.com');
+insert into org_members (org_id, user_id, role) values ('00000000-0000-0000-0000-00000000d3e0', '43430000-0000-0000-0000-000000000043', 'admin');
+insert into member_contracts (org_id, user_id, contract_id) values ('00000000-0000-0000-0000-00000000d3e0', '43430000-0000-0000-0000-000000000043', :'dbw');
+set role authenticated;
+select set_config('request.jwt.claim.sub', '43430000-0000-0000-0000-000000000043', false) \g /dev/null
+select pg_temp.ok(pg_temp.raises($$update employees set access_role = 'owner' where employee_number = 'E4301'$$), 'writing a role into the table is refused');
+select pg_temp.ok(pg_temp.raises($$update employees set station_role = 'admin' where employee_number = 'E4301'$$), 'so is writing a fob level');
+select pg_temp.ok(pg_temp.raises($$insert into employees (org_id, first_name, access_role, contract_id) values ('00000000-0000-0000-0000-00000000d3e0', 'X', 'owner', '$$ || :'dbw' || $$')$$),
+                  'or adding someone with a role');
+update employees set last_name = 'Edited43' where employee_number = 'E4301';
+select pg_temp.ok(exists (select 1 from employees where employee_number = 'E4301' and last_name = 'Edited43'), 'other edits still work');
+select pg_temp.ok(set_employee_access(:'agt43', 'supervisor')->>'error' = 'pin_needed', 'from the dashboard too: a fob with powers needs a PIN');
+select pg_temp.ok((set_employee_access(:'agt43', 'supervisor', null, null, '5555')->>'ok')::boolean, 'Supervisor with a PIN, no email');
+-- Departments and positions
+insert into departments (org_id, contract_id, name) values ('00000000-0000-0000-0000-00000000d3e0', :'dbw', 'Cabin'), ('00000000-0000-0000-0000-00000000d3e0', :'dbw', 'Janitorial');
+select pg_temp.ok(pg_temp.raises($$insert into departments (org_id, contract_id, name) values ('00000000-0000-0000-0000-00000000d3e0', '$$ || :'ubw' || $$', 'Lav')$$),
+                  'a Delta BW Manager can''t add departments to United BW');
+insert into employee_positions (org_id, employee_id, title, department_id)
+  select '00000000-0000-0000-0000-00000000d3e0', :'agt43', 'Supervisor', id from departments where name in ('Cabin', 'Janitorial');
+select pg_temp.ok((select string_agg(p.title || ' - ' || d.name, ', ' order by d.name) from employee_positions p join departments d on d.id = p.department_id
+                   where p.employee_id = :'agt43') = 'Supervisor - Cabin, Supervisor - Janitorial', 'two positions: Supervisor for Cabin and for Janitorial');
+reset role;
+update member_contracts set contract_id = :'ubw' where user_id = '43430000-0000-0000-0000-000000000043';
+set role authenticated;
+select pg_temp.ok((select count(*) from departments where name = 'Cabin') = 0 and (select count(*) from employee_positions where employee_id = :'agt43') = 0,
+                  'United BW doesn''t see Delta BW''s departments or positions');
+-- A linked account: the station changes the dashboard role too.
+reset role;
+update employees set user_id = '43430000-0000-0000-0000-000000000043' where id = :'agt43';
+set role anon;
+select station_update_employee(:'key4', '04BA0000000B', '1357', :'agt43', p_access => 'viewer') \g /dev/null
+reset role;
+select pg_temp.ok((select role::text from org_members where user_id = '43430000-0000-0000-0000-000000000043') = 'viewer', 'changing a linked person''s role at the station changes their dashboard role');
+update org_members set role = 'supervisor' where user_id = '43430000-0000-0000-0000-000000000043';
+select pg_temp.ok((select access_role::text from employees where id = :'agt43') = 'supervisor', 'and the other way round');
+delete from employee_positions where employee_id = :'agt43';
+delete from departments where org_id = '00000000-0000-0000-0000-00000000d3e0';
+delete from employees where employee_number in ('E4301', 'E4302') or badge_uid in ('04BA00004303', '04BA00004304');
+delete from custom_roles where id = :'cr43';
+delete from org_members where user_id = '43430000-0000-0000-0000-000000000043';
 
 \echo '--- Deleting a company removes all its data'
 delete from organizations where slug = 'demo';

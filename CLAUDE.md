@@ -25,7 +25,7 @@ See README.md for the full product description.
 - Push to `main` → GitHub Actions runs `tests/run.sh db`, `ui` and `live` (PostgREST downloaded in CI), then deploys app + console to Cloudflare Pages
   (projects `sonoranpoint-app`, `sonoranpoint-console`, `sonoranpoint-site`).
 - Database changes are NOT automatic. Add a new migration file (never edit one already run on the live
-  project), then tell Dez to run it in the Supabase SQL editor. Migrations 1–42 have been run (checked 2026-11-13;
+  project), then tell Dez to run it in the Supabase SQL editor. Migrations 1–42 have been run, 43 not yet (checked 2026-11-13;
   ask if unsure). Alert emails are live (Resend key in Vault, first send
   confirmed 2026-10-20).
 - Station changes reach the Pis by themselves: every deploy publishes `app.sonoranpoint.com/station-release/latest.json` + a zip
@@ -94,6 +94,20 @@ See README.md for the full product description.
   `set_employee_access(employee, role?, custom_role?, email?)`: both null = Agent (badge only: invites cancelled, member removed),
   linked = change role, else links an existing member with that email or invites them (employee's contract). `accept_invite` links.
   Dashboard employee form "Dashboard role" (`empAccess`, `S.formAccess`, `api.setEmployeeAccess`), Team-box holders only.
+- Migration 43 (one role per person): `employees.access_role` + `custom_role_id` (null = Agent, badge only) decide the fob AND, with a
+  linked account, the dashboard. `station_role` is derived by trigger `employee_station_role` (stations box = admin, any of
+  `private.station_powers` = manager, else employee; writes of only station_role are read the old way: manager -> Manager, admin -> Admin).
+  Linked account <-> employee kept equal (`member_role_to_employee` on org_members; station role changes update org_members). Trigger
+  `a_guard_employee_access` refuses dashboard writes of access_role/custom_role_id/user_id/station_role except inside functions that
+  set `app.access_ok` (save/restore it in nested triggers). `set_employee_access(employee, role, custom, email, pin)`: email optional,
+  PIN required for station powers when they have a badge. Station: `private.staff_with(..., box)` per action (people, equipment,
+  status, visitors; retire = equipment; deactivate = remove_people; roles via `emp_can_give`/`emp_can_manage`), `staff_session`
+  refuses a fob with powers and no PIN (`no_pin`), staff login returns `perms`, `roles` it can give, per-employee `access`/`role_label`/`can_manage`;
+  `station_add_employee`/`station_update_employee` take `p_access` ("" / built-in / "role:<id>"). The "fobs" box is unused (hidden).
+  Departments (`public.departments`, per contract or company-wide; RLS: Team box in scope) and `public.employee_positions`
+  (title + optional department, several per person; People box). Dashboard: employee form "Role" (+PIN, optional email), positions
+  rows (`S.formPos`, `posAdd`/`posDel`), Employees -> "Departments" (`vDepartments`), `accessOf`/`accessLabel`/`stationPowers`/`fobOf`.
+  Station: `sCan(box)`, `boxesOf`, `roleInfo`, `roleText`; demo server mirrors it (`demo.boxes/canGive/canManage`).
 - Dashboard: `PERMS`, `ROLE_PERMS`, `has(perm)`, `roleLabel`, `roleOptions` ("role:<id>" values), Team page "Your roles" (`vRoles`).
   Console team panel lists the customer's roles in its role picker (`roleName`, `splitRole`).
 
@@ -163,7 +177,7 @@ See README.md for the full product description.
 ## Dashboard roles
 - Stored as viewer/supervisor/admin/owner (`org_members.role`, RLS, functions) but shown as View Only / Supervisor / Manager / Admin
   (`ROLE_NAME` in the dashboard; the console's customer pages say "admin" for the customer's top role). Copy follows the shown names.
-  Station fob roles (employee/manager/admin) are separate. The trial-reminder email says "admin or manager" since migration 27.
+  Since migration 43 the station fob level (employee/manager/admin) is worked out from the person's role. The trial-reminder email says "admin or manager" since migration 27.
 
 ## Dashboard sidebar
 - Dark blue with the company's light logo (`organizations.logo_dark_url`, migration 22) when they have one; otherwise `.side.light`

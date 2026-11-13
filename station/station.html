@@ -674,9 +674,11 @@ function demoSeed() {
       { id: "e1", employee_number: "E1001", name: "Alex Rivera", badge_uid: "04BA00000001", active: true },
       { id: "e2", employee_number: "E1002", name: "Jordan Lee", badge_uid: "04BA00000002", barcode: "000102", active: true },
       { id: "e3", employee_number: "E1003", name: "Sam Patel", badge_uid: "04BA00000003", active: true },
-      { id: "e4", employee_number: "M2001", name: "Dana Brooks", badge_uid: "04BA0000000A", active: true, role: "manager", pin: "2468" },
-      { id: "e5", employee_number: "A3001", name: "Morgan Reyes", badge_uid: "04BA0000000B", active: true, role: "admin", pin: "1357" },
-    ].map((e) => ({ role: "employee", pin: null, ...e })),
+      { id: "e4", employee_number: "M2001", name: "Dana Brooks", badge_uid: "04BA0000000A", active: true, access: "admin", pin: "2468" },
+      { id: "e5", employee_number: "A3001", name: "Morgan Reyes", badge_uid: "04BA0000000B", active: true, access: "owner", pin: "1357" },
+      { id: "e6", employee_number: "S4001", name: "Priya Shah", badge_uid: "04BA0000000C", active: true, access: "supervisor", pin: "1470" },
+    ].map((e) => { const x = { access: "", pin: null, ...e }; x.role = stFob(x.access); return x; }),
+    roles: [{ id: "rl", name: "Ramp lead", perms: ["people", "status", "equipment"] }],
     equipment,
     shifts: [
       { id: "s1", name: "AM", start: "05:00", end: "13:30", days: null, early: 60, active: true },
@@ -697,7 +699,8 @@ function demoReasons() { return [["Damaged", false], ["Not charging", false], ["
 
 const demo = {
   db: null, wifi: true, listeners: [],
-  load() { this.db = store.get("demoServer.v2") || demoSeed(); this.db.reasons ||= demoReasons(); this.db.problems ||= []; this.db.contracts ||= []; this.db.loans ||= [];
+  load() { this.db = store.get("demoServer.v2") || demoSeed(); this.db.roles ||= [];
+    this.db.employees.forEach((e) => { if (e.access === undefined) e.access = { manager: "admin", admin: "owner" }[e.role] || ""; }); this.db.reasons ||= demoReasons(); this.db.problems ||= []; this.db.contracts ||= []; this.db.loans ||= [];
     const dmg = this.db.reasons.find((r) => r.label === "Damaged"); if (dmg && !this.db.reasonsV2) { dmg.blocks_checkout = false; this.db.reasonsV2 = true; } },
   /* Contracts (same as private.contracts_share / contracts_move) */
   cpath(id) { const out = []; let c = this.db.contracts.find((x) => x.id === id); while (c && out.length < 50) { out.unshift(c.id); c = this.db.contracts.find((x) => x.id === c.parent_id); } return out; },
@@ -777,7 +780,7 @@ const demo = {
         reach: st.contract_id ? demo.db.contracts.filter((c) => demo.shares(st.contract_id, c.id)).map((c) => c.id) : null,
         visitors: st.contract_id ? Object.fromEntries((demo.db.passes || []).filter((p) => !p.ended && p.ends_at > clock.now() && demo.shares(p.contract_id, st.contract_id))
           .map((p) => [p.employee_id, new Date(p.ends_at).toISOString()])) : {},
-        employees: demo.db.employees.filter((e) => e.active && e.badge_uid).map((e) => ({ id: e.id, badge_uid: e.badge_uid, barcode: e.barcode || null, name: e.name, role: e.role, has_pin: !!e.pin, contract_id: e.contract_id || null })),
+        employees: demo.db.employees.filter((e) => e.active && e.badge_uid).map((e) => ({ id: e.id, badge_uid: e.badge_uid, barcode: e.barcode || null, name: e.name, role: e.role, perms: demo.boxes(e.access), has_pin: !!e.pin, contract_id: e.contract_id || null })),
         equipment: demo.db.equipment.filter((q) => q.nfc_uid && q.status !== "retired").map((q) => ({
           id: q.id, nfc_uid: q.nfc_uid, barcode: q.barcode || null, name: q.name, category_id: q.category_id, status: q.status, contract_id: q.contract_id || null, loan_to: demo.loanOf(q.id)?.to || null,
           current_employee_id: q.current_employee_id, checked_out_at: q.checked_out_at, due_at: q.due_at,
@@ -816,7 +819,7 @@ const demo = {
       return { ok: true, id: p.id, equipment: { id: eq.id, name: eq.name }, reason: r.label, blocks_checkout: r.blocks_checkout, held_by_reporter: eq.current_employee_id === emp.id };
     },
     station_lend_equipment(a) {
-      const ss = demo.staffSession(a, "manager"); if (!ss.ok) return ss;
+      const ss = demo.staffSession(a, "status"); if (!ss.ok) return ss;
       const q = demo.db.equipment.find((x) => x.nfc_uid === normUid(a.p_equipment_uid)); if (!q) return { ok: false, error: "unknown_equipment" };
       if (!demo.db.contracts.some((c) => c.id === a.p_to_contract)) return { ok: false, error: "unknown_contract" };
       if (!q.contract_id) return { ok: false, error: "no_contract" };
@@ -828,12 +831,12 @@ const demo = {
       return { ok: true, equipment: { id: q.id, name: q.name }, to: demo.cname(a.p_to_contract), from: demo.cname(q.contract_id) };
     },
     station_end_loan(a) {
-      const ss = demo.staffSession(a, "manager"); if (!ss.ok) return ss;
+      const ss = demo.staffSession(a, "status"); if (!ss.ok) return ss;
       const q = demo.db.equipment.find((x) => x.nfc_uid === normUid(a.p_equipment_uid)); if (!q) return { ok: false, error: "unknown_equipment" };
       return { ok: true, ended: demo.endLoan(q.id, "ended") };
     },
     station_clear_problem(a) {
-      const ss = demo.staffSession(a, "manager"); if (!ss.ok) return ss;
+      const ss = demo.staffSession(a, "status"); if (!ss.ok) return ss;
       const q = demo.db.equipment.find((x) => x.nfc_uid === normUid(a.p_equipment_uid)); if (!q) return { ok: false, error: "unknown_equipment" };
       let n = 0; for (const p of demo.db.problems) if (p.equipment_id === q.id && !p.cleared_at) { Object.assign(p, { cleared_at: clock.now(), cleared_by_employee: ss.e.id }); n++; }
       if (n) demo.log(ss.e, `cleared the reported problem on ${q.name}`);
@@ -842,7 +845,7 @@ const demo = {
     /* ---- Staff fobs (same checks as the database's station_staff_* functions) ---- */
     /* Same as station_visitor_pass: a manager from this station lets a visitor's badge in until midnight. */
     station_visitor_pass(a) {
-      const ss = demo.staffSession(a, "manager"); if (!ss.ok) return ss;
+      const ss = demo.staffSession(a, "visitors"); if (!ss.ok) return ss;
       const st = demo.station(a.p_device_key), m = demo.db.employees.find((x) => x.active && x.badge_uid === normUid(a.p_badge_uid));
       if (!demo.shares(st.contract_id, m.contract_id)) return { ok: false, error: "not_your_station" };
       const v = demo.db.employees.find((x) => x.active && x.badge_uid === normUid(a.p_visitor_badge)); if (!v) return { ok: false, error: "unknown_badge" };
@@ -854,20 +857,23 @@ const demo = {
       return { ok: true, pass_id: p.id, ends_at: new Date(p.ends_at).toISOString(), employee: { id: v.id, name: v.name }, home_contract: demo.cname(v.contract_id), approved_by: m.name };
     },
     station_staff_login(a) {
-      const ss = demo.staffSession(a, "manager"); if (!ss.ok) return ss;
-      return { ok: true, staff: { id: ss.e.id, name: ss.e.name, role: ss.e.role },
+      const ss = demo.staffSession(a, null); if (!ss.ok) return ss;
+      const roles = [...["viewer", "supervisor", "admin"].map((v) => ({ value: v, label: ACCESS_NAME[v], station: demo.boxes(v).some((b) => STATION_BOXES.includes(b)) })),
+        ...demo.db.roles.map((r) => ({ value: "role:" + r.id, label: r.name, station: r.perms.some((b) => STATION_BOXES.includes(b)) }))].filter((r) => demo.canGive(ss.e, r.value));
+      return { ok: true, staff: { id: ss.e.id, name: ss.e.name, role: ss.e.role, access: ss.e.access, role_label: demo.label(ss.e.access), perms: demo.boxes(ss.e.access) }, roles,
         categories: [...demo.db.categories].sort((x, y) => x.sort - y.sort).map((c) => ({ id: c.id, name: c.name,
           names: demo.db.equipment.filter((q) => q.category_id === c.id).map((q) => q.name).sort() })),
         employees: [...demo.db.employees].sort((x, y) => (y.active - x.active) || x.name.localeCompare(y.name)).map((e) => ({
-          id: e.id, name: e.name, employee_number: e.employee_number, role: e.role, active: e.active, has_badge: !!e.badge_uid, has_pin: !!e.pin })),
+          id: e.id, name: e.name, employee_number: e.employee_number, role: e.role, access: e.access, role_label: demo.label(e.access),
+          can_manage: e.id !== ss.e.id && demo.canManage(ss.e, e), active: e.active, has_badge: !!e.badge_uid, has_pin: !!e.pin })),
         untagged: demo.db.equipment.filter((q) => !q.nfc_uid && q.status !== "retired").map((q) => ({ id: q.id, name: q.name, category: demo.cat(q.category_id)?.name })) };
     },
     station_add_employee(a) {
-      const ss = demo.staffSession(a, "manager"); if (!ss.ok) return ss;
-      const role = a.p_role || "employee"; const num = (a.p_employee_number || "").trim() || null; const code = (a.p_new_barcode || "").trim().toUpperCase() || null;
+      const ss = demo.staffSession(a, "people"); if (!ss.ok) return ss;
+      const access = a.p_access != null ? a.p_access : { manager: "admin", admin: "owner" }[a.p_role] || "", role = stFob(access, demo.db.roles); const num = (a.p_employee_number || "").trim() || null; const code = (a.p_new_barcode || "").trim().toUpperCase() || null;
       const uid = normUid(a.p_new_badge_uid) || (code ? barcodeUid(code) : "");
       if (!(a.p_first_name || "").trim()) return { ok: false, error: "name_required" };
-      if (role !== "employee" && ss.e.role !== "admin") return { ok: false, error: "admin_only" };
+      if (!demo.canGive(ss.e, access)) return { ok: false, error: "admin_only" };
       if (role !== "employee" && !validPin(a.p_new_pin)) return { ok: false, error: "pin_needed" };
       if (!uid) return { ok: false, error: "no_badge" };
       const own = demo.uidOwner(uid); if (own) return { ok: false, error: own.kind === "badge" ? "badge_in_use" : "tag_is_equipment", used_by: own.name };
@@ -875,12 +881,12 @@ const demo = {
         if (o2) return { ok: false, error: o2.kind === "badge" ? "barcode_in_use" : "barcode_is_equipment", used_by: o2.name }; }
       const dup = num && demo.db.employees.find((e) => e.employee_number === num); if (dup) return { ok: false, error: "number_in_use", used_by: dup.name };
       const name = [a.p_first_name.trim(), (a.p_last_name || "").trim()].filter(Boolean).join(" ");
-      const e = { id: "e" + randHex(4), employee_number: num, name, badge_uid: uid, barcode: code || uidToCode(uid), active: true, role, pin: role !== "employee" ? a.p_new_pin : null, contract_id: ss.st.contract_id || null };
-      demo.db.employees.push(e); demo.log(ss.e, `added employee ${name}${role !== "employee" ? " (" + role + ")" : ""}`);
-      return { ok: true, employee: { id: e.id, name, role } };
+      const e = { id: "e" + randHex(4), employee_number: num, name, badge_uid: uid, barcode: code || uidToCode(uid), active: true, access, role, pin: role !== "employee" ? a.p_new_pin : null, contract_id: ss.st.contract_id || null };
+      demo.db.employees.push(e); demo.log(ss.e, `added employee ${name}${access ? " (" + demo.label(access) + ")" : ""}`);
+      return { ok: true, employee: { id: e.id, name, role, access, role_label: demo.label(access) } };
     },
     station_add_equipment(a) {
-      const ss = demo.staffSession(a, "manager"); if (!ss.ok) return ss;
+      const ss = demo.staffSession(a, "equipment"); if (!ss.ok) return ss;
       const name = (a.p_name || "").trim(); const code = (a.p_barcode || "").trim().toUpperCase() || null; const uid = normUid(a.p_tag_uid) || (code ? barcodeUid(code) : "");
       if (!name) return { ok: false, error: "name_required" };
       if (!demo.cat(a.p_category_id)) return { ok: false, error: "unknown_category" };
@@ -894,40 +900,45 @@ const demo = {
       return { ok: true, equipment: { id: q.id, name } };
     },
     station_set_item_status(a) {
-      const ss = demo.staffSession(a, a.p_status === "retired" ? "admin" : "manager"); if (!ss.ok) return ss;
+      const ss = demo.staffSession(a, a.p_status === "retired" ? "equipment" : "status"); if (!ss.ok) return ss;
       const q = demo.db.equipment.find((x) => x.nfc_uid === normUid(a.p_equipment_uid)); if (!q) return { ok: false, error: "unknown_equipment" };
       q.status = a.p_status === "available" ? (q.current_employee_id ? "checked_out" : "available") : a.p_status;
       demo.log(ss.e, { lost: `marked ${q.name} lost`, maintenance: `sent ${q.name} to maintenance`, retired: `retired ${q.name}` }[a.p_status] || `put ${q.name} back in service`);
       return { ok: true, equipment: { id: q.id, name: q.name, status: q.status } };
     },
     station_replace_uid(a) {
-      const ss = demo.staffSession(a, "manager"); if (!ss.ok) return ss;
+      const ss = demo.staffSession(a, null); if (!ss.ok) return ss;
       const uid = normUid(a.p_new_uid); if (!uid) return { ok: false, error: "no_tag" };
       const own = demo.uidOwner(uid, a.p_target); if (own) return { ok: false, error: own.kind === "badge" ? "badge_in_use" : "tag_in_use", used_by: own.name };
       if (a.p_kind === "employee") {
         const e = demo.emp(a.p_target); if (!e) return { ok: false, error: "unknown_employee" };
-        if (e.role !== "employee" && ss.e.role !== "admin") return { ok: false, error: "admin_only" };
+        if (!demo.boxes(ss.e.access).includes("people") || !demo.canManage(ss.e, e)) return { ok: false, error: "admin_only" };
         e.badge_uid = uid; demo.log(ss.e, `gave ${e.name} a new badge`);
       } else {
         const q = demo.db.equipment.find((x) => x.id === a.p_target); if (!q) return { ok: false, error: "unknown_equipment" };
+        if (!demo.boxes(ss.e.access).includes("status")) return { ok: false, error: "admin_only" };
         q.nfc_uid = uid; demo.log(ss.e, `put a new tag on ${q.name}`);
       }
       return { ok: true };
     },
     station_update_employee(a) {
-      const ss = demo.staffSession(a, "admin"); if (!ss.ok) return ss;
+      const ss = demo.staffSession(a, null); if (!ss.ok) return ss;
       const e = demo.emp(a.p_employee); if (!e) return { ok: false, error: "unknown_employee" };
-      if (e.id === ss.e.id && (a.p_active === false || (a.p_role && a.p_role !== e.role))) return { ok: false, error: "cant_change_self" };
+      const access = a.p_access != null ? a.p_access : a.p_role ? { manager: "admin", admin: "owner" }[a.p_role] || "" : e.access, change = access !== e.access, mine = demo.boxes(ss.e.access);
+      if (e.id === ss.e.id && (a.p_active === false || change)) return { ok: false, error: "cant_change_self" };
+      if (change && !(demo.canManage(ss.e, e) && demo.canGive(ss.e, access))) return { ok: false, error: "admin_only" };
+      if (a.p_active != null && a.p_active !== e.active && !(mine.includes("remove_people") && demo.canManage(ss.e, e))) return { ok: false, error: "admin_only" };
+      if (a.p_new_pin != null && e.id !== ss.e.id && !(mine.includes("people") && demo.canManage(ss.e, e))) return { ok: false, error: "admin_only" };
       if (a.p_new_pin != null && !validPin(a.p_new_pin)) return { ok: false, error: "pin_needed" };
-      const role = a.p_role || e.role;
+      const role = stFob(access, demo.db.roles);
       if (role !== "employee" && a.p_new_pin == null && !e.pin) return { ok: false, error: "pin_needed" };
       const changes = [];
-      if (role !== e.role) changes.push(`made ${e.name} ${role === "employee" ? "a regular employee" : "a " + role}`);
+      if (change) changes.push(`made ${e.name} ${access ? (/^[AEIOU]/.test(demo.label(access)) ? "an " : "a ") + demo.label(access) : "an Agent"}`);
       if (a.p_active != null && a.p_active !== e.active) changes.push(`${a.p_active ? "reactivated" : "deactivated"} ${e.name}`);
       if (a.p_new_pin != null) changes.push(`set a new PIN for ${e.name}`);
-      e.role = role; if (a.p_active != null) e.active = a.p_active; if (a.p_new_pin != null) e.pin = a.p_new_pin; if (role === "employee") e.pin = null;
+      demo.setAccess(e, access); if (a.p_active != null) e.active = a.p_active; if (a.p_new_pin != null && role !== "employee") e.pin = a.p_new_pin;
       changes.forEach((c) => demo.log(ss.e, c));
-      return { ok: true, employee: { id: e.id, role: e.role, active: e.active } };
+      return { ok: true, employee: { id: e.id, role: e.role, active: e.active, access: e.access, role_label: demo.label(e.access) } };
     },
     station_claim_admin_tag(a) {
       const st = demo.station(a.p_device_key); if (!st) return { ok: false, error: "station_not_authorized" };
@@ -945,7 +956,7 @@ const demo = {
       if (!(a.p_first_name || "").trim()) return { ok: false, error: "name_required" };
       if (!validPin(a.p_pin)) return { ok: false, error: "pin_needed" };
       const name = [a.p_first_name.trim(), (a.p_last_name || "").trim()].filter(Boolean).join(" ");
-      const ne = { id: "e" + randHex(4), employee_number: null, name, badge_uid: uid, active: true, role: "admin", pin: a.p_pin };
+      const ne = { id: "e" + randHex(4), employee_number: null, name, badge_uid: uid, active: true, access: "owner", role: "admin", pin: a.p_pin };
       demo.db.employees.push(ne); st.admin_claimed_at = clock.now(); demo.log(ne, "registered the admin tag that came with the station");
       return { ok: true, existing: false, employee: { id: ne.id, name, role: "admin" } };
     },
@@ -1038,22 +1049,31 @@ const demo = {
   onPass(empId, stContract) {
     return (this.db.passes || []).some((p) => p.employee_id === empId && !p.ended && clock.now() < p.ends_at && this.shares(p.contract_id, stContract));
   },
-  staffSession(a, min) {
+  // Roles (migration 43), as the database works them out.
+  boxes(access) { return !access ? [] : access.startsWith("role:") ? (this.db.roles.find((r) => "role:" + r.id === access)?.perms || []) : ROLE_BOXES[access] || []; },
+  label(access) { return access?.startsWith("role:") ? this.db.roles.find((r) => "role:" + r.id === access)?.name || "Custom role" : ACCESS_NAME[access || ""]; },
+  canGive(actor, access) {
+    if (!access) return true; if (access === "owner") return false;
+    const mine = this.boxes(actor.access), want = this.boxes(access);
+    if (access.startsWith("role:")) return actor.access === "owner" || (mine.includes("team") && want.every((b) => mine.includes(b)));
+    return actor.access === "owner" || (mine.includes("team") && ["viewer", "supervisor"].includes(access) && want.every((b) => mine.includes(b)));
+  },
+  canManage(actor, t) { return !t.access || (t.id !== actor.id && this.canGive(actor, t.access)); },
+  setAccess(e, access) { e.access = access || ""; e.role = stFob(e.access, this.db.roles); if (e.role === "employee") e.pin = null; },
+  staffSession(a, box) {
     const st = this.station(a.p_device_key); if (!st) return { ok: false, error: "station_not_authorized" };
-    const rank = { employee: 0, manager: 1, admin: 2 };
     const e = this.db.employees.find((x) => x.active && x.badge_uid === normUid(a.p_badge_uid));
-    if (!e || rank[e.role] < 1) return { ok: false, error: "not_staff" };
-    if (rank[e.role] < rank[min]) return { ok: false, error: "admin_only" };
-    if (e.pin) {
-      if ((e.locked_until || 0) > clock.now()) return { ok: false, error: "pin_locked" };
-      if (!a.p_pin) return { ok: false, error: "pin_required" };
-      if (a.p_pin !== e.pin) {
-        e.failures = (e.failures || 0) + 1;
-        if (e.failures >= 5) { e.failures = 0; e.locked_until = clock.now() + 15 * 60000; return { ok: false, error: "pin_locked" }; }
-        return { ok: false, error: "wrong_pin", tries_left: 5 - e.failures };
-      }
-      e.failures = 0;
+    if (!e || stFob(e.access, this.db.roles) === "employee") return { ok: false, error: "not_staff" };
+    if (!e.pin) return { ok: false, error: "no_pin" };
+    if ((e.locked_until || 0) > clock.now()) return { ok: false, error: "pin_locked" };
+    if (!a.p_pin) return { ok: false, error: "pin_required" };
+    if (a.p_pin !== e.pin) {
+      e.failures = (e.failures || 0) + 1;
+      if (e.failures >= 5) { e.failures = 0; e.locked_until = clock.now() + 15 * 60000; return { ok: false, error: "pin_locked" }; }
+      return { ok: false, error: "wrong_pin", tries_left: 5 - e.failures };
     }
+    e.failures = 0;
+    if (box && !this.boxes(e.access).includes(box)) return { ok: false, error: "admin_only" };
     st.last_seen = clock.now();
     return { ok: true, st, e };
   },
@@ -1833,9 +1853,9 @@ function overlayHtml() {
         <dt>Waiting to sync</dt><dd>${q} tap${q === 1 ? "" : "s"}</dd>
         ${S.saved.syncIssues.length ? `<dt>Sync problems</dt><dd>${S.saved.syncIssues.slice(-2).map(esc).join("; ")}</dd>` : ""}
       </dl>
-      ${c && S.staff?.emp.role !== "admin" && !window.SP_TRY ? `<p style="margin:0;font-size:1.6cqw;color:var(--screen-muted)">Unpairing needs an admin fob.</p>` : ""}
+      ${c && !sCan("stations") && !window.SP_TRY ? `<p style="margin:0;font-size:1.6cqw;color:var(--screen-muted)">Unpairing needs an admin fob.</p>` : ""}
       <div class="row">
-        ${c ? `<button class="sbtn primary" data-a="sync">Sync now</button><button class="sbtn" data-a="refresh">Refresh data</button>${S.staff?.emp.role === "admin" && !window.SP_TRY ? `<button class="sbtn danger" data-a="confirmUnpair">Unpair…</button>` : ""}` : ""}
+        ${c ? `<button class="sbtn primary" data-a="sync">Sync now</button><button class="sbtn" data-a="refresh">Refresh data</button>${sCan("stations") && !window.SP_TRY ? `<button class="sbtn danger" data-a="confirmUnpair">Unpair…</button>` : ""}` : ""}
         <button class="sbtn" data-a="close">Close</button>
       </div></div></div>`;
 }
@@ -1940,7 +1960,7 @@ function handleTag(raw) {
   const emp = cache.employees.find((e) => e.badge_uid === uid);
   if (S.visit) {   // waiting for a manager to let a visitor in
     if (uid === S.visit.emp.badge_uid) return;
-    if (emp && (emp.role === "manager" || emp.role === "admin") && serves(emp.contract_id)) return approveVisit(emp, null);
+    if (emp && boxesOf(emp).includes("visitors") && serves(emp.contract_id)) return approveVisit(emp, null);
     beep("bad"); return toast("Needs a manager from here", `Only a ${stationContract() || "station"} manager's fob can let them in.`);
   }
   if (emp && !servesEmp(emp)) { beep("bad"); S.lookup = null; return startVisit(emp); }
@@ -2186,6 +2206,19 @@ function replaceResult(old, res) {
 /* ================= Staff mode: manager and admin fobs ================= */
 const STAFF_MS = 90000;
 const ROLE = { employee: "Employee", manager: "Manager", admin: "Admin" };
+/* Roles (migration 43): a person's role decides what their fob does here, the same boxes as on the dashboard.
+   "" = Agent (badge only), viewer/supervisor/admin (Manager)/owner (Admin), or "role:<id>" for a company's own role. */
+const ALL_BOXES = ["people", "remove_people", "status", "reports", "alerts", "visitors", "equipment", "stations", "fobs", "shifts", "team"];
+const ROLE_BOXES = { viewer: [], supervisor: ["people", "status", "reports", "visitors"],
+  admin: ["people", "remove_people", "status", "reports", "alerts", "visitors", "equipment", "shifts", "team"], owner: ALL_BOXES };
+const STATION_BOXES = ["people", "remove_people", "status", "visitors", "equipment", "team", "stations"];
+const ACCESS_NAME = { "": "Agent", viewer: "View Only", supervisor: "Supervisor", admin: "Manager", owner: "Admin" };
+// Older servers send only the fob level.
+const OLD_BOXES = { employee: [], manager: ["people", "status", "visitors", "equipment"], admin: STATION_BOXES };
+const boxesOf = (e) => e?.perms || OLD_BOXES[e?.role] || [];
+const sCan = (box) => boxesOf(S.staff?.emp).includes(box);
+const roleText = (e) => e?.role_label || ROLE[e?.role] || "";
+const aRole = (label) => label === "Agent" ? "an Agent" : (/^[AEIOU]/i.test(label) ? "an " : "a ") + label;
 const KB_ROWS = ["1234567890", "QWERTYUIOP", "ASDFGHJKL-", "ZXCVBNM"];
 
 function beginStaff(emp, opts) {
@@ -2255,9 +2288,9 @@ async function staffLogin(emp, pin, opts = {}) {
   let r; try { r = await call("station_staff_login", { p_device_key: S.saved.deviceKey, p_badge_uid: emp.badge_uid, p_pin: pin }); } catch { r = { ok: false, error: "offline" }; }
   if (r.ok) {
     S.pinEntry = null;
-    S.staff = { emp: { ...emp, ...r.staff, badge_uid: emp.badge_uid }, pin, data: { categories: r.categories, employees: r.employees, untagged: r.untagged || [] },
+    S.staff = { emp: { ...emp, ...r.staff, badge_uid: emp.badge_uid }, pin, data: { categories: r.categories, employees: r.employees, untagged: r.untagged || [], roles: r.roles || [] },
                 view: "menu", form: {}, field: null, capture: null, msg: null, busy: false, at: Date.now(), fromSetup: !!opts.fromSetup };
-    if (opts.view === "addEmp") Object.assign(S.staff, { view: "addEmp", form: { role: "employee" }, field: "first" });
+    if (opts.view === "addEmp") Object.assign(S.staff, { view: "addEmp", form: { role: "" }, field: "first" });
     if (opts.view === "addEq") Object.assign(S.staff, { view: "addEq", form: {}, field: "category" });
     if (opts.fromSetup && S.wiz && pin) { S.wiz.adminPin = pin; S.wiz.adminUid = emp.badge_uid; S.wiz.admin = S.wiz.admin || { name: r.staff.name }; }
     S.screen = "staff"; beep("ok"); return render();
@@ -2267,6 +2300,7 @@ async function staffLogin(emp, pin, opts = {}) {
   if (r.error === "station_not_authorized") return lockedOut();
   S.pinEntry = null;
   if (r.error === "not_staff" && !opts.fromSetup) return startSession(emp);
+  if (r.error === "no_pin" && !opts.fromSetup) { startSession(emp); return toast("Your fob needs a PIN for the admin menu", "Ask a manager to set one."); }
   S.screen = opts.fromSetup ? "setup" : "idle"; render(); beep("bad");
   if (r.error === "pin_locked") toast("Fob locked", "Too many wrong PINs. Try again in 15 minutes, or ask an admin.");
   else if (r.error === "offline") toast("The admin menu needs a connection", "Check the Wi-Fi and try again.");
@@ -2281,7 +2315,7 @@ function exitStaff() {
 async function reloadStaffData() {
   try {
     const r = await call("station_staff_login", { p_device_key: S.saved.deviceKey, p_badge_uid: S.staff.emp.badge_uid, p_pin: S.staff.pin });
-    if (r.ok && S.staff) S.staff.data = { categories: r.categories, employees: r.employees, untagged: r.untagged || [] };
+    if (r.ok && S.staff) S.staff.data = { categories: r.categories, employees: r.employees, untagged: r.untagged || [], roles: r.roles || [] };
   } catch {}
   refreshData();
 }
@@ -2305,7 +2339,8 @@ function staffError(r) {
     barcode_is_badge: `That barcode is ${r.used_by}'s badge. Scan the item's barcode.`,
     barcode_too_long: "That barcode is too long (40 characters at most).",
     number_in_use: `Employee # is already used by ${r.used_by}.`,
-    admin_only: "Only an admin fob can do that.",
+    admin_only: "Your role can't do that.",
+    no_pin: "That fob doesn't have a PIN yet. A manager can set one.",
     pin_needed: "Enter a PIN of 4 to 8 digits.",
     name_required: "Enter a name first.",
     unknown_equipment: "That tag isn't on any equipment.",
@@ -2319,12 +2354,12 @@ const setMsg = (tone, text) => { S.staff.msg = text ? { tone, text } : null; };
 
 /* ----- Forms with the on-screen keyboard ----- */
 function formFields() {
-  const T = S.staff, f = T.form, admin = T.emp.role === "admin";
+  const T = S.staff, f = T.form;
   if (T.view === "addEmp") return [
     { k: "first", label: "First name", type: "text" }, { k: "last", label: "Last name", type: "text" },
     { k: "number", label: "Employee #", type: "code", optional: true },
-    ...(admin ? [{ k: "role", label: "Role", type: "role" }] : []),
-    ...(f.role && f.role !== "employee" ? [{ k: "pin", label: "Fob PIN", type: "pin" }] : []),
+    ...((T.data.roles || []).length ? [{ k: "role", label: "Role", type: "role" }] : []),
+    ...(roleInfo(f.role).station ? [{ k: "pin", label: "Fob PIN", type: "pin" }] : []),
   ];
   if (T.view === "addEq") return [
     { k: "category", label: "Category", type: "category" }, { k: "name", label: "Name", type: "text" },
@@ -2333,12 +2368,17 @@ function formFields() {
   if (T.view === "setPin") return [{ k: "pin", label: "New PIN", type: "pin" }];
   return [];
 }
+const roleInfo = (v) => !v ? { value: "", label: "Agent", station: false } : (S.staff?.data.roles || []).find((r) => r.value === v) || { value: v, label: v, station: true };
 function fieldValue(fd) {
   const v = S.staff.form[fd.k];
-  if (fd.type === "role") return ROLE[v || "employee"];
+  if (fd.type === "role") return roleInfo(v).label;
   if (fd.type === "category") return S.staff.data.categories.find((c) => c.id === v)?.name || "";
   if (fd.type === "pin") return "•".repeat((v || "").length);
   return v || "";
+}
+function stFob(access, roles) {
+  const b = !access ? [] : String(access).startsWith("role:") ? ((roles || demo?.db?.roles || []).find((r) => "role:" + r.id === access)?.perms || []) : ROLE_BOXES[access] || [];
+  return b.includes("stations") ? "admin" : b.some((x) => STATION_BOXES.includes(x)) ? "manager" : "employee";
 }
 function nextName(cat) {
   const nums = cat.names.map((n) => (n.match(/(\d+)\s*$/) || [])[1]).filter(Boolean).map(Number);
@@ -2363,7 +2403,7 @@ function staffPrimary() {
   const T = S.staff, f = T.form;
   if (T.view === "addEmp") {
     if (!(f.first || "").trim()) { T.field = "first"; setMsg("bad", "Enter their first name."); return renderMain(); }
-    if (f.role && f.role !== "employee" && !validPin(f.pin)) { T.field = "pin"; setMsg("bad", "Give their fob a PIN of 4 to 8 digits."); return renderMain(); }
+    if (roleInfo(f.role).station && !validPin(f.pin)) { T.field = "pin"; setMsg("bad", "Give their fob a PIN of 4 to 8 digits."); return renderMain(); }
     T.capture = { kind: "newBadge" }; T.field = null; setMsg(); return renderMain();
   }
   if (T.view === "addEq") {
@@ -2373,25 +2413,26 @@ function staffPrimary() {
   }
   if (T.view === "setPin") {
     if (!validPin(f.pin)) { setMsg("bad", "PINs are 4 to 8 digits."); return renderMain(); }
-    return updatePerson({ p_new_pin: f.pin, p_role: f.role || null }, f.role && f.role !== T.person.role
-      ? `${T.person.name} is now ${f.role === "admin" ? "an admin" : "a manager"}. Their fob opens this menu with the new PIN.`
+    const newRole = f.role != null && f.role !== (T.person.access || "");
+    return updatePerson({ p_new_pin: f.pin, ...(newRole ? { p_access: f.role } : {}) }, newRole
+      ? `${T.person.name} is now ${aRole(roleInfo(f.role).label)}. Their fob opens this menu with the new PIN.`
       : `New PIN set for ${T.person.name}.`);
   }
 }
 
 /* ----- Screens ----- */
 function renderStaff(el) {
-  const T = S.staff; const admin = T.emp.role === "admin";
-  const head = `<div class="st-head"><span class="st-role">${esc(ROLE[T.emp.role])}</span><h2>${esc(T.emp.name)}</h2>
+  const T = S.staff; const admin = sCan("stations");
+  const head = `<div class="st-head"><span class="st-role">${esc(roleText(T.emp))}</span><h2>${esc(T.emp.name)}</h2>
     ${T.view !== "menu" ? `<button class="sbtn" data-act="menu">Menu</button>` : ""}<button class="sbtn ${T.fromSetup ? "primary" : ""}" data-act="exit">${T.fromSetup ? "Back to setup" : "Exit"}</button></div>`;
   const msg = T.msg ? `<div class="st-msg ${T.msg.tone}" role="status">${esc(T.msg.text)}</div>` : "";
   let body = "";
   if (T.capture) body = captureHtml();
   else if (T.view === "menu") body = `<div class="tiles">
-      <button class="tile" data-act="addEmp"><b>Add employee</b><span>Name, then their badge or its barcode</span></button>
-      <button class="tile" data-act="addEq"><b>Add ${esc(term().equipment.toLowerCase())}</b><span>Name, then its tag or barcode</span></button>
-      <button class="tile" data-act="item"><b>${esc(term().equipment)} status</b><span>Lost, maintenance, new tag</span></button>
-      <button class="tile" data-act="people"><b>Employees</b><span>${admin ? "Roles, PINs, badges, deactivate" : "Replace a lost badge"}</span></button>
+      ${sCan("people") ? `<button class="tile" data-act="addEmp"><b>Add employee</b><span>Name, then their badge or its barcode</span></button>` : ""}
+      ${sCan("equipment") ? `<button class="tile" data-act="addEq"><b>Add ${esc(term().equipment.toLowerCase())}</b><span>Name, then its tag or barcode</span></button>` : ""}
+      ${sCan("status") || sCan("equipment") ? `<button class="tile" data-act="item"><b>${esc(term().equipment)} status</b><span>Lost, maintenance, new tag</span></button>` : ""}
+      ${sCan("people") || sCan("remove_people") ? `<button class="tile" data-act="people"><b>Employees</b><span>${(T.data.roles || []).length ? "Roles, PINs, badges" : "Replace a lost badge"}${sCan("remove_people") ? ", deactivate" : ""}</span></button>` : ""}
       <button class="tile" data-act="station"><b>Station</b><span>${admin ? "Wi-Fi, server, sync, unpair" : "Sync and connection"}</span></button>
       <button class="tile primary" data-act="checkout"><b>Check out ${esc(term().equipment.toLowerCase())}</b><span>Use your fob like a badge</span></button>
     </div>`;
@@ -2400,7 +2441,7 @@ function renderStaff(el) {
   else if (T.view === "lend") body = lendHtml();
   else if (T.view === "people") body = `<div class="people fit" data-fit=",dense,dense tight">${T.data.employees.map((e) =>
       `<button class="person ${e.active ? "" : "off"}" data-pick="person:${e.id}"><b>${esc(e.name)}</b>
-        <small>${e.role !== "employee" ? `<span class="r">${ROLE[e.role]}</span> · ` : ""}${e.active ? (e.has_badge ? esc(e.employee_number || "Badge set") : "No badge") : "Inactive"}</small></button>`).join("")}</div>`;
+        <small>${e.access || e.role !== "employee" ? `<span class="r">${esc(roleText(e))}</span> · ` : ""}${e.active ? (e.has_badge ? esc(e.employee_number || "Badge set") : "No badge") : "Inactive"}</small></button>`).join("")}</div>`;
   else if (T.view === "person") body = personHtml();
   else if (T.view === "station") body = stationSettingsHtml();
   else if (T.view === "untagged") body = `<p class="prompt" style="font-size:2.6cqw;margin:0">Pick the item, then tap its new tag<small>Added on the dashboard without a tag.</small></p>
@@ -2424,9 +2465,9 @@ function formHtml() {
   }).join("");
   const action = T.view === "addEmp" ? "Next: badge or barcode" : T.view === "addEq" ? "Next: tag or barcode" : "Save PIN";
   let right;
-  if (fd.type === "role") right = `<div class="picks" style="grid-template-columns:1fr">${["employee", "manager", "admin"].map((r) =>
-      `<button class="pickb ${(T.form.role || "employee") === r ? "on" : ""}" data-pick="role:${r}">${ROLE[r]}<small>${
-        { employee: "Checks equipment in and out", manager: "Fob opens this menu: add people and equipment", admin: "Everything, plus roles and PINs" }[r]}</small></button>`).join("")}</div>`;
+  if (fd.type === "role") right = `<div class="picks" style="grid-template-columns:1fr">${[roleInfo(""), ...(T.data.roles || [])].map((r) =>
+      `<button class="pickb ${(T.form.role || "") === r.value ? "on" : ""}" data-pick="role:${esc(r.value)}">${esc(r.label)}<small>${
+        !r.value ? "Badge only: checks equipment in and out" : r.station ? "Fob opens this menu (needs a PIN)" : "Badge only at the station"}</small></button>`).join("")}</div>`;
   else if (fd.type === "category") right = `<div class="picks">${T.data.categories.map((c) =>
       `<button class="pickb ${T.form.category === c.id ? "on" : ""}" data-pick="cat:${c.id}">${esc(c.name)}<small>${c.names.length} now</small></button>`).join("")}</div>`;
   else if (fd.type === "pin") right = `<div class="kb num">${["1","2","3","4","5","6","7","8","9","DEL","0","NEXT"].map((k) =>
@@ -2439,7 +2480,7 @@ function formHtml() {
 function captureHtml() {
   const T = S.staff, c = T.capture, f = T.form;
   const cfg = {
-    newBadge: ["Tap their new badge", `Registering ${[f.first, f.last].filter(Boolean).join(" ")}${f.role && f.role !== "employee" ? " as " + ROLE[f.role].toLowerCase() : ""}.`, "Use a badge that isn't registered yet."],
+    newBadge: ["Tap their new badge", `Registering ${[f.first, f.last].filter(Boolean).join(" ")}${f.role ? " as " + aRole(roleInfo(f.role).label) : ""}.`, "Use a badge that isn't registered yet."],
     newTag: ["Tap the new tag", `Registering ${f.name}.`, "Stick the tag on the item first, then tap it here."],
     item: ["Tap the item", "See its status, mark it lost or in maintenance, or give it a new tag.", ""],
     replaceBadge: ["Tap the replacement badge", `For ${T.person?.name}. Their old badge stops working.`, ""],
@@ -2450,7 +2491,7 @@ function captureHtml() {
     const slot = (label, v, hint) => `<div class="cap-slot ${v ? "got" : ""}"><span class="ck" aria-hidden="true">${v ? "✓" : ""}</span><span><b>${label}</b><small>${v ? esc(v) : hint}</small></span></div>`;
     return `<div class="capture"><div class="rings" aria-hidden="true"><span></span><span></span><span></span>${BADGE_SVG}</div>
       <div><h3>${emp ? "Tap their badge or scan its barcode" : "Tap its tag or scan its barcode"}</h3>
-        <p>Registering ${esc(who)}${emp && f.role && f.role !== "employee" ? " as " + esc(ROLE[f.role].toLowerCase()) : ""}. ${any ? "Add the other one too if it has both, or save." : `One is enough. If ${emp ? "the badge" : "it"} has both, add both.`}</p>
+        <p>Registering ${esc(who)}${emp && f.role ? " as " + esc(aRole(roleInfo(f.role).label)) : ""}. ${any ? "Add the other one too if it has both, or save." : `One is enough. If ${emp ? "the badge" : "it"} has both, add both.`}</p>
         <div class="cap-slots">${slot(emp ? "NFC badge" : "NFC tag", c.uid ? fmtUid(c.uid) : "", emp ? "Tap it on the reader" : "Stick it on, then tap it")}${slot("Barcode", c.code || "", "Scan it with the handheld scanner")}</div>
         ${T.busy ? `<p><b>Saving…</b></p>` : ""}<div class="row" style="display:flex;gap:1cqw;flex-wrap:wrap">
           ${any ? `<button class="sbtn primary" data-act="saveCapture" ${T.busy ? "disabled" : ""}>Save ${emp ? "employee" : esc(term().equipment.toLowerCase())}</button>` : ""}
@@ -2502,9 +2543,9 @@ async function saveCapture() {
   let r;
   if (c.kind === "newBadge") {
     r = await staffCall("station_add_employee", { p_first_name: f.first, p_last_name: f.last || "", p_employee_number: f.number || null,
-          p_new_badge_uid: uid, ...(both ? { p_new_barcode: c.code } : {}), p_role: f.role || "employee", p_new_pin: f.role && f.role !== "employee" ? f.pin : null });
+          p_new_badge_uid: uid, ...(both ? { p_new_barcode: c.code } : {}), p_access: f.role || "", p_new_pin: roleInfo(f.role).station ? f.pin : null });
     if (!S.staff) return;
-    if (r.ok) return staffDone(`Added ${r.employee.name}`, `${what[0].toUpperCase() + what.slice(1)} ${both ? "are" : "is"} registered${f.role && f.role !== "employee" ? ` as a ${f.role} fob` : ""}. They can use it right away.`, "addEmp", "Add another employee");
+    if (r.ok) return staffDone(`Added ${r.employee.name}`, `${what[0].toUpperCase() + what.slice(1)} ${both ? "are" : "is"} registered${f.role ? ` as ${aRole(roleInfo(f.role).label)}${roleInfo(f.role).station ? ": their fob opens this menu" : ""}` : ""}. They can use it right away.`, "addEmp", "Add another employee");
   } else {
     r = await staffCall("station_add_equipment", { p_name: f.name, p_category_id: f.category, p_tag_uid: uid, ...(both ? { p_barcode: c.code } : {}), p_asset_tag: f.asset || null });
     if (!S.staff) return;
@@ -2520,7 +2561,7 @@ function staffDone(title, text, again, againLabel) {
   if (S.wiz && T.view === "addEq") S.wiz.added.equipment++; T.capture = null; T.view = "done"; T.done = { title, text, again, againLabel }; setMsg(); beep("ok"); renderMain(); reloadStaffData();
 }
 function itemHtml() {
-  const T = S.staff, admin = T.emp.role === "admin";
+  const T = S.staff, st0 = sCan("status");
   if (!T.item) return captureHtml();
   const i = T.item, st = i.equipment.status;
   const label = { available: "Available", checked_out: "Checked out", lost: "Lost", maintenance: "In maintenance", retired: "Retired" }[st];
@@ -2533,13 +2574,13 @@ function itemHtml() {
       ${i.contract ? `<p>Belongs to <b>${esc(i.contract.name)}</b>${i.loan ? ` · on loan to <b>${esc(i.loan.to)}</b>` : ""}</p>` : ""}
       <p class="muted">Tag ${esc(fmtUid(T.itemUid))}</p></div>
     <div class="btncol">
-      ${i.problem ? `<button class="sbtn primary" data-act="clearProblem">Problem fixed: clear it</button>` : ""}
-      ${i.loan ? `<button class="sbtn" data-act="endLoan">End the loan</button>` : i.contract && serves(i.contract.id) && lendTargets().length ? `<button class="sbtn" data-act="lend">Lend to another ${esc(cTerm().toLowerCase())}</button>` : ""}
-      ${st !== "lost" ? `<button class="sbtn danger" data-status="lost" data-act="setStatus">Mark lost</button>` : ""}
-      ${st !== "maintenance" ? `<button class="sbtn" data-status="maintenance" data-act="setStatus">Send to maintenance</button>` : ""}
-      ${["lost", "maintenance", "retired"].includes(st) ? `<button class="sbtn primary" data-status="available" data-act="setStatus">Back in service</button>` : ""}
-      <button class="sbtn" data-act="replaceTag">Give it a new tag</button>
-      ${admin && st !== "retired" ? `<button class="sbtn danger" data-status="retired" data-act="setStatus">Retire (take out of service)</button>` : ""}
+      ${st0 && i.problem ? `<button class="sbtn primary" data-act="clearProblem">Problem fixed: clear it</button>` : ""}
+      ${!st0 ? "" : i.loan ? `<button class="sbtn" data-act="endLoan">End the loan</button>` : i.contract && serves(i.contract.id) && lendTargets().length ? `<button class="sbtn" data-act="lend">Lend to another ${esc(cTerm().toLowerCase())}</button>` : ""}
+      ${st0 && st !== "lost" ? `<button class="sbtn danger" data-status="lost" data-act="setStatus">Mark lost</button>` : ""}
+      ${st0 && st !== "maintenance" ? `<button class="sbtn" data-status="maintenance" data-act="setStatus">Send to maintenance</button>` : ""}
+      ${st0 && ["lost", "maintenance", "retired"].includes(st) ? `<button class="sbtn primary" data-status="available" data-act="setStatus">Back in service</button>` : ""}
+      ${st0 ? `<button class="sbtn" data-act="replaceTag">Give it a new tag</button>` : ""}
+      ${sCan("equipment") && st !== "retired" ? `<button class="sbtn danger" data-status="retired" data-act="setStatus">Retire (take out of service)</button>` : ""}
       <button class="sbtn" data-act="item">Look up another item</button>
     </div></div>`;
 }
@@ -2596,19 +2637,21 @@ function serverHtml() {
     ${custom ? fullKbHtml() : ""}</div>`;
 }
 function personHtml() {
-  const T = S.staff, p = T.person, admin = T.emp.role === "admin", self = p.id === T.emp.id;
-  const canBadge = admin || p.role === "employee";
+  const T = S.staff, p = T.person, self = p.id === T.emp.id;
+  const manage = p.can_manage ?? (sCan("stations") || p.role === "employee");   // older servers: admins, or anyone for a regular badge
+  const canBadge = sCan("people") && manage, roles = T.data.roles || [], here = p.access || "";
+  const choices = manage && !self && p.active && roles.length ? [roleInfo(""), ...roles] : [];
   return `<div class="detail"><div>
-      <div class="lk-cat">${esc(ROLE[p.role])}${p.employee_number ? " · " + esc(p.employee_number) : ""}</div><h3>${esc(p.name)}</h3>
+      <div class="lk-cat">${esc(roleText(p) || "Agent")}${p.employee_number ? " · " + esc(p.employee_number) : ""}</div><h3>${esc(p.name)}</h3>
       <span class="pill ${p.active ? "in" : "maint"}">${p.active ? "ACTIVE" : "INACTIVE"}</span>
       <p class="muted">${p.has_badge ? "Has a badge" : "No badge yet"}${p.role !== "employee" ? (p.has_pin ? " · PIN set" : " · No PIN") : ""}</p>
-      ${!canBadge ? `<p class="muted">Only an admin can change a manager's or admin's fob.</p>` : ""}</div>
+      ${!manage && !self ? `<p class="muted">Only someone who could give their role can change their fob.</p>` : ""}</div>
     <div class="btncol">
       <button class="sbtn" data-act="replaceBadge" ${canBadge && p.active ? "" : "disabled"}>${p.has_badge ? "Replace lost badge" : "Give them a badge"}</button>
-      ${admin ? `<div class="seg3">${["employee", "manager", "admin"].map((r) =>
-          `<button class="sbtn ${p.role === r ? "on" : ""}" data-pick="setrole:${r}" ${self || !p.active ? "disabled" : ""}>${ROLE[r]}</button>`).join("")}</div>
-        ${p.role !== "employee" ? `<button class="sbtn" data-act="setPin">Set a new PIN</button>` : ""}
-        <button class="sbtn ${p.active ? "danger" : "primary"}" data-act="toggleActive" ${self ? "disabled" : ""}>${p.active ? "Deactivate (badge stops working)" : "Reactivate"}</button>` : ""}
+      ${choices.length ? `<div class="seg3" style="grid-template-columns:repeat(${Math.min(choices.length + (choices.some((r) => r.value === here) ? 0 : 1), 4)},1fr)">${(choices.some((r) => r.value === here) ? [] : [{ value: here, label: roleText(p) }]).concat(choices).map((r) =>
+          `<button class="sbtn ${here === r.value ? "on" : ""}" data-pick="setrole:${esc(r.value)}" ${here === r.value ? "aria-current=\"true\"" : ""}>${esc(r.label)}</button>`).join("")}</div>` : ""}
+      ${p.role !== "employee" && (self || (manage && sCan("people"))) ? `<button class="sbtn" data-act="setPin">${self ? "Change my PIN" : "Set a new PIN"}</button>` : ""}
+      ${sCan("remove_people") && manage && !self ? `<button class="sbtn ${p.active ? "danger" : "primary"}" data-act="toggleActive">${p.active ? "Deactivate (badge stops working)" : "Reactivate"}</button>` : ""}
       <button class="sbtn" data-act="people">All employees</button>
     </div></div>`;
 }
@@ -2637,8 +2680,8 @@ document.addEventListener("click", async (e) => {
   if (t.dataset.k) return kbPress(t.dataset.k);
   if (t.dataset.field) { T.field = t.dataset.field; return renderMain(); }
   if (t.dataset.pick) {
-    const [kind, val] = t.dataset.pick.split(":");
-    if (kind === "role") { T.form.role = val; T.field = val === "employee" ? "role" : "pin"; }
+    const cut = t.dataset.pick.indexOf(":"), kind = t.dataset.pick.slice(0, cut), val = t.dataset.pick.slice(cut + 1);
+    if (kind === "role") { T.form.role = val; T.field = roleInfo(val).station ? "pin" : "role"; }
     if (kind === "cat") {
       const cat = T.data.categories.find((c) => c.id === val);
       const prev = T.data.categories.find((c) => c.id === T.form.category);
@@ -2649,17 +2692,18 @@ document.addEventListener("click", async (e) => {
     if (kind === "person") { T.person = T.data.employees.find((x) => x.id === val); T.view = "person"; }
     if (kind === "tagq") { const q = T.data.untagged.find((x) => x.id === val); T.item = { equipment: { id: q.id, name: q.name } }; T.view = "item"; T.capture = { kind: "replaceTag" }; }
     if (kind === "setrole") {
-      if (val === T.person.role) return;
-      if (val !== "employee" && !T.person.has_pin) { T.view = "setPin"; T.form = { role: val, pin: "" }; T.field = "pin";
-        setMsg("ok", `Give ${T.person.name}'s fob a PIN to make them ${val === "admin" ? "an admin" : "a manager"}.`); return renderMain(); }
-      return updatePerson({ p_role: val }, `${T.person.name} is now ${val === "employee" ? "a regular employee" : val === "admin" ? "an admin" : "a manager"}.`);
+      if (val === (T.person.access || "")) return;
+      const r = roleInfo(val);
+      if (r.station && !T.person.has_pin) { T.view = "setPin"; T.form = { role: val, pin: "" }; T.field = "pin";
+        setMsg("ok", `Give ${T.person.name}'s fob a PIN to make them ${aRole(r.label)}.`); return renderMain(); }
+      return updatePerson({ p_access: val }, `${T.person.name} is now ${aRole(r.label)}.`);
     }
     setMsg(); return renderMain();
   }
   const a = t.dataset.act;
   if (a === "exit") return exitStaff();
   if (a === "menu") { Object.assign(T, { view: "menu", capture: null, field: null, form: {} }); setMsg(); return renderMain(); }
-  if (a === "addEmp") { Object.assign(T, { view: "addEmp", form: { role: "employee" }, field: "first", capture: null }); setMsg(); return renderMain(); }
+  if (a === "addEmp") { Object.assign(T, { view: "addEmp", form: { role: "" }, field: "first", capture: null }); setMsg(); return renderMain(); }
   if (a === "addEq" || a === "addEqAgain") {
     const keepCat = a === "addEqAgain" ? T.form.category : null;
     Object.assign(T, { view: "addEq", form: {}, field: "category", capture: null }); setMsg();
@@ -2670,7 +2714,7 @@ document.addEventListener("click", async (e) => {
   if (a === "untagged") { Object.assign(T, { view: "untagged", capture: null }); setMsg(); return renderMain(); }
   if (a === "people") { Object.assign(T, { view: "people", capture: null }); setMsg(); return renderMain(); }
   if (a === "station") {
-    if (T.emp.role !== "admin") { S.overlay = "menu"; return renderLayer(); }   // managers: sync + status only
+    if (!sCan("stations")) { S.overlay = "menu"; return renderLayer(); }   // without the Stations box: sync + status only
     T.view = "station"; T.confirmUnpair = false; setMsg(); device.status().then((st) => { T.wifiStatus = st; renderMain(); }).catch(() => {}); return renderMain();
   }
   if (a === "changeWifi") { wifiOpen("admin"); T.view = "wifi"; setMsg(); renderMain(); return wifiScan(); }

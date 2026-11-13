@@ -62,12 +62,12 @@ const ORG = "00000000-0000-0000-0000-00000000d3e0";
   P.set('[data-form^="emp:"] [name=badge]', "04:BA:00:00:20:01");
   const am = one(`select id from shifts where org_id='${ORG}' and name='AM'`);
   P.doc.querySelector(`[data-form^="emp:"] [name=shifts][value="${am}"]`).checked = true;
-  P.change('[data-form^="emp:"] [name=role]', "manager"); await P.until(() => P.doc.querySelector('[data-form^="emp:"] [name=pin]'));
+  P.change('[data-form^="emp:"] [name=access]', "admin"); await P.until(() => P.doc.querySelector('[data-form^="emp:"] [name=pin]'));
   P.set('[data-form^="emp:"] [name=first]', "Rosa"); P.set('[data-form^="emp:"] [name=last]', "Diaz"); P.set('[data-form^="emp:"] [name=number]', "E2001"); P.set('[data-form^="emp:"] [name=badge]', "04:BA:00:00:20:01");
   P.doc.querySelector(`[data-form^="emp:"] [name=shifts][value="${am}"]`).checked = true;
   P.set('[data-form^="emp:"] [name=pin]', "4321");
   P.submit('[data-form^="emp:"]');
-  check(await P.until(() => one(`select station_role from employees where employee_number='E2001'`) === "manager"), "add employee + manager fob saves");
+  check(await P.until(() => one(`select access_role || ' ' || station_role from employees where employee_number='E2001'`) === "admin manager"), "add employee as a Manager: role saved, fob opens the Admin menu");
   await P.settled();
   const rosa = one(`select id from employees where employee_number='E2001'`);
   check(one(`select badge_uid from employees where id='${rosa}'`) === "04BA00002001" && one(`select count(*) from shift_assignments where employee_id='${rosa}' and shift_id='${am}'`) === "1"
@@ -83,7 +83,20 @@ const ORG = "00000000-0000-0000-0000-00000000d3e0";
   check(await P.until(() => one(`select role || ' ' || employee_id from org_invites where email='rosa.diaz@demoair.example'`) === `supervisor ${rosa}`), "giving an employee a role invites them, tied to their record");
   check(await P.until(() => b.outbox.some((m) => m.email === "rosa.diaz@demoair.example" && /\/\?invite=[0-9a-f]{48}$/.test(m.redirect_to))), "and emails them the invite link");
   await P.settled();
-  check(await P.until(() => /Invite sent to rosa.diaz@demoair.example/.test(P.text())), "her page shows the invite waiting", P.text().slice(0, 600));
+  check(await P.until(() => /Invited ?rosa.diaz@demoair.example/.test(P.text())), "her page shows the invite waiting", P.text().slice(0, 600));
+  // Departments and positions (migration 43)
+  P.click('[data-act="close"]'); await P.until(() => P.doc.querySelector('[data-form="dept"]'));
+  P.set('[data-form="dept"] [name=name]', "Cabin"); P.submit('[data-form="dept"]');
+  check(await P.until(() => one(`select count(*) from departments where org_id='${ORG}' and name='Cabin'`) === "1"), "add a department saves");
+  await P.settled();
+  const cabin = one(`select id from departments where org_id='${ORG}' and name='Cabin'`);
+  P.E(`openDrawer('empForm', '${rosa}')`); await P.until(() => P.doc.querySelector('[data-act="posAdd"]'));
+  P.click('[data-act="posAdd"]'); await P.until(() => P.doc.querySelector('[name=pos_title]'));
+  P.set('[name=pos_title]', "Supervisor"); P.doc.querySelector('[name=pos_dept]').value = cabin; P.submit('[data-form^="emp:"]');
+  check(await P.until(() => one(`select p.title || ' - ' || d.name from employee_positions p join departments d on d.id = p.department_id where p.employee_id='${rosa}'`) === "Supervisor - Cabin"),
+        "a position saves with its department");
+  await P.settled();
+  check(await P.until(() => /Positions ?Supervisor – Cabin/.test(P.text())), "and shows on her page after reloading");
   P.click('[data-act="close"]');
 
   // categories

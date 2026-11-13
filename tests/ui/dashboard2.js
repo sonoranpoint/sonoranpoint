@@ -28,12 +28,12 @@ const drawer = () => doc.querySelector(".drawer")?.textContent.replace(/\s+/g, "
   await click('.drawer [data-act="close"]'); await go("employees"); await click('[data-act="newEmp"]');
   await submit('[data-form^="emp:"]', { first: "Nina", last: "Okafor", number: "E1001", badge: "" });
   check(/already used by Alex Rivera/.test(drawer()), "add employee: duplicate employee # refused, names who has it");
-  const f = doc.querySelector('[data-form^="emp:"]'); f.elements.role.value = "manager"; f.elements.role.dispatchEvent(new dom.window.Event("change", { bubbles: true })); await sleep(20);
-  check(doc.querySelector('[data-form^="emp:"]').elements.pin && doc.querySelector('[data-form^="emp:"]').elements.first.value === "Nina", "choosing Manager fob shows a PIN field and keeps what was typed");
+  const f = doc.querySelector('[data-form^="emp:"]'); f.elements.access.value = "admin"; f.elements.access.dispatchEvent(new dom.window.Event("change", { bubbles: true })); await sleep(20);
+  check(doc.querySelector('[data-form^="emp:"]').elements.pin && doc.querySelector('[data-form^="emp:"]').elements.first.value === "Nina", "choosing the Manager role shows a PIN field and keeps what was typed");
   await submit('[data-form^="emp:"]', { first: "Nina", last: "Okafor", number: "E1013", badge: "04BA0000000C", pin: "" });
-  check(/needs a PIN/.test(drawer()), "manager fob without a PIN refused");
+  check(/Give them a PIN/.test(drawer()), "a Manager with a badge and no PIN is refused");
   await submit('[data-form^="emp:"]', { first: "Nina", last: "Okafor", number: "E1013", badge: "04BA0000000C", pin: "4826" });
-  check(E("DB.employees.some(e => e.name === 'Nina Okafor' && e.role === 'manager' && e.badge === '04BA0000000C')"), "Nina added as a manager fob with her badge");
+  check(E("DB.employees.some(e => e.name === 'Nina Okafor' && e.access === 'admin' && e.role === 'manager' && e.pin && e.badge === '04BA0000000C')"), "Nina added as a Manager: her fob opens the Admin menu");
   await click('[data-act="editEmp"]'); doc.querySelector('[data-form^="emp:"] input[name="shifts"][value="s2"]').checked = true;
   await submit('[data-form^="emp:"]', { first: "Nina", last: "Okafor-Lee", number: "E1013", badge: "04BA0000000C" });
   check(E("(() => { const e = DB.employees.find(e => e.first === 'Nina'); return e.last === 'Okafor-Lee' && e.shifts.includes('s2'); })()"), "edit employee: name + shift");
