@@ -96,7 +96,7 @@ const ORG = "00000000-0000-0000-0000-00000000d3e0";
   check(await P.until(() => one(`select p.title || ' - ' || d.name from employee_positions p join departments d on d.id = p.department_id where p.employee_id='${rosa}'`) === "Supervisor - Cabin"),
         "a position saves with its department");
   await P.settled();
-  check(await P.until(() => /Positions ?Supervisor – Cabin/.test(P.text())), "and shows on her page after reloading");
+  check(await P.until(() => /Positions ?Cabin/.test(P.text())), "and shows on her page after reloading");
   P.click('[data-act="close"]');
 
   // categories

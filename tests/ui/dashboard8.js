@@ -65,8 +65,8 @@ const access = () => doc.querySelector('.drawer select[name=access]');
   // Positions: Priya is Supervisor for Cabin and for Janitorial at Delta BW.
   const pri = E("DB.employees.find(e => e.name === 'Priya Shah').id");
   E(`openDrawer('employee', '${pri}')`); await sleep(20);
-  check(/Positions ?Supervisor – Cabin ?Supervisor – Janitorial/.test(drawer()), "a person can have several positions", drawer().slice(0, 600));
-  check(/Supervisor – Cabin, Supervisor – Janitorial/.test(doc.querySelector(".main").textContent), "the Employees list shows them");
+  check(/Positions ?Cabin ?Janitorial/.test(drawer()), "a person can have several positions (same title as their role: just the department)", drawer().slice(0, 600));
+  check(/Supervisor ?Cabin, Janitorial/.test(doc.querySelector(".main").textContent), "the Employees list shows Supervisor · Cabin, Janitorial");
   E(`openDrawer('empForm', '${pri}')`); await sleep(20);
   check(doc.querySelectorAll('.drawer [name=pos_title]').length === 2 && [...doc.querySelectorAll('.drawer [name=pos_dept]')[0].options].map((o) => o.textContent).join() === "No department,Cabin,Janitorial,Lav,Sky Club",
         "the form lists them, with Delta BW's departments to pick from");
@@ -77,7 +77,7 @@ const access = () => doc.querySelector('.drawer select[name=access]');
   rows[0].querySelector('[data-act="posDel"]').click(); await sleep(15);
   check(doc.querySelectorAll('.drawer [name=pos_title]').length === 2, "Remove takes a row out");
   await submit('[data-form^="emp:"]', {});
-  check(E(`empOf('${pri}').positions.map(posText).join()`) === "Supervisor – Janitorial,Lead – Sky Club" && E(`empOf('${pri}').last`) === "Shah-Kaur", "positions save with the rest",
+  check(E(`posShort(empOf('${pri}')).join()`) === "Janitorial,Lead – Sky Club" && E(`empOf('${pri}').positions.map(posText).join()`) === "Supervisor – Janitorial,Lead – Sky Club" && E(`empOf('${pri}').last`) === "Shah-Kaur", "positions save with the rest",
         E(`empOf('${pri}').positions.map(posText).join()`));
   // Departments
   check(/Departments/.test(doc.querySelector(".main").textContent), "Employees has the department list");

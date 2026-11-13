@@ -928,6 +928,8 @@ function deptsFor(contract) {
 }
 const deptName = (id) => (DB.departments || []).find((d) => d.id === id)?.name || "";
 const posText = (p) => p.dept && deptName(p.dept) ? `${p.title} – ${deptName(p.dept)}` : p.title;
+// Next to their role, a position with the same title just names the department: Supervisor · Sky Club, Janitorial.
+const posShort = (e) => (e.positions || []).map((p) => p.dept && deptName(p.dept) && p.title.toLowerCase() === accessLabel(accessOf(e)).toLowerCase() ? deptName(p.dept) : posText(p));
 const POS_TITLES = ["Lead", "Supervisor", "Manager", "Duty manager", "Trainer"];
 
 /* =====================================================================
@@ -1771,7 +1773,7 @@ function vEmployees() {
       <thead><tr><th>Name</th><th>Role</th><th>Shift</th><th>Badge</th><th>Has out</th><th>Last tap</th></tr></thead>
       <tbody>${rows.map((e) => `<tr class="click" data-open="employee:${e.id}" tabindex="0" ${e.active ? "" : 'style="opacity:.55"'}>
         <td class="lead"><b>${esc(e.name)}</b><span class="sub">${esc([e.number, contractName(e.contract)].filter(Boolean).join(" · "))}${e.active ? "" : " · Inactive"}</span></td>
-        <td class="pin">${accessOf(e) ? `<span class="chip brand">${esc(accessLabel(accessOf(e)))}</span>` : `<span class="muted">Agent</span>`}${(e.positions || []).length ? `<span class="sub">${esc(e.positions.map(posText).join(", "))}</span>` : ""}</td>
+        <td class="pin">${accessOf(e) ? `<span class="chip brand">${esc(accessLabel(accessOf(e)))}</span>` : `<span class="muted">Agent</span>`}${(e.positions || []).length ? `<span class="sub">${esc(posShort(e).join(", "))}</span>` : ""}</td>
         <td data-label="Shift">${esc(e.shiftNames.join(", ") || "—")}</td><td data-label="Badge">${realTag(e.badge) ? `On file <span class="muted mono" title="${esc(fmtUid(e.badge))}">${esc(shortUid(e.badge))}</span>` : e.barcode ? `Barcode <span class="muted mono">${esc(e.barcode)}</span>` : `<span class="muted">No badge</span>`}</td>
         <td class="num" data-label="Has out">${e.out ? `<b>${e.out}</b>` : `<span class="muted">0</span>`}</td><td class="num ${e.last ? "" : "empty-sm"}" data-label="Last tap">${e.last ? esc(fmtWhen(e.last)) : ""}</td></tr>`).join("")}</tbody></table></div></section>${vVisitors()}${vDepartments()}`;
 }
@@ -2513,7 +2515,7 @@ function dEmployee(id) {
       ${(() => { const a = empAccess(e), sub = (t) => `<span class="muted" style="display:block;font-weight:400;font-size:13px">${t}</span>`;
         return `<dt>Role</dt><dd>${esc(a.label)}${sub(!a.value ? "Badge only" : stationPowers(a.value) ? `Opens the station's Admin menu${e.pin ? "" : " (no PIN yet)"}` : "Badge only at the station")}</dd>
           ${has("team") && a.value ? `<dt>Dashboard</dt><dd>${a.member ? `Signs in${sub(esc(a.member.email))}` : a.invite ? `Invited${sub(`${esc(a.invite.email)}, not accepted yet`)}` : `No${sub("Station only. Add their email to give them the dashboard too.")}`}</dd>` : ""}
-          ${(e.positions || []).length ? `<dt>Positions</dt><dd>${e.positions.map((p) => esc(posText(p))).join("<br>")}</dd>` : ""}`; })()}</dl></div>
+          ${(e.positions || []).length ? `<dt>Positions</dt><dd>${posShort(e).map(esc).join("<br>")}</dd>` : ""}`; })()}</dl></div>
     ${has("people") ? `<div class="actions"><button class="btn" data-act="editEmp">Edit details</button></div>
     ${has("remove_people") ? `<div class="sect"><h3>Access</h3>${c === "deactivate" ? `<div class="confirm">Deactivate ${esc(e.name)}? Their badge stops working right away. Their history stays.
         <button class="btn sm danger" data-act="doActive" data-v="0">Deactivate</button><button class="btn sm" data-act="noConfirm">Cancel</button></div>`
