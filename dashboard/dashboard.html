@@ -1766,10 +1766,12 @@ function vVisitors() {
 }
 function vEmployees() {
   const q = S.f.empSearch.trim().toLowerCase();
-  const rows = api.employees().filter((e) => (!q || `${e.name} ${e.number} ${e.barcode || ""}`.toLowerCase().includes(q)) && (!S.f.empContract || inBranch(e.contract, S.f.empContract)))
+  const all = api.employees(), inactive = all.filter((e) => !e.active).length;
+  const rows = all.filter((e) => (S.f.empInactive || e.active) && (!q || `${e.name} ${e.number} ${e.barcode || ""}`.toLowerCase().includes(q)) && (!S.f.empContract || inBranch(e.contract, S.f.empContract)))
     .sort((a, b) => (b.active - a.active) || (b.out - a.out) || a.name.localeCompare(b.name));
   return head("Employees", `${rows.filter((e) => e.active).length} active · also addable at a station with a supervisor's or manager's fob`, (has("people") || has("equipment")) ? `<span class="actions"><button class="btn" data-act="labOpen" data-k="employees">${ic("tag")}Print labels</button><a class="btn" href="#import-employees">${ic("upload")}Import</a><button class="btn primary" data-act="newEmp">Add employee</button></span>` : "") + `
-    <div class="filters"><input class="field" type="search" id="empSearch" aria-label="Search employees" placeholder="Search name or employee #" value="${esc(S.f.empSearch)}" data-f="empSearch">${DB.contracts?.length ? `<select class="field" id="empContract" aria-label="${esc(CTERM().one)}" data-f="empContract">${contractOptions(S.f.empContract || "", `All ${CTERM().many.toLowerCase()}`, null, true)}</select>` : ""}</div>
+    <div class="filters"><input class="field" type="search" id="empSearch" aria-label="Search employees" placeholder="Search name or employee #" value="${esc(S.f.empSearch)}" data-f="empSearch">${DB.contracts?.length ? `<select class="field" id="empContract" aria-label="${esc(CTERM().one)}" data-f="empContract">${contractOptions(S.f.empContract || "", `All ${CTERM().many.toLowerCase()}`, null, true)}</select>` : ""}
+      ${inactive ? `<label class="checks" style="align-self:center"><input type="checkbox" id="empInactive" ${S.f.empInactive ? "checked" : ""}> Show inactive (${inactive})</label>` : ""}</div>
     <section class="panel"><div class="tablewrap"><table class="cardify">
       <thead><tr><th>Name</th><th>Role</th><th>Shift</th><th>Badge</th><th>Has out</th><th>Last tap</th></tr></thead>
       <tbody>${rows.map((e) => `<tr class="click" data-open="employee:${e.id}" tabindex="0" ${e.active ? "" : 'style="opacity:.55"'}>
@@ -2789,6 +2791,7 @@ document.addEventListener("input", (e) => {
 document.addEventListener("change", (e) => {
   const t = e.target;
   if (t.id === "viewSel") { S.view = t.value || null; try { localStorage.setItem("sp.view." + (DB.org.id || "demo"), S.view || ""); } catch {} S.drawer = null; return render(); }
+  if (t.id === "empInactive") { S.f.empInactive = t.checked; return render(); }
   if (t.id === "switchOrg") { S.drawer = null; return openCompany(t.value); }
   if (t.id === "actDay") { S.f.actDay = t.value; S.f.actShow = 150;
     if (LIVE && t.value && live.loadDay) { S.dayLoading = true; render(); live.loadDay(t.value).catch((err) => toast(niceErr(err))).finally(() => { S.dayLoading = false; render(); }); return; }

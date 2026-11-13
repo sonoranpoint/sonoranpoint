@@ -88,6 +88,12 @@ const access = () => doc.querySelector('.drawer select[name=access]');
   doc.querySelector('.drawer [name=pos_title]').value = ""; await submit('[data-form^="emp:"]', {});
   check(E("DB.employees.find(e => e.first === 'Shifty').shifts.join()") === "s2", "and they save");
   await go("employees");
+  // Inactive people are hidden unless you ask for them
+  { const chris = E("DB.employees.find(e => e.name === 'Chris Diaz').id"), rowsOf = () => [...doc.querySelectorAll('.main tbody tr')].map((r) => r.dataset.open);
+    check(!rowsOf().includes("employee:" + chris) && /Show inactive \(1\)/.test(doc.querySelector(".main").textContent), "inactive people are hidden; the switch says how many");
+    const box = doc.querySelector("#empInactive"); box.checked = true; box.dispatchEvent(new dom.window.Event("change", { bubbles: true })); await sleep(15);
+    check(rowsOf().includes("employee:" + chris), "Show inactive brings them back");
+    const b2 = doc.querySelector("#empInactive"); b2.checked = false; b2.dispatchEvent(new dom.window.Event("change", { bubbles: true })); await sleep(15); }
   // Departments
   check(/Departments/.test(doc.querySelector(".main").textContent), "Employees has the department list");
   await submit('[data-form="dept"]', { name: "Ramp", contract: "dbw" });
