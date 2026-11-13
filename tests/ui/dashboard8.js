@@ -118,6 +118,9 @@ const access = () => doc.querySelector('.drawer select[name=access]');
   check(/Sonoran Point/.test(E(`api.setEmployeeAccess('${luis}', 'owner', 'x@y.example').error`)), "nobody makes an Admin from the employee page");
   await go("team");
   check(/At the station.*Badge only.*Admin menu.*Admin menu.*Admin menu/.test(doc.querySelector(".roles-t").textContent.replace(/\s+/g, " ")), "the role table says what each role's fob does");
+  check(/employee # is already used/.test(E(`niceErr({ code: "23505", message: 'duplicate key value violates unique constraint "employees_org_id_employee_number_key"' })`))
+        && /badge is already registered/.test(E(`niceErr({ code: "23505", message: 'duplicate key value violates unique constraint "employees_org_id_badge_uid_key"' })`)),
+        "a save refused for a duplicate says which value was taken");
   check(errors.length === 0, "no script errors " + errors.join(";"));
   process.exit();
 })();

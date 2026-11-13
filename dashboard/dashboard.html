@@ -2978,7 +2978,7 @@ async function rpc(fn, args) { const { data, error } = await sb.rpc(fn, args || 
 const mapPass = (p) => ({ id: p.id, employee_id: p.employee_id, name: p.name, number: p.number, home_contract_id: p.home_contract_id, home_contract: p.home_contract,
   contract_id: p.contract_id, contract: p.contract, starts: ms(p.starts_at), ends: ms(p.ends_at), ended: ms(p.ended_at), note: p.note, by: p.by, station: p.station, here: p.here });
 async function okRpc(fn, args) { const r = await rpc(fn, args); if (r && r.ok === false) throw new Error(r.error); return r; }
-async function q(promise) { const { data, error } = await promise; if (error) throw Object.assign(new Error(error.message), { code: error.code }); return data; }
+async function q(promise) { const { data, error } = await promise; if (error) throw Object.assign(new Error(error.message), { code: error.code, details: error.details }); return data; }
 // Taps, with the station's contract at the time (database update 21; read without it before that's run).
 let TXN_STC = true;
 async function txnRows(build) {
@@ -2991,7 +2991,17 @@ async function all(table, cols, build) {      // reads past the server's 1000-ro
 }
 const niceErr = (e) => /fetch|network/i.test(e?.message || "") ? "Can't reach the server. Check your connection."
   : e?.code === "42501" || /row-level security|permission/i.test(e?.message || "") ? "Your role isn't allowed to do that."
-  : e?.code === "23505" ? "That's already used by something else." : (e?.message || "Something went wrong.");
+  : e?.code === "23505" ? dupText(e) : (e?.message || "Something went wrong.");
+// Which value was already taken, from the database's constraint name (it can be someone in a contract you can't see).
+function dupText(e) {
+  const m = `${e?.message || ""} ${e?.details || ""}`;
+  for (const [re, text] of [[/employee_number/, "That employee # is already used by someone else (maybe in another contract)."],
+    [/badge_uid/, "That badge is already registered to someone else."], [/employees_barcode/, "That badge barcode is already used by someone else."],
+    [/equipment_barcode|equipment.*barcode/, "That barcode is already on another item."], [/nfc_uid/, "That tag is already on another item."],
+    [/asset_tag/, "That asset tag is already used."], [/employees_user/, "That dashboard account is already linked to another employee."],
+    [/departments_name/, "That department is already there."], [/shift_assignments/, "They're already on that shift."]]) if (re.test(m)) return text;
+  return "That's already used by something else.";
+}
 async function sendInviteEmail(email, token, name) {
   // The name is saved on their account if this email doesn't have one yet; they can change it when they first sign in.
   const { error } = await sb.auth.signInWithOtp({ email, options: { emailRedirectTo: `${location.origin}/?invite=${token}`, shouldCreateUser: true, data: name ? { full_name: name } : undefined } });
@@ -3145,7 +3155,8 @@ const ORG = () => DB.org.id;
 const upd = (table, id, row) => q(sb.from(table).update(row).eq("id", id));
 async function syncAssignments(field, id, ids, other) {
   await q(sb.from("shift_assignments").delete().eq(field, id));
-  if (ids.length) await q(sb.from("shift_assignments").insert(ids.map((x) => ({ org_id: ORG(), [field]: id, [other]: x }))));
+  // upsert: an assignment the delete couldn't reach (outside what you can see) is left as it is instead of failing the save
+  if (ids.length) await q(sb.from("shift_assignments").upsert(ids.map((x) => ({ org_id: ORG(), [field]: id, [other]: x })), { onConflict: "shift_id,employee_id", ignoreDuplicates: true }));
 }
 const REMOTE = {
   setStatus: ([id, status]) => okRpc("set_equipment_status", { p_equipment: id, p_status: status }),
