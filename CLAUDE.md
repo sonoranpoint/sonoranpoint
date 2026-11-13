@@ -19,6 +19,7 @@ See README.md for the full product description.
   `site/security/` explains how data is protected (keep it true when security changes); `/.well-known/security.txt` (expires 2027-11-11).
 - `deploy/build.py` — builds `deploy/dist/{app,console,station,site}`; `deploy/email-templates/` — Supabase auth emails
 - `tests/run.sh` — runs everything; `tests/ui/` — jsdom screen tests
+- `ROADMAP.md` — the to-do list (planned modules and open questions)
 
 ## How changes ship
 - Push to `main` → GitHub Actions runs `tests/run.sh db`, `ui` and `live` (PostgREST downloaded in CI), then deploys app + console to Cloudflare Pages
