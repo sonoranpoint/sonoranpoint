@@ -403,6 +403,15 @@ const api_set = async (id) => { E(`api.updateCustomer('${id}', { logo_dark_url: 
     check(E(`!custOf('${copper}').stations.some(s => s.name === 'Tug Shop 2')`) && E(`DB.hw.find(x => x.id === '${unit}').station_id`) === null && /isn't on a station yet/.test(mt()),
           "move back with Remove and no station: the station it left is gone; no code yet");
   }
+  // Terms of Service (migration 45)
+  await go("team");
+  check(/Customer terms/.test(page()) && /Version 1\.0/.test(page()) && /customers haven't agreed/.test(page()), "Team: the terms panel shows the version and who hasn't agreed");
+  { const f = doc.querySelector('[data-form="terms"]'); f.elements.version.value = "1.0"; await submit('[data-form="terms"]'); }
+  check(/already used/.test(page()), "a version number can't be reused");
+  { const f = doc.querySelector('[data-form="terms"]'); f.elements.version.value = "2.0"; f.elements.notes.value = "New deposit terms"; f.elements.must.checked = true; await submit('[data-form="terms"]'); }
+  check(E("DB.legal.versions[0].version") === "2.0" && E("DB.legal.versions[0].must_accept") && E("DB.customers.every(c => c.legal.needs)"), "publishing a must-agree version asks every customer again");
+  await go("customer/" + E("DB.customers[0].id"));
+  check(/Terms ?Not agreed yet/.test(page()) && /agreed by/.test(page()), "a customer's page shows their last agreement and that they're due again");
   check(errors.length === 0, "no script errors " + errors.join(";"));
   process.exit();
 })();

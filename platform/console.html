@@ -737,7 +737,13 @@ function buildDemo() {
       message: "We'd like to try it at our fuel farm office." },
       [{ at: now - 1 * DAY, kind: "status", by: me.name, details: { from: "open", to: "won" } }, { at: now - 1 * DAY, kind: "customer", by: me.name, details: { to: "Saguaro Aviation Fuel" } }]),
   ];
-  return { customers, log, team, hw, latestStation: "station-0.1.0", outages, requests };
+  // Terms of Service (migration 45): versions we've published; a customer's agreements live on the customer (c.legal).
+  const legal = { versions: [{ version: "1.0", published_at: now - 20 * DAY, must_accept: true, notes: "First version", by: "Dez", accepted: 1 }], waiting: customers.length - 1 };
+  customers.forEach((c, i) => { c.legal = i === 0
+    ? { current: "1.0", required: "1.0", needs: false, accepted: { version: "1.0", at: now - 18 * DAY, name: c.contact_name || "Their admin", email: c.contact_email || "" },
+        history: [{ version: "1.0", at: now - 18 * DAY, name: c.contact_name || "Their admin", email: c.contact_email || "", ip: "203.0.113.7" }] }
+    : { current: "1.0", required: "1.0", needs: true, accepted: null, history: [] }; });
+  return { customers, log, team, hw, latestStation: "station-0.1.0", outages, requests, legal };
 }
 const DB = buildDemo();
 
@@ -1012,6 +1018,20 @@ const api = {
   },
   /* rpc platform_team() */
   team() { return DB.team; },
+  /* rpc platform_terms: Terms of Service versions; null until migration 45 is run */
+  legal() { return DB.legal; },
+  /* rpc platform_publish_terms(version, must_accept, notes) — owners */
+  publishTerms(version, must, notes) {
+    version = (version || "").trim();
+    if (OPERATOR.role !== "owner") return { ok: false, error: "Only owners can publish terms." };
+    if (!/^[0-9A-Za-z.\-]{1,20}$/.test(version)) return { ok: false, error: "Use a short version number, like 1.1 or 2.0." };
+    if (DB.legal.versions.some((v) => v.version === version)) return { ok: false, error: "That version number is already used." };
+    must = !!must || !DB.legal.versions.length;
+    DB.legal.versions.unshift({ version, published_at: Date.now(), must_accept: must, notes: (notes || "").trim() || null, by: OPERATOR.name, accepted: 0 });
+    DB.customers.forEach((c) => { c.legal ||= { current: null, required: null, needs: false, accepted: null, history: [] }; c.legal.current = version; if (must) { c.legal.required = version; c.legal.notes = (notes || "").trim() || null; c.legal.needs = true; } });
+    DB.legal.waiting = DB.customers.filter((c) => c.status !== "cancelled" && c.legal?.needs).length;
+    log(null, "published terms", changeText({ version, text: must ? "customers must agree again" : "no new agreement needed" })); return { ok: true };
+  },
   /* rpc platform_set_my_name(name) */
   setMyName(name) {
     name = (name || "").trim().replace(/\s+/g, " "); if (!name || name.length > 60) return { ok: false, error: "Enter your name (up to 60 characters)." };
@@ -1213,6 +1233,7 @@ const live = {
       rpc("platform_hardware").catch(() => null)]);   // null until the hardware migration is run
     if (seq !== loadSeq) { await reqs.catch(() => {}); await outs.catch(() => {}); return; }
     DB.team = team ? mapTeam(team) : null;
+    DB.legal = await rpc("platform_terms").then((t) => ({ ...t, versions: t.versions.map((v) => ({ ...v, published_at: ms(v.published_at) })) })).catch(() => null);
     const rl = await reqs; if (seq !== loadSeq) return; const rPrev = Object.fromEntries((DB.requests || []).map((r) => [r.id, r]));
     DB.requests = rl ? rl.map((r) => mapRequest(r, rPrev[r.id]?.events)) : null;
     const o = await outs; if (seq !== loadSeq) return; DB.outages = o ? o.map((x) => ({ station: x.station_id, start: ms(x.started_at), end: ms(x.ended_at) })) : null;
@@ -1244,6 +1265,8 @@ const live = {
       roles: (r.custom_roles || []).map((x) => ({ ...x, perms: x.perms || [] })),
       share_contracts: !!o.settings?.share_contracts, move_on_return: !!o.settings?.move_on_return });
     c.member_count = c.members.length; if (c.members.length) c.has_owner = c.members.some((m) => m.role === "owner");
+    c.legal = await rpc("platform_customer_terms", { p_org: id }).then((t) => ({ ...t, accepted: t.accepted ? { ...t.accepted, at: ms(t.accepted.at) } : null,
+      history: (t.history || []).map((h) => ({ ...h, at: ms(h.at) })) })).catch(() => null);
   },
   async reqDetail(id) {
     const r = await rpc("platform_request", { p_id: Number(id) }); if (!r.ok) return;
@@ -1266,6 +1289,12 @@ const ERR = { slug_taken: ["That short ID is already used.", "slug"], bad_slug: 
   name_required: ["Enter the company name.", "name"], already_member: ["That person is already on their team.", "email"], not_found: ["That customer or station no longer exists.", null] };
 const demoCreate = api.createCustomer;
 const liveApi = {
+  async publishTerms(version, must, notes) {
+    let r; try { r = await rpc("platform_publish_terms", { p_version: (version || "").trim(), p_must_accept: !!must, p_notes: (notes || "").trim() || null }); }
+    catch (e) { return { ok: false, error: nice(e) }; }
+    if (!r.ok) return { ok: false, error: { bad_version: "Use a short version number, like 1.1 or 2.0.", version_exists: "That version number is already used." }[r.error] || r.error };
+    await live.refresh().catch(() => {}); return { ok: true };
+  },
   async createCustomer(d) {
     // Same checks as the demo first (so mistakes are caught without a round trip), on a throwaway copy.
     const snapshot = JSON.stringify(DB);
@@ -2052,6 +2081,7 @@ function vCustomer() {
     </div>
 
     <div class="stack">
+      ${custTerms(c)}
       <section class="panel"><div class="panel-h"><h2>Account</h2></div>
         <form class="panel-b fgrid" data-form="account">
           <label>Status<select class="field" name="status">${Object.entries(STATUS).map(([k, [l]]) => `<option value="${k}" ${c.status === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
@@ -2242,10 +2272,43 @@ function vTeam() {
           <div class="err" role="alert">${S.formErr?.form === "myname" ? esc(S.formErr.text) : ""}</div>
           <div class="actions"><button class="btn primary">Save name</button>${LIVE ? `<button type="button" class="btn" data-act="setPass">Set a new password</button>` : ""}</div>
         </form></section>
+      ${termsPanel(owner)}
       <section class="panel"><div class="panel-h"><h2>Roles</h2></div><div class="panel-b"><dl class="kv">
         ${Object.values(ROLES).map(([l, d]) => `<dt>${l}</dt><dd>${esc(d)}</dd>`).join("")}</dl>
         <p class="muted" style="margin:10px 0 0;font-size:13px">There's always at least one owner. Nobody here can see inside a customer's dashboard.</p></div></section>
     </div></div>`;
+}
+
+/* ---- Terms of Service (migration 45) ---- */
+function termsPanel(owner) {
+  const L = api.legal();
+  if (!L) return `<section class="panel"><div class="panel-h"><h2>Customer terms</h2></div><div class="panel-b muted" style="font-size:13.5px">Run the database update <span class="mono">20261114000045_customer_terms.sql</span> to turn on terms.</div></section>`;
+  const cur = L.versions[0];
+  return `<section class="panel"><div class="panel-h"><h2>Customer terms</h2>${cur ? `<span class="chip info">Version ${esc(cur.version)}</span>` : ""}</div>
+    <div class="panel-b" style="display:flex;flex-direction:column;gap:10px">
+      <p class="muted" style="margin:0;font-size:13.5px">${cur ? `${L.waiting ? `<b>${L.waiting} customer${L.waiting === 1 ? " hasn't" : "s haven't"}</b> agreed to the current version yet. Their Admin or a Manager is asked when they next sign in.` : "Every customer has agreed to the current version."}`
+        : "Nothing published yet, so customers aren't asked. Publish version 1.0 once the terms and privacy pages are final; every customer's Admin or a Manager is then asked to agree."}
+        Pages: <a href="https://sonoranpoint.com/terms/" target="_blank" rel="noopener">terms</a> · <a href="https://sonoranpoint.com/privacy/" target="_blank" rel="noopener">privacy</a></p>
+      ${L.versions.length ? `<div class="list" style="border:1px solid var(--line);border-radius:10px">${L.versions.map((v) => `<div class="row" style="grid-template-columns:minmax(0,1fr) auto"><span><b>${esc(v.version)}</b>${v.must_accept ? ` <span class="chip warn">Must agree</span>` : ""}
+        <span class="sub">${esc(fmtDate(v.published_at))}${v.by ? ` · ${esc(v.by)}` : ""}${v.notes ? ` · ${esc(v.notes)}` : ""}</span></span><span class="muted" style="font-size:13px">${v.accepted} agreed</span></div>`).join("")}</div>` : ""}
+      ${owner ? `<form class="fgrid" data-form="terms" style="grid-template-columns:1fr">
+        <label>New version<small>Publish after you've updated the terms page. ${cur ? "Small changes (wording, contact details) don't need anyone to agree again." : ""}</small><input class="field" name="version" maxlength="20" placeholder="${cur ? "1.1" : "1.0"}" required autocomplete="off"></label>
+        <label>What changed<small>Optional. Shown to customers when they're asked to agree.</small><input class="field" name="notes" maxlength="300" placeholder="${cur ? "New hardware deposit terms" : "First version"}"></label>
+        ${cur ? `<label class="check"><input type="checkbox" name="must"><span>Customers must agree again<small>For bigger changes: price, cancellation, liability, data or hardware. Their Admin or a Manager can't use the dashboard until they agree.</small></span></label>` : ""}
+        <div class="err" role="alert">${S.formErr?.form === "terms" ? esc(S.formErr.text) : ""}</div>
+        <div class="actions"><button class="btn primary">Publish version</button></div></form>` : ""}
+    </div></section>`;
+}
+function custTerms(c) {
+  const t = c.legal; if (!t || !t.current) return "";
+  const a = t.accepted;
+  return `<section class="panel"><div class="panel-h"><h2>Terms</h2><span class="chip ${t.needs ? "warn" : "ok"}">${t.needs ? "Not agreed yet" : "Agreed"}</span></div>
+    <div class="panel-b" style="display:flex;flex-direction:column;gap:8px;font-size:14px">
+      <p style="margin:0">${a ? `Version ${esc(a.version)} agreed by <b>${esc(a.name || a.email || "their admin")}</b>${a.email && a.name !== a.email ? ` (${esc(a.email)})` : ""} on ${esc(fmtDate(a.at))}.` : "Nobody has agreed yet."}
+        ${t.needs ? `<span class="muted">Their Admin or a Manager is asked to agree to version ${esc(t.required)} when they next sign in.</span>` : ""}</p>
+      ${(t.history || []).length > 1 ? `<details><summary class="muted" style="cursor:pointer">All agreements (${t.history.length})</summary><div class="list">${t.history.map((h) => `<div class="row"><span>Version ${esc(h.version)} · ${esc(h.name || h.email || "")}<span class="sub">${esc(fmtDate(h.at))}${h.ip ? ` · from ${esc(h.ip)}` : ""}</span></span></div>`).join("")}</div></details>`
+        : (t.history || [])[0]?.ip ? `<p class="muted" style="margin:0;font-size:13px">From IP ${esc(t.history[0].ip)}</p>` : ""}
+    </div></section>`;
 }
 
 /* ---- Hardware ---- */
@@ -2784,6 +2847,10 @@ async function onSubmit(f, kind, fd, d) {
   if (kind === "reqedit") { const r = await api.updateRequest(S.id, { name: d.name, company: d.company, email: d.email, phone: d.phone }); if (!r.ok) { S.formErr = { form: "reqedit", text: r.error }; return render(); } S.formErr = null; toast("Details saved"); return render(); }
   if (kind === "hwnote") { const r = await api.saveHardware({ id: S.id, note: d.note }); if (!r.ok) return toast(r.error); toast("Note added"); return render(); }
   if (kind === "myname") { const r = await api.setMyName(d.name); if (!r.ok) { S.formErr = { form: "myname", text: r.error }; return render(); } S.formErr = null; toast("Name saved"); return render(); }
+  if (kind === "terms") {
+    const r = await api.publishTerms(d.version, d.must === "on", d.notes); if (!r.ok) { S.formErr = { form: "terms", text: r.error }; return render(); }
+    S.formErr = null; toast(`Version ${d.version.trim()} published`); return render();
+  }
   if (kind === "opinvite") {
     const r = await api.inviteOperator(d.email, d.role, d.name); if (!r.ok) { S.formErr = { form: "opinvite", text: r.error }; render(); $('[data-form="opinvite"] [name=email]')?.focus(); return; }
     S.formErr = null; S.lastOpInvite = r; toast(r.mailErr ? "Invite made, but the email didn't send. Copy the link below." : `Invite sent to ${r.email}`); return render();

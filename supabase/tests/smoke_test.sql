@@ -1901,6 +1901,38 @@ delete from employees where employee_number in ('E4301', 'E4302') or badge_uid i
 delete from custom_roles where id = :'cr43';
 delete from org_members where user_id = '43430000-0000-0000-0000-000000000043';
 
+\echo '--- Customers agree to the terms (migration 45)'
+set role authenticated;
+select set_config('request.jwt.claim.sub', 'aaaaaaaa-0000-0000-0000-000000000001', false) \g /dev/null
+select pg_temp.ok(not (terms_status('00000000-0000-0000-0000-00000000d3e0')->>'needs')::boolean, 'nothing to agree to before we publish terms');
+select pg_temp.ok(pg_temp.raises($$select platform_publish_terms('1.0')$$), 'customers can''t publish terms');
+select set_config('request.jwt.claim.sub', '99999999-0000-0000-0000-000000000009', false) \g /dev/null
+select pg_temp.ok((platform_publish_terms('1.0', false, 'First version')->>'ok')::boolean, 'we publish version 1.0');
+select pg_temp.ok(platform_publish_terms('1.0')->>'error' = 'version_exists', 'a version number is used once');
+select set_config('request.jwt.claim.sub', 'cccccccc-0000-0000-0000-000000000003', false) \g /dev/null
+select terms_status('00000000-0000-0000-0000-00000000d3e0') as ts \gset
+select pg_temp.ok((:'ts'::jsonb->>'needs')::boolean and :'ts'::jsonb->>'required' = '1.0', 'the first version must be agreed to');
+reset role;
+update org_members set role = 'supervisor' where user_id = 'cccccccc-0000-0000-0000-000000000003';
+set role authenticated;
+select pg_temp.ok(not (terms_status('00000000-0000-0000-0000-00000000d3e0')->>'can_accept')::boolean, 'a Supervisor can''t agree for the company');
+select pg_temp.ok(pg_temp.raises($$select accept_terms('00000000-0000-0000-0000-00000000d3e0', '1.0')$$), '...even by calling it directly');
+select set_config('request.jwt.claim.sub', 'aaaaaaaa-0000-0000-0000-000000000001', false) \g /dev/null
+select set_config('request.headers', '{"x-forwarded-for": "203.0.113.7, 10.0.0.1", "user-agent": "Test browser"}', false) \g /dev/null
+select pg_temp.ok((accept_terms('00000000-0000-0000-0000-00000000d3e0', '1.0')->>'ok')::boolean, 'the Admin agrees on behalf of the company');
+select pg_temp.ok(not (terms_status('00000000-0000-0000-0000-00000000d3e0')->>'needs')::boolean, 'then nobody is asked again');
+select set_config('request.jwt.claim.sub', '99999999-0000-0000-0000-000000000009', false) \g /dev/null
+select platform_customer_terms('00000000-0000-0000-0000-00000000d3e0') as pt \gset
+select pg_temp.ok(:'pt'::jsonb->'history'->0->>'ip' = '203.0.113.7' and :'pt'::jsonb->'accepted'->>'version' = '1.0', 'we see who agreed, to which version, and from where');
+select platform_publish_terms('1.1', false, 'Typo fixes') \g /dev/null
+select pg_temp.ok(not (platform_customer_terms('00000000-0000-0000-0000-00000000d3e0')->>'needs')::boolean, 'a small change (1.1) doesn''t ask again');
+select platform_publish_terms('2.0', true, 'New hardware deposit terms') \g /dev/null
+select pg_temp.ok((platform_customer_terms('00000000-0000-0000-0000-00000000d3e0')->>'needs')::boolean, 'a must-agree change (2.0) asks again');
+select pg_temp.ok((platform_terms()->>'waiting')::int >= 1 and platform_terms()->'versions'->0->>'version' = '2.0', 'the console lists versions and who''s still to agree');
+reset role;
+select set_config('request.headers', '', false) \g /dev/null
+delete from private.terms_acceptances; delete from private.terms_versions;
+
 \echo '--- Deleting a company removes all its data'
 delete from organizations where slug = 'demo';
 select pg_temp.ok((select count(*) from equipment) = 0 and (select count(*) from transactions) = 0, 'company delete cascades cleanly');

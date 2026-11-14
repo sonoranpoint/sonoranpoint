@@ -312,6 +312,13 @@ const ORG = "00000000-0000-0000-0000-00000000d3e0";
   check(await K.until(() => /Recent activity/.test(K.text())), "second user signs in");
   check(await K.until(() => K.E("DB.equipment.length") > 0) && !K.E("DB.equipment.some(q => q.name === 'Radio 02')") && K.E("DB.me.contracts.length") === 1,
         "signed in, Kelly doesn't get United BW's gear at all (the database leaves it out)");
+  // Terms of Service (migration 45): once a version is published, the Admin agrees before carrying on.
+  one(`insert into private.terms_versions (version, must_accept, notes) values ('1.0', true, 'First version')`);
+  await P.E("live.reload()"); await P.settled();
+  check(await P.until(() => P.doc.querySelector('[data-form="terms"]')), "after we publish terms, the Admin is asked to agree");
+  P.doc.querySelector('[data-form="terms"] [name=agree]').checked = true; P.submit('[data-form="terms"]');
+  check(await P.until(() => one(`select version || ' ' || email from private.terms_acceptances where org_id='${ORG}'`) === "1.0 morgan@demoair.example")
+        && await P.until(() => P.doc.querySelector(".snav")), "agreeing is saved (who and which version) and the dashboard opens");
   P.click('[data-act="signOut"]');
   check(await P.until(() => P.doc.querySelector('[data-form="signin"]')), "sign out");
   check([P, V, W, K].every((x) => x.errors.length === 0), "no script errors " + [P, V, W, K].flatMap((x) => x.errors).join(";"));

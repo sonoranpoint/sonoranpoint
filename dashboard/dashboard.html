@@ -1306,6 +1306,11 @@ const api = {
     }
     return { ok: true };
   },
+  /* rpc accept_terms (migration 45): agree to the current Terms of Service for the company */
+  async acceptTerms(version) {
+    if (!can("admin")) return { ok: false, error: "An Admin or Manager needs to agree to these." };
+    DB.terms = { ...DB.terms, needs: false, accepted: { version, at: Date.now(), name: DB.me.name } }; return { ok: true };
+  },
   /* employee_positions table (migration 43): replace someone's positions */
   savePositions(id, rows) {
     const e = empOf(id); if (!e) return { ok: false, error: "That employee isn't here any more." };
@@ -1516,6 +1521,7 @@ function render() {
   document.title = DB.org?.name && (!LIVE || S.ready) ? `${DB.org.name} · Sonoran Point` : "Sonoran Point";
   if (LIVE && !S.ready) return renderAuth();
   if (DEEP && applyDeep()) return;
+  if (termsGate()) return renderTerms();
   const open = api.alerts().filter((a) => !a.resolved_at && !a.ack_at).length + api.problems().filter((p) => !p.cleared_at).length;
   const nav = [["overview", "Dashboard", "home"], ["equipment", "Equipment", "box"], ["activity", "Activity", "list"], ["employees", "Employees", "users"],
     ["stations", "Stations", "station"], ["shifts", "Shifts", "calendar"], ["alerts", "Alerts", "bell", open], "-", ["settings", "Settings", "sliders"], ...(has("team") ? [["team", "Team access", "shield"]] : [])];
@@ -2846,6 +2852,13 @@ document.addEventListener("submit", async (e) => {
   e.preventDefault();
   const f = e.target, kind = f.dataset.form || "", data = Object.fromEntries(new FormData(f));
   if (kind === "signin" || kind === "newpass" || kind === "profile") return authAction(kind, f);
+  if (kind === "terms") {
+    if (!f.elements.agree.checked) { S.termsErr = "Tick the box to agree, or sign out."; return render(); }
+    S.termsBusy = true; S.termsErr = null; render();
+    const r = await api.acceptTerms(DB.terms.current); S.termsBusy = false;
+    if (!r.ok) { S.termsErr = r.error; return render(); }
+    toast("Thanks. You're all set."); return render();
+  }
   if (kind === "impPaste") { S.imp.text = data.text || ""; return impLoad(parseTable(S.imp.text)); }
   if (kind === "visitorFind") {
     const results = await api.findVisitors(data.q); S.visitor = { q: data.q, results, searched: true }; return render();
@@ -3097,6 +3110,8 @@ const live = {
     DB.me.contracts = coversOf(L.user.id); DB.members.forEach((m) => { m.contracts = coversOf(m.id); });
     // Custom roles (migration 40): the list, and which one you have.
     DB.roles = await rpc("list_custom_roles", { p_org: org }).then((r) => r.map((x) => ({ ...x, perms: x.perms || [] }))).catch(() => []);
+    // Terms of Service (migration 45): whether this company still has to agree; null before it's run.
+    DB.terms = await rpc("terms_status", { p_org: org }).catch(() => null);
     DB.me.custom = await q(sb.from("org_members").select("custom_role_id").eq("org_id", org).eq("user_id", L.user.id)).then((r) => r[0]?.custom_role_id || null).catch(() => null);
     // Visitors (migration 34): passes in and out of your contracts; a visitor's own record shows only for names in history.
     DB.passes = await rpc("list_visitor_passes", { p_org: org }).then((r) => r.map(mapPass)).catch(() => null);
@@ -3306,6 +3321,12 @@ function goLive() {
     catch (e) { return { ok: false, error: niceErr(e) }; }
     await reloadRoles(); return { ok: true };
   };
+  // Terms of Service: straight to the server, then ask again where the company stands.
+  api.acceptTerms = async (version) => {
+    try { const r = await rpc("accept_terms", { p_org: ORG(), p_version: version }); if (!r.ok) return { ok: false, error: "Those terms were changed just now. Reload the page and try again." }; }
+    catch (e) { return { ok: false, error: niceErr(e) }; }
+    DB.terms = await rpc("terms_status", { p_org: ORG() }).catch(() => null); return { ok: true };
+  };
   // Need the server's answer before showing anything.
   api.createStation = async (name, location) => {
     let loc = null;
@@ -3329,6 +3350,23 @@ function goLive() {
 
 /* ---- Sign-in, invites, company choice ---- */
 const AUTH = { view: "signin", msg: "", err: "", busy: false, email: "" };
+// Terms of Service (migration 45): once we publish terms, an Admin or Manager agrees for the company before using the
+// dashboard, and again when a version is marked "must agree". Others carry on as normal.
+const TERMS_URL = "https://sonoranpoint.com/terms/", PRIVACY_URL = "https://sonoranpoint.com/privacy/";
+const termsGate = () => !!(DB.terms?.needs && DB.terms.can_accept);
+function renderTerms() {
+  const t = DB.terms, update = !!t.accepted, org = esc(DB.org.name);
+  const inner = `<form data-form="terms" class="fgrid" style="grid-template-columns:1fr">
+      <h2 style="margin:0;font-size:20px">${update ? "We've updated our terms" : "Before you start"}</h2>
+      <p style="margin:0;font-size:14.5px">${update ? `Please read and agree to the new version to keep using the dashboard.${t.notes ? `</p><p class="muted" style="margin:0;font-size:14px">What changed: ${esc(t.notes)}` : ""}`
+        : `${org} uses Sonoran Point under our Terms of Service. Please read them and our Privacy Policy before you continue.`}</p>
+      <p style="margin:0;display:flex;gap:14px;flex-wrap:wrap"><a href="${TERMS_URL}" target="_blank" rel="noopener">Terms of Service</a><a href="${PRIVACY_URL}" target="_blank" rel="noopener">Privacy Policy</a><span class="muted">Version ${esc(t.current || "")}</span></p>
+      <label style="display:flex;flex-direction:row;align-items:flex-start;gap:10px;font-weight:400;font-size:14.5px;cursor:pointer"><input type="checkbox" name="agree" style="margin-top:3px;flex:none"> <span>I've read them and agree on behalf of <b>${org}</b>.</span></label>
+      <div class="err" role="alert">${esc(S.termsErr || "")}</div>
+      <div class="actions"><button class="btn primary" ${S.termsBusy ? "disabled" : ""}>Agree and continue</button>${LIVE ? `<button class="btn" type="button" data-act="signOut">Sign out</button>` : ""}</div>
+      <p class="muted" style="margin:0;font-size:13px">Questions first? Email <a href="mailto:support@sonoranpoint.com">support@sonoranpoint.com</a>.</p></form>`;
+  $("#app").className = "app"; $("#app").innerHTML = authCard(inner); renderLayer();
+}
 function authCard(inner) {
   return `<div style="grid-column:1 / -1;min-height:100vh;display:grid;place-items:center;padding-block:24px;padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px));background:var(--bg)">
     <div class="panel" style="width:min(420px,100%);padding:26px 24px;display:flex;flex-direction:column;gap:16px">

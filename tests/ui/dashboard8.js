@@ -127,6 +127,19 @@ const access = () => doc.querySelector('.drawer select[name=access]');
   check(/employee # is already used/.test(E(`niceErr({ code: "23505", message: 'duplicate key value violates unique constraint "employees_org_id_employee_number_key"' })`))
         && /badge is already registered/.test(E(`niceErr({ code: "23505", message: 'duplicate key value violates unique constraint "employees_org_id_badge_uid_key"' })`)),
         "a save refused for a duplicate says which value was taken");
+  // Terms of Service (migration 45): an Admin or Manager agrees for the company before using the dashboard.
+  E("DB.me.role = 'owner'; DB.terms = { current: '1.0', required: '1.0', needs: true, can_accept: true, accepted: null }; render()"); await sleep(20);
+  check(/Before you start/.test(doc.querySelector("#app").textContent) && !!doc.querySelector('[data-form="terms"] a[href="https://sonoranpoint.com/terms/"]') && !doc.querySelector(".snav"),
+        "the dashboard waits for someone to agree to the terms");
+  await submit('[data-form="terms"]', {}); await sleep(20);
+  check(/Tick the box/.test(doc.querySelector("#app").textContent), "agreeing needs the box ticked");
+  doc.querySelector('[data-form="terms"] [name=agree]').checked = true; doc.querySelector('[data-form="terms"]').dispatchEvent(new dom.window.Event("submit", { bubbles: true, cancelable: true })); await sleep(40);
+  check(!E("DB.terms.needs") && !!doc.querySelector(".snav"), "once agreed, the dashboard opens");
+  E("DB.terms = { current: '2.0', required: '2.0', needs: true, can_accept: false, accepted: { version: '1.0' } }; DB.me.role = 'supervisor'; render()"); await sleep(20);
+  check(!!doc.querySelector(".snav") && !/updated our terms/.test(doc.querySelector("#app").textContent), "a Supervisor isn't stopped (their manager agrees)", (doc.querySelector("#app")?.textContent || "").replace(/\s+/g, " ").slice(0, 400) + " ERR:" + errors.join(";"));
+  E("DB.terms.can_accept = true; DB.terms.notes = 'New deposit terms'; DB.me.role = 'admin'; render()"); await sleep(20);
+  check(/We've updated our terms/.test(doc.querySelector("#app").textContent) && /New deposit terms/.test(doc.querySelector("#app").textContent), "a must-agree update says what changed");
+  E("DB.terms = null; DB.me.role = 'owner'; render()");
   check(errors.length === 0, "no script errors " + errors.join(";"));
   process.exit();
 })();
